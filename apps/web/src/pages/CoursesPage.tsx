@@ -164,8 +164,15 @@ function CourseFinder({ onPick }: { onPick: (course: LookupCourse, tee: LookupTe
           <button type="button" className="btn" disabled={busy} onClick={search}>{busy ? 'Searching…' : 'Search'}</button>
         </div>
       </label>
+      {api.mode === 'demo' && (
+        <p className="small warn">Demo mode: the search only knows two sample courses (“maple” and “pine”). For real courses, use the live site.</p>
+      )}
       <ErrorText>{error}</ErrorText>
-      {results && results.length === 0 && <p className="small muted">No courses found. Try part of the name, or enter the pars below.</p>}
+      {results && results.length === 0 && (
+        <p className="small muted">
+          {api.mode === 'demo' ? 'No sample course matches. In demo mode, try “maple” or “pine”.' : 'No courses found. Try part of the name, or enter the pars below.'}
+        </p>
+      )}
       {results && results.length > 0 && (
         <ul className="list picker">
           {results.map((r) => (
