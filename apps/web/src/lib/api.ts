@@ -76,9 +76,11 @@ export interface Api {
   watchLeague(leagueId: string, onChange: () => void): () => void;
 
   /** Weekly recap email (Pro): preview who gets it, then send. */
-  recapPreview(eventId: string): Promise<RecapPreview>;
+  recapPreview(eventId: string, story?: string | null): Promise<RecapPreview>;
+  /** AI-drafted opening paragraph for the commissioner to review and edit. */
+  draftRecapStory(eventId: string): Promise<string>;
   /** Throws Error('already_sent') if the week was already emailed and `force` isn't set. */
-  sendRecap(eventId: string, force?: boolean): Promise<{ sent: number; missing: string[] }>;
+  sendRecap(eventId: string, opts?: { force?: boolean; story?: string | null }): Promise<{ sent: number; missing: string[] }>;
   /** Golfer's own setting: email me the weekly recap (default on). */
   recapPref(playerId: string): Promise<boolean>;
   setRecapPref(leagueId: string, playerId: string, on: boolean): Promise<void>;

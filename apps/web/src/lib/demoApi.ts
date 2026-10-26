@@ -1,7 +1,9 @@
 import type { Api } from './api';
 import type { Contact, Course, JoinRequest, League, LeagueEvent, LedgerRow, PaymentHandles, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SubRequest, TvDisplay, User } from './types';
 import { isCommissioner } from './types';
+import type { WeeklyRecap } from '@golfscorehq/engine';
 import { buildRecapEmail } from '../../../../supabase/functions/send-recap/email';
+import { cleanStory } from '../../../../supabase/functions/send-recap/story';
 import { buildWeekRecap } from './recap';
 import { DEMO_COURSES } from './demoCourses';
 import { sha256Hex, randomToken } from './util';
@@ -109,7 +111,7 @@ export function demoApi(): DemoApi {
   }
 
   /** Same checks and output as the send-recap server function. */
-  function demoRecap(db: Db, eventId: string): { preview: RecapPreview } {
+  function demoRecap(db: Db, eventId: string, story?: string | null): { preview: RecapPreview; recap: WeeklyRecap } {
     const ev = db.events.find((e) => e.id === eventId);
     if (!ev) throw new Error("That week wasn't found.");
     if (!isCommissioner(roleIn(db, ev.leagueId))) throw new Error('Only commissioners can send the recap.');
@@ -148,8 +150,9 @@ export function demoApi(): DemoApi {
       playerName: first?.displayName ?? 'Golfer', payment: db.paymentHandles[league.id] ?? { venmo: null, paypalMe: null, zelle: null },
       weekCents: playsForMoney && first ? recap.weekBalances[first.id] ?? 0 : null,
       seasonCents: playsForMoney && first ? recap.seasonBalances[first.id] ?? 0 : null,
+      story: story ? cleanStory(story) : null,
     });
-    return { preview: { subject: sample.subject, text: sample.text, recipients: recipients.length, missing, alreadySent: db.recapSends[eventId] ?? null } };
+    return { recap, preview: { subject: sample.subject, text: sample.text, recipients: recipients.length, missing, alreadySent: db.recapSends[eventId] ?? null } };
   }
 
   return {
@@ -502,14 +505,33 @@ export function demoApi(): DemoApi {
       const db = load();
       return db.ledger.filter((e) => e.eventId === eventId).map(({ eventId: _e, ...r }) => r);
     },
-    async recapPreview(eventId) {
-      return demoRecap(load(), eventId).preview;
+    async recapPreview(eventId, story) {
+      return demoRecap(load(), eventId, story).preview;
     },
-    async sendRecap(eventId, force = false) {
+    async draftRecapStory(eventId) {
+      // Demo has no AI: a fill-in-the-blanks sample built from the same results.
+      const db = load();
+      const { recap } = demoRecap(db, eventId);
+      const first = (pid: string) => (db.players.find((p) => p.id === pid)?.displayName ?? '?').split(' ')[0];
+      const lines: string[] = [];
+      const best = recap.highlights[0];
+      if (best) lines.push(`${first(best.playerId)} got things going with ${best.kind === 'ace' ? 'an ace' : `a ${best.kind}`} on ${best.holeNumber}, and the rest of the field spent the night trying to catch up.`);
+      if (recap.lowRound) lines.push(`${recap.lowRound.playerIds.map(first).join(' and ')} posted the low round, a ${recap.lowRound.score}.`);
+      const skins = new Map<string, number>();
+      for (const s of recap.skins) for (const p of s.playerIds) skins.set(p, (skins.get(p) ?? 0) + 1);
+      const topSkins = [...skins].sort((a, b) => b[1] - a[1])[0];
+      const close = recap.matches.find((m) => m.winner === null);
+      const second = [
+        topSkins ? (topSkins[1] > 1 ? `${first(topSkins[0])} cleaned up with ${topSkins[1]} skins.` : `${first(topSkins[0])} grabbed a skin.`) : '',
+        close ? `${close.teamA.map(first).join(' & ')} and ${close.teamB.map(first).join(' & ')} couldn't be separated, so nobody gets bragging rights until next week.` : '',
+      ].filter(Boolean).join(' ');
+      return [lines.join(' ') || `Week ${recap.week} is in the books.`, second].filter(Boolean).join('\n\n');
+    },
+    async sendRecap(eventId, opts = {}) {
       // Demo never emails anyone; it records the send so the screens behave the same.
       const db = load();
-      const { preview } = demoRecap(db, eventId);
-      if (preview.alreadySent && !force) throw new Error('already_sent');
+      const { preview } = demoRecap(db, eventId, opts.story);
+      if (preview.alreadySent && !opts.force) throw new Error('already_sent');
       db.recapSends[eventId] = { sent_at: new Date().toISOString(), recipients: preview.recipients };
       save(db);
       return { sent: preview.recipients, missing: preview.missing };

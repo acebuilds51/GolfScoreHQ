@@ -48,6 +48,8 @@ export async function sha256Hex(text: string): Promise<string> {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^[+()\-.\s\d]{7,}$/;
+const EMAIL_IN_RE = /[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+/;
+const PHONE_IN_RE = /(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/;
 const HEADER_RE = /^(names?|first( name)?|last( name)?|full name|players?|golfers?|e-?mail( address)?|phone( number)?|cell|mobile|type|status|subs?|member)$/i;
 
 export interface ParsedRoster {
@@ -77,7 +79,20 @@ export function parseRoster(text: string, existingNames: string[] = []): ParsedR
     let phone: string | undefined;
     let isSub = false;
     const nameParts: string[] = [];
-    for (const f of fields) {
+    // An email or phone typed after the name with only spaces ("Jim Jones jim@x.com 248-555-1212").
+    for (let i = 0; i < fields.length; i++) {
+      const f = fields[i]!;
+      if (EMAIL_RE.test(f) || PHONE_RE.test(f)) continue;
+      let rest = f;
+      const e = !email ? rest.match(EMAIL_IN_RE) : null;
+      if (e) { email = e[0].toLowerCase(); rest = rest.replace(e[0], ' '); }
+      const p = !phone ? rest.match(PHONE_IN_RE) : null;
+      if (p) { phone = p[0].trim(); rest = rest.replace(p[0], ' '); }
+      rest = rest.replace(/\s+/g, ' ').trim();
+      if (rest !== f && /\s(sub|substitute)$/i.test(rest)) { isSub = true; rest = rest.replace(/\s\S+$/, ''); }
+      fields[i] = rest;
+    }
+    for (const f of fields.filter(Boolean)) {
       if (!email && EMAIL_RE.test(f)) email = f.toLowerCase();
       else if (!phone && PHONE_RE.test(f) && f.replace(/\D/g, '').length >= 7) phone = f;
       else if (/^(sub|substitute)$/i.test(f)) isSub = true;

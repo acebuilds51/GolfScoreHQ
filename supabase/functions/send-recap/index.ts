@@ -3,14 +3,18 @@
 //   POST { eventId }                 → preview: subject, sample text, who gets it, who has no email
 //   POST { eventId, send: true }     → email every golfer their personal recap
 //   POST { eventId, send: true, force: true } → send again after it was already sent
+//   POST { eventId, draftStory: true } → AI-drafted opening paragraph for the commissioner to review
+//   `story` (the reviewed write-up) can be passed with a preview or send.
 //
 // Commissioners of a Pro league only, and only for a settled week. Money comes
 // from the posted results. Golfers who turned the recap off are skipped.
-// Secrets: RESEND_API_KEY, RECAP_FROM_EMAIL (e.g. "GolfScoreHQ <recaps@yourdomain.com>"), APP_URL.
+// Secrets: RESEND_API_KEY, RECAP_FROM_EMAIL (e.g. "GolfScoreHQ <recaps@yourdomain.com>"), APP_URL,
+// ANTHROPIC_API_KEY (AI write-up), RECAP_AI_MODEL (optional).
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 // @ts-ignore generated JavaScript bundle of packages/engine (npm run build:functions)
 import { recapText, weeklyRecap, withPostedResults } from '../_shared/engine.js';
 import { buildRecapEmail } from './email.ts';
+import { cleanStory, storyFromResponse, storyRequest } from './story.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -29,7 +33,7 @@ Deno.serve(async (req) => {
   const { data: auth } = await userClient.auth.getUser();
   if (!auth.user) return json({ error: 'Sign in first.' }, 401);
 
-  let body: { eventId?: string; send?: boolean; force?: boolean };
+  let body: { eventId?: string; send?: boolean; force?: boolean; draftStory?: boolean; story?: string | null };
   try { body = await req.json(); } catch { return json({ error: 'Bad request.' }, 400); }
   if (!body.eventId) return json({ error: 'Which week?' }, 400);
 
@@ -86,6 +90,25 @@ Deno.serve(async (req) => {
   const recapBody: string = recapText(recap, (id: string) => names.get(id) ?? '?', { leagueName: league!.name });
   const playsForMoney = rules.match.stake > 0 || rules.presses.enabled || rules.skins.enabled || rules.ctp.enabled;
 
+  if (body.draftStory) {
+    const aiKey = env('ANTHROPIC_API_KEY');
+    if (!aiKey) return json({ error: "AI write-ups aren't set up yet. Add the ANTHROPIC_API_KEY secret in Supabase." }, 503);
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': aiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify(storyRequest({ leagueName: league!.name, weekNumber: event.week_number, recapBody, model: env('RECAP_AI_MODEL') })),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      console.error('anthropic', res.status, detail.slice(0, 500));
+      return json({ error: `The AI write-up isn't available right now (${res.status}). Write your own or send without one.` }, 502);
+    }
+    const story = storyFromResponse(await res.json());
+    if (!story) return json({ error: 'The AI came back empty. Try again, or write your own.' }, 502);
+    return json({ story });
+  }
+  const story = body.story ? cleanStory(String(body.story)) : null;
+
   // Who gets it: active golfers with an email on file or a linked account, unless they opted out.
   const optedOut = new Set((prefs ?? []).filter((p: Row) => p.weekly_recap === false).map((p: Row) => p.player_id));
   const contactEmail = new Map((contacts ?? []).filter((c: Row) => c.email).map((c: Row) => [c.player_id, c.email as string]));
@@ -107,7 +130,7 @@ Deno.serve(async (req) => {
   const handles = { venmo: payment?.venmo_username, paypalMe: payment?.paypal_me, zelle: payment?.zelle_contact };
   const emailFor = (r: { playerId: string; name: string }) =>
     buildRecapEmail({
-      leagueName: league!.name, weekNumber: event.week_number, leagueUrl, recapBody, playerName: r.name, payment: handles,
+      leagueName: league!.name, weekNumber: event.week_number, leagueUrl, recapBody, playerName: r.name, payment: handles, story,
       weekCents: playsForMoney ? recap.weekBalances[r.playerId] ?? 0 : null,
       seasonCents: playsForMoney ? recap.seasonBalances[r.playerId] ?? 0 : null,
     });

@@ -108,3 +108,14 @@ npx supabase functions deploy send-recap --use-api
 The function uses a bundled copy of the scoring engine (`supabase/functions/_shared/engine.js`). After changing anything in `packages/engine`, run `npm run build:functions` and commit the result; a test fails if the copy is out of date.
 
 In demo mode the recap screens work but no email is sent.
+
+### AI write-up (optional)
+
+**Write it up with AI** on the week page drafts a short, fun opening for the email from that week's results. The commissioner reads it, edits anything, and it's sent exactly as shown. The results underneath always come from the scoring engine, not the AI.
+
+1. Create an API key at [console.anthropic.com](https://console.anthropic.com) (**API Keys**) and add some credit. A write-up costs a few cents at most: one per week per league, not one per golfer.
+2. In Supabase **Edge Functions → Secrets**, add `ANTHROPIC_API_KEY` with the key. Keep it out of chat, email and the code.
+3. Optional: `RECAP_AI_MODEL` to use a different Claude model (default `claude-opus-5-5`).
+4. Redeploy: `npx supabase functions deploy send-recap --use-api`
+
+Only golfers' names and the week's results are sent to the AI, never emails or phone numbers.

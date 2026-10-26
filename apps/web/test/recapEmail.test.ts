@@ -36,6 +36,13 @@ describe('weekly recap email', () => {
     expect(e.html).not.toContain('<Thursday>');
   });
 
+  it('puts the write-up above the results, escaped in HTML', () => {
+    const e = buildRecapEmail({ ...base, weekCents: 9500, seasonCents: 18000, story: 'Al <finally> found the hole.\n\nBob did not.' });
+    expect(e.text).toContain('Season to date: +$180.\n\nAl <finally> found the hole.\n\nBob did not.\n\nMaple — Week 3 recap');
+    expect(e.html).toContain('<p style="margin:0 0 8px">Al &lt;finally&gt; found the hole.</p>');
+    expect(buildRecapEmail({ ...base, weekCents: null, seasonCents: null, story: '  ' }).text).not.toContain('\n\n\n');
+  });
+
   it('only lists the payment apps the commissioner set up', () => {
     expect(paymentOptions({ venmo: '', paypalMe: null, zelle: '248-555-0100' }, 500).map((p) => p.label)).toEqual(['Zelle 248-555-0100']);
   });
