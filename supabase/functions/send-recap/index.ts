@@ -130,7 +130,7 @@ Deno.serve(async (req) => {
     recipients.push({ playerId: p.id, name: p.display_name, email });
   }
 
-  const leagueUrl = `${env('APP_URL') || 'https://golfscorehq.com'}/l/${league!.slug}`;
+  const leagueUrl = `${env('APP_URL') || 'https://golfscorehq.app'}/l/${league!.slug}`;
   const handles = { venmo: payment?.venmo_username, paypalMe: payment?.paypal_me, zelle: payment?.zelle_contact };
   const { data: branded } = await admin.rpc('league_has_feature', { lid: event.league_id, feature: 'branding' });
   const brand = branded ? { color: league!.brand_color, accent: league!.accent_color, logoUrl: league!.logo_url } : undefined;
@@ -149,7 +149,7 @@ Deno.serve(async (req) => {
   if (sent && !body.force) return json({ error: 'already_sent', alreadySent: sent }, 409);
   const key = env('RESEND_API_KEY');
   if (!key) return json({ error: "Email isn't set up yet. Add the RESEND_API_KEY secret in Supabase." }, 503);
-  const from = env('RECAP_FROM_EMAIL') || 'GolfScoreHQ <onboarding@resend.dev>';
+  const from = env('RECAP_FROM_EMAIL') || 'GolfScoreHQ <recaps@golfscorehq.app>';
 
   let delivered = 0;
   for (let i = 0; i < recipients.length; i += 100) {

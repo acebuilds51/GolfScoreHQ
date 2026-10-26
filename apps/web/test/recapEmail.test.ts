@@ -4,7 +4,7 @@ import { buildRecapEmail, paymentOptions } from '../../../supabase/functions/sen
 const base = {
   leagueName: 'Maple <Thursday> League',
   weekNumber: 3,
-  leagueUrl: 'https://golfscorehq.com/l/maple',
+  leagueUrl: 'https://golfscorehq.app/l/maple',
   recapBody: 'Maple — Week 3 recap (Front 9)\n\nSKINS\n  Hole 1: Al (+$90)\n\nLOW ROUND: Al — 34 (-2)',
   playerName: 'Bob Banks',
   payment: { venmo: '@maple-commish', paypalMe: 'maplecommish', zelle: 'commish@example.com' },

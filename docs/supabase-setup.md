@@ -100,8 +100,8 @@ After a week is settled, the commissioner taps **Email the recap** on the week p
 2. To send from your own address, add your domain in Resend (**Domains**) and add the DNS records it shows you. Until then, Resend's test sender only delivers to your own Resend account's email, which is fine for trying it out.
 3. In Supabase **Edge Functions → Secrets**, add:
    - `RESEND_API_KEY`: your Resend key. Keep it out of chat, email and the code.
-   - `RECAP_FROM_EMAIL`: who the email is from, for example `GolfScoreHQ <recaps@yourdomain.com>` (must be on the domain you verified).
-   - `APP_URL`: where the app lives, for example `https://golfscorehq.com`, so the email's link points to the league.
+   - `RECAP_FROM_EMAIL`: who the email is from: `GolfScoreHQ <recaps@golfscorehq.app>` (must be on the domain verified in Resend).
+   - `APP_URL`: where the app lives, `https://golfscorehq.app`, so the email's link points to the league.
 4. Deploy the function from the `GolfScoreHQ` folder (after `npx supabase login` and `link` from step 5):
 
 ```bash
