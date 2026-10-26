@@ -2,9 +2,12 @@
   "name": "golfscorehq",
   "private": true,
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
+    "dev": "npm run dev -w @golfscorehq/web",
+    "build": "npm run build -w @golfscorehq/web",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   }

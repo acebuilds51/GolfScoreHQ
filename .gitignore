@@ -3,6 +3,7 @@ dist/
 coverage/
 .env
 .env.*
+!.env.example
 *.log
 # Never commit real league exports (names, emails, phone numbers)
 *.xlsx
