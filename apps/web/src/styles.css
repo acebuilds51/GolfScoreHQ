@@ -316,6 +316,9 @@ table.money th { color: var(--text-2); font-weight: 600; }
 }
 @keyframes stamp { from { transform: rotate(-6deg) scale(2.2); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .final-stamp { animation: none; } }
+.plan-card .badge { font-size: 0.8rem; }
+.upgrade { border: 2px solid var(--league); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.upgrade-price { font-size: 1.6rem; }
 .share-week { border-top: 1px solid var(--border); padding-top: 14px; }
 .share-week .btn { display: inline-flex; align-items: center; gap: 6px; }
 .share-preview img { width: 100%; max-width: 360px; border-radius: 12px; box-shadow: var(--shadow); }

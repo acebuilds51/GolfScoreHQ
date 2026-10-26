@@ -1,0 +1,81 @@
+// Small Stripe helpers shared by the billing server functions. No imports and
+// no Stripe library: plain HTTPS calls, so they run in Deno and in tests.
+
+/** Stripe's API takes form fields; nested objects become name[key][sub]=value. */
+export function formEncode(obj: Record<string, unknown>, prefix = ''): string {
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === undefined || v === null) continue;
+    const key = prefix ? `${prefix}[${k}]` : k;
+    if (Array.isArray(v)) v.forEach((item, i) => parts.push(typeof item === 'object' && item !== null ? formEncode(item as Record<string, unknown>, `${key}[${i}]`) : `${encodeURIComponent(`${key}[${i}]`)}=${encodeURIComponent(String(item))}`));
+    else if (typeof v === 'object') parts.push(formEncode(v as Record<string, unknown>, key));
+    else parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(v))}`);
+  }
+  return parts.filter(Boolean).join('&');
+}
+
+export async function stripeApi<T = Record<string, any>>(secretKey: string, method: 'GET' | 'POST', path: string, body?: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`https://api.stripe.com/v1/${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${secretKey}`, ...(body ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}) },
+    body: body ? formEncode(body) : undefined,
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error?.message ?? `Stripe error ${res.status}`);
+  return json as T;
+}
+
+const hex = (buf: ArrayBuffer) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
+
+/**
+ * Check a webhook really came from Stripe: the Stripe-Signature header carries a
+ * timestamp and an HMAC-SHA256 of "timestamp.body" made with the endpoint's secret.
+ * Rejects anything older than `toleranceSec` to stop replays.
+ */
+export async function verifyStripeSignature(rawBody: string, header: string | null, secret: string, toleranceSec = 300, nowSec = Math.floor(Date.now() / 1000)): Promise<boolean> {
+  if (!header || !secret) return false;
+  const fields = header.split(',').map((p) => p.split('=') as [string, string]);
+  const t = Number(fields.find(([k]) => k === 't')?.[1]);
+  const sigs = fields.filter(([k]) => k === 'v1').map(([, v]) => v);
+  if (!t || !sigs.length || Math.abs(nowSec - t) > toleranceSec) return false;
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const expected = hex(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${t}.${rawBody}`)));
+  // Compare without bailing out early, so timing doesn't leak how much matched.
+  return sigs.some((s) => s.length === expected.length && [...s].reduce((diff, ch, i) => diff | (ch.charCodeAt(0) ^ expected.charCodeAt(i)), 0) === 0);
+}
+
+export interface SubscriptionState {
+  id: string;
+  status: string;
+  /** End of the paid year (seconds since 1970), or null if Stripe didn't say. */
+  periodEnd: number | null;
+  cancelAtPeriodEnd: boolean;
+  metadata: Record<string, string>;
+  customer: string | null;
+}
+
+/** Read what matters from a Stripe subscription (newer API versions keep the period on the items). */
+export function readSubscription(sub: Record<string, any>): SubscriptionState {
+  const periodEnd = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end ?? null;
+  return {
+    id: sub.id,
+    status: sub.status,
+    periodEnd: typeof periodEnd === 'number' ? periodEnd : null,
+    cancelAtPeriodEnd: !!sub.cancel_at_period_end || !!sub.cancel_at,
+    metadata: sub.metadata ?? {},
+    customer: typeof sub.customer === 'string' ? sub.customer : sub.customer?.id ?? null,
+  };
+}
+
+/** A few days' grace after the paid year so a late card retry doesn't switch features off mid-week. */
+export const GRACE_DAYS = 3;
+
+/**
+ * Until when the plan's features stay on. Paid or being retried: the end of the
+ * paid year plus grace. Canceled for good or never paid: now (features off).
+ */
+export function accessUntil(s: SubscriptionState, nowMs = Date.now()): Date {
+  const live = ['active', 'trialing', 'past_due'].includes(s.status);
+  if (!live || !s.periodEnd) return new Date(nowMs);
+  return new Date(s.periodEnd * 1000 + GRACE_DAYS * 86_400_000);
+}

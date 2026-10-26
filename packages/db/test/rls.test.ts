@@ -393,6 +393,56 @@ describe('Clubhouse TV feed', () => {
   });
 });
 
+describe('billing', () => {
+  /** What the Stripe webhook (service role) records after a payment. */
+  async function paid(sub: string, owner: string, target: { league?: string; club?: string }, status = 'active') {
+    await db.query(
+      `insert into billing_subscriptions (stripe_subscription_id, owner_id, league_id, club_id, plan, status, current_period_end)
+       values ($1, $2, $3, $4, $5, $6, now() + interval '1 year')`,
+      [sub, owner, target.league ?? null, target.club ?? null, target.league ? 'pro' : 'club', status],
+    );
+  }
+
+  it('lets payers and commissioners see a league’s billing, but nobody can write it', async () => {
+    await paid('sub_1', tony, { league: oak });
+    expect(await as(db, tony, () => rows(db, 'select stripe_subscription_id from billing_subscriptions'))).toHaveLength(1);
+    expect(await as(db, joe, () => rows(db, 'select stripe_subscription_id from billing_subscriptions'))).toHaveLength(0);
+    expect(await as(db, sam, () => rows(db, 'select stripe_subscription_id from billing_subscriptions'))).toHaveLength(0);
+    await expect(as(db, tony, () => db.query(`update billing_subscriptions set status = 'active'`))).rejects.toThrow(/permission denied/);
+    await expect(as(db, tony, () => db.query(`insert into billing_customers (user_id, stripe_customer_id) values ($1, 'cus_x')`, [tony]))).rejects.toThrow(/permission denied/);
+
+    const [b] = await as(db, tony, () => rows<{ b: any }>(db, 'select league_billing($1) as b', [oak]));
+    expect(b!.b).toMatchObject({ plan: 'free', isOwner: true, subscription: { status: 'active', paidByMe: true, cancelAtPeriodEnd: false } });
+    expect((await as(db, joe, () => rows<{ b: any }>(db, 'select league_billing($1) as b', [oak])))[0]!.b).toBeNull();
+  });
+
+  it('lets an owner put their leagues under their paid Club, up to the rules', async () => {
+    const club = (await as(db, tony, () => rows<{ id: string }>(db, `select create_club('Crystal Lake Golf') as id`)))[0]!.id;
+    await expect(as(db, tony, () => db.query('select set_league_club($1, $2)', [oak, club]))).rejects.toThrow(/Start the Club plan first/);
+
+    await db.query(`update clubs set plan_expires_at = now() + interval '1 year' where id = $1`, [club]);
+    await expect(as(db, sam, () => db.query('select set_league_club($1, $2)', [pine, club]))).rejects.toThrow(/club isn't yours/);
+    await expect(as(db, joe, () => db.query('select set_league_club($1, $2)', [oak, club]))).rejects.toThrow(/Only the league's owner/);
+
+    await as(db, tony, () => db.query('select set_league_club($1, $2)', [oak, club]));
+    expect(await as(db, tony, () => rows(db, 'select effective_plan($1) as p', [oak]))).toEqual([{ p: 'club' }]);
+    expect((await as(db, tony, () => rows<{ b: any }>(db, 'select league_billing($1) as b', [oak])))[0]!.b).toMatchObject({ clubName: 'Crystal Lake Golf', effectivePlan: 'club' });
+
+    await as(db, tony, () => db.query('select set_league_club($1, null)', [oak]));
+    expect(await as(db, tony, () => rows(db, 'select plan, club_id from leagues where id = $1', [oak]))).toEqual([{ plan: 'free', club_id: null }]);
+  });
+
+  it("won't add a league that already pays for Pro, or a free Pilot league", async () => {
+    const club = (await as(db, tony, () => rows<{ id: string }>(db, `select create_club('Crystal Lake Golf') as id`)))[0]!.id;
+    await db.query(`update clubs set plan_expires_at = now() + interval '1 year' where id = $1`, [club]);
+    await paid('sub_2', tony, { league: oak });
+    await expect(as(db, tony, () => db.query('select set_league_club($1, $2)', [oak, club]))).rejects.toThrow(/pays for its own Pro/);
+    await db.query(`delete from billing_subscriptions`);
+    await setPlan(oak, 'pilot');
+    await expect(as(db, tony, () => db.query('select set_league_club($1, $2)', [oak, club]))).rejects.toThrow(/already has GolfScoreHQ free/);
+  });
+});
+
 describe('scoring a round from the phone', () => {
   it('saves what the app sends: scores, changed scores, CTP answers (changed too), current hole', async () => {
     await setPlan(oak, 'pilot');

@@ -158,6 +158,25 @@ export interface RoundData {
   submittedAt: string | null;
 }
 
+/** A league's plan and billing, as its Settings page shows it. */
+export interface LeagueBilling {
+  plan: Plan;
+  effectivePlan: Plan;
+  /** When Pro/Club features switch off unless renewed (null = no end date). */
+  expiresAt: string | null;
+  clubName: string | null;
+  isOwner: boolean;
+  subscription: { status: string; renewsAt: string | null; cancelAtPeriodEnd: boolean; paidByMe: boolean } | null;
+}
+
+export interface Club {
+  id: string;
+  name: string;
+  /** Paid through (plus a few days' grace); null = not paid yet. */
+  expiresAt: string | null;
+  leagues: { id: string; name: string; slug: string }[];
+}
+
 export interface RecapPreview {
   subject: string;
   /** A sample of what golfers receive. */

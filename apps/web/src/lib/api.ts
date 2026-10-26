@@ -1,5 +1,6 @@
 import type { CourseSummary, LookupCourse } from '../../../../supabase/functions/course-lookup/normalize';
 import type {
+  Club, LeagueBilling,
   Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, LedgerRow, Member, NewCourse, NewPlayer, Player, Role,
   PaymentHandles, RecapPreview, RoundData, RoundPlayer, RsvpStatus, ScoreEntry, Season, SubOffer, SubRequest, TvDisplay, TvFeed, TvSettings, User,
 } from './types';
@@ -85,6 +86,16 @@ export interface Api {
    * rounds, CTP, presses, week status). Returns an unsubscribe function.
    */
   watchLeague(leagueId: string, onChange: () => void): () => void;
+
+  /** Billing. Checkout and the billing page are hosted by Stripe; these return the page to open. */
+  leagueBilling(leagueId: string): Promise<LeagueBilling | null>;
+  startCheckout(target: { leagueId: string } | { clubId: string }): Promise<string>;
+  billingPortal(returnPath: string): Promise<string>;
+  /** Clubs you own (one Club plan covers up to 5 of your leagues). */
+  myClubs(): Promise<Club[]>;
+  createClub(name: string): Promise<string>;
+  /** Put one of your leagues under your paid club, or take it out (clubId null). */
+  setLeagueClub(leagueId: string, clubId: string | null): Promise<void>;
 
   /** Weekly recap email (Pro): preview who gets it, then send. */
   recapPreview(eventId: string, story?: string | null): Promise<RecapPreview>;
