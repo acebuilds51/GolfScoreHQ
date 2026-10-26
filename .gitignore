@@ -6,6 +6,9 @@ coverage/
 !.env.example
 !.env.demo
 *.log
+# Supabase CLI's local link state
+supabase/.temp/
+supabase/.branches/
 # Never commit real league exports (names, emails, phone numbers)
 *.xlsx
 data/private/
