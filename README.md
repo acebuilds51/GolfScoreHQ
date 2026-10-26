@@ -9,9 +9,19 @@ schedule) instead of each league getting custom code.
 | Path | What it is |
 |---|---|
 | `packages/engine` | Pure TypeScript rules engine: matches, presses, skins, CTP, scramble, WHS handicaps. No I/O. |
+| `supabase/migrations` | Postgres schema: leagues, members, roster, courses, seasons, rounds, hole-by-hole scores, ledger, payments, plan limits, and row-level security. |
+| `packages/db` | Tests that run the migrations in an embedded Postgres (PGlite) and check tenant isolation, roles and plan limits. |
 | `legacy/ocbc` | The original OCBC Golf League PWA (v2.24) and its Apps Script backend, kept as a reference. OCBC itself runs from its own repo. |
 
-Planned: `apps/web` (React + Vite PWA) and a Supabase project (Postgres with row-level security per league).
+Planned: `apps/web` (React + Vite PWA) and the hosted Supabase project.
+
+## Database conventions
+
+- Every league-owned row has `league_id`; children reference parents with composite `(league_id, id)` keys, so rows can't cross leagues.
+- RLS: members read their league; commissioners manage it; any member can score until a week is settled, then only commissioners.
+- Contact details are in `player_contacts`, visible only to commissioners and the golfer.
+- `ledger_entries` is written only by settlement (service role). `payments` records money actually handed over; the app never moves money.
+- Plan limits are triggers (free: 1 league per owner, 20 regular players). Plan fields change only through the service role.
 
 ## Engine conventions
 
