@@ -1,0 +1,42 @@
+# Publishes the web app to Cloudflare Pages (https://golfscorehq.pages.dev)
+# every time main changes. Tests and type checks run first; if any fail,
+# nothing is published and the live site stays as it was.
+#
+# One-time GitHub setup (Settings → Secrets and variables → Actions):
+#   Secret   CLOUDFLARE_API_TOKEN     Cloudflare token with "Cloudflare Pages: Edit"
+#   Variable VITE_SUPABASE_ANON_KEY   Supabase publishable (anon) key, same as apps/web/.env.local
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VITE_SUPABASE_URL: https://foxthtwxgfnoqxrcbxfc.supabase.co
+      VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Check the key is set (otherwise the site would build in demo mode)
+        run: test -n "$VITE_SUPABASE_ANON_KEY" || (echo "Add the VITE_SUPABASE_ANON_KEY variable in GitHub settings." && exit 1)
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 3aed8b3c298c05cae272b310d9ea4864
+          command: pages deploy apps/web/dist --project-name golfscorehq --branch main
