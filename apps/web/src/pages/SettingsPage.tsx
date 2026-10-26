@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CopyField, ErrorText, ProLock } from '../components/ui';
 import { api } from '../lib/backend';
-import { brandLogo, brandStyle, PALETTES, resizeLogo } from '../lib/brand';
+import { brandLogo, brandStyle, PALETTES, parseHex, resizeLogo } from '../lib/brand';
 import type { DemoApi } from '../lib/demoApi';
 import { useAction, useAsync, useAuth, useLeague } from '../lib/hooks';
 import { isCommissioner, type PaymentHandles, type Plan, type Role, type TvDisplay, type TvPanel, type TvSettings } from '../lib/types';
@@ -102,7 +102,30 @@ function LeagueLook() {
       <ErrorText>{logoAction.error}</ErrorText>
 
       <div className="stack">
-        <strong className="small">Colors</strong>
+        <strong>Your colors</strong>
+        <p className="small muted">Pick any two colors: tap a box to choose, or type your club's color code.</p>
+        <div className="grid two color-fields">
+          <ColorField
+            label="Main color"
+            hint="Header, buttons, hole numbers"
+            value={current.brand}
+            fallback="#14365c"
+            disabled={!allowed}
+            onChange={(c) => pick(c, current.accent)}
+          />
+          <ColorField
+            label="Accent color"
+            hint="Tab underline, TV and email trim"
+            value={current.accent}
+            fallback="#1d9e75"
+            disabled={!allowed}
+            onChange={(c) => pick(current.brand, c)}
+          />
+        </div>
+        {(current.brand || current.accent) && (
+          <div><button type="button" className="btn btn-ghost btn-sm" disabled={!allowed} onClick={() => pick(null, null)}>Go back to GolfScoreHQ colors</button></div>
+        )}
+        <strong className="small">Or start from one of these</strong>
         <div className="palettes">
           {PALETTES.map((p) => (
             <button
@@ -117,19 +140,6 @@ function LeagueLook() {
               <span className="small">{p.name}</span>
             </button>
           ))}
-        </div>
-        <div className="row wrap">
-          <label className="check-row">
-            <input type="color" value={current.brand ?? '#14365c'} disabled={!allowed} onChange={(e) => pick(e.target.value.toLowerCase(), current.accent)} />
-            Main color
-          </label>
-          <label className="check-row">
-            <input type="color" value={current.accent ?? '#1d9e75'} disabled={!allowed} onChange={(e) => pick(current.brand, e.target.value.toLowerCase())} />
-            Accent color
-          </label>
-          {(current.brand || current.accent) && (
-            <button type="button" className="btn btn-ghost btn-sm" disabled={!allowed} onClick={() => pick(null, null)}>Use GolfScoreHQ colors</button>
-          )}
         </div>
       </div>
 
@@ -162,6 +172,50 @@ function LeagueLook() {
       </div>
       <ErrorText>{colorAction.error}</ErrorText>
     </section>
+  );
+}
+
+/** A color picker plus a box for typing an exact color code like #0B5D3B. */
+function ColorField({ label, hint, value, fallback, disabled, onChange }: {
+  label: string; hint: string; value: string | null; fallback: string; disabled: boolean; onChange: (hex: string) => void;
+}) {
+  const [text, setText] = useState(value ?? '');
+  const [bad, setBad] = useState(false);
+  // Follow changes made elsewhere (the picker, a ready-made pair, "go back"), not ones typed here.
+  useEffect(() => {
+    setText((t) => (parseHex(t) === value ? t : value ?? ''));
+    setBad(false);
+  }, [value]);
+  const typed = (s: string) => {
+    setText(s);
+    setBad(false);
+    const hex = parseHex(s);
+    if (hex && s.replace(/[#\s]/g, '').length === 6) onChange(hex); // short codes wait for blur
+  };
+  const finished = () => {
+    if (!text.trim()) return;
+    const hex = parseHex(text);
+    if (!hex) return setBad(true);
+    setText(hex);
+    onChange(hex);
+  };
+  return (
+    <div className="color-field">
+      <input
+        type="color"
+        aria-label={label}
+        value={value ?? fallback}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value.toLowerCase())}
+      />
+      <div className="stack">
+        <label>
+          {label}
+          <input value={text} placeholder={fallback.toUpperCase()} maxLength={7} disabled={disabled} spellCheck={false} onChange={(e) => typed(e.target.value)} onBlur={finished} />
+        </label>
+        <span className={`small ${bad ? 'warn' : 'muted'}`}>{bad ? 'Use a 6-digit code like #0B5D3B' : hint}</span>
+      </div>
+    </div>
   );
 }
 

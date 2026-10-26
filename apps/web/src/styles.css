@@ -151,6 +151,10 @@ label.btn.disabled { opacity: 0.55; cursor: default; }
 .palette:disabled { opacity: 0.55; cursor: default; }
 .swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgb(0 0 0 / 0.15); flex-shrink: 0; }
 input[type='color'], label.check-row input[type='color'] { width: 44px; height: 32px; padding: 2px; border-radius: 6px; cursor: pointer; flex-shrink: 0; }
+.color-fields { margin: 0; }
+.color-field { display: flex; gap: 12px; align-items: flex-start; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; }
+.color-field input[type='color'] { width: 56px; height: 56px; padding: 3px; }
+.color-field input:not([type='color']) { font-family: ui-monospace, Menlo, Consolas, monospace; text-transform: uppercase; max-width: 9em; }
 .logo-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .brand-preview { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .brand-preview .league-band, .brand-preview .league-head { padding: 10px 12px; }

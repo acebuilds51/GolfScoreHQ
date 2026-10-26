@@ -15,6 +15,14 @@ export const PALETTES: { name: string; brand: string; accent: string }[] = [
 
 export const HEX_RE = /^#[0-9a-f]{6}$/;
 
+/** Read a typed color code: "#0B5D3B", "0b5d3b" or short "#0b5" → "#0b5d3b"; null if it isn't one. */
+export function parseHex(s: string): string | null {
+  const m = s.trim().toLowerCase().match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/);
+  if (!m) return null;
+  const h = m[1]!.length === 3 ? [...m[1]!].map((c) => c + c).join('') : m[1]!;
+  return `#${h}`;
+}
+
 function luminance(hex: string): number {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
   return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;

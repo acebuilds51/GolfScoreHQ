@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { brandLogo, brandStyle, PALETTES, textOn } from '../src/lib/brand';
+import { brandLogo, brandStyle, PALETTES, parseHex, textOn } from '../src/lib/brand';
 
 describe('league branding', () => {
+  it('reads typed color codes', () => {
+    expect(parseHex('#0B5D3B')).toBe('#0b5d3b');
+    expect(parseHex(' 0b5d3b ')).toBe('#0b5d3b');
+    expect(parseHex('#0b5')).toBe('#00bb55');
+    expect(parseHex('green')).toBeNull();
+    expect(parseHex('#0b5d3')).toBeNull();
+  });
+
   it('picks readable text for any color', () => {
     expect(textOn('#0b5d3b')).toBe('#ffffff');
     expect(textOn('#14365c')).toBe('#ffffff');
