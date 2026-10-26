@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { parseRoster, randomJoinCode, SLUG_RE, slugify } from '../src/lib/util';
+import { cleanSlugInput, parseRoster, randomJoinCode, SLUG_RE, slugify } from '../src/lib/util';
+
+describe('cleanSlugInput', () => {
+  it('turns a pasted website into a league link', () => {
+    expect(cleanSlugInput('https://shepherdshollow.com/')).toBe('shepherdshollow');
+    expect(cleanSlugInput('www.shepherdshollow.com')).toBe('shepherdshollow');
+    expect(cleanSlugInput('https://example.com/leagues/Thursday Men')).toBe('thursday-men');
+    expect(cleanSlugInput('shepherds-hollow')).toBe('shepherds-hollow');
+    expect(cleanSlugInput('Shepherds Hollow-')).toBe('shepherds-hollow');
+  });
+});
 
 describe('slugify', () => {
   it('makes a valid web address from a league name', () => {

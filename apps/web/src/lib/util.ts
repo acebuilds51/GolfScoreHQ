@@ -15,6 +15,20 @@ export function slugify(name: string): string {
 
 export const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,40}$/;
 
+/**
+ * Tidy whatever was typed into the league link box. People paste their
+ * course's website here, so "https://www.shepherdshollow.com/" becomes
+ * "shepherdshollow".
+ */
+export function cleanSlugInput(raw: string): string {
+  const noScheme = raw.trim().toLowerCase().replace(/^[a-z]+:\/\//, '').replace(/^www\./, '');
+  const lastPart = noScheme.split(/[/?#]/).filter(Boolean).pop() ?? '';
+  const host = noScheme.split(/[/?#]/)[0] ?? '';
+  // A bare domain ("shepherdshollow.com") keeps its name; a path keeps its last segment.
+  const part = lastPart === host ? host.replace(/\.[a-z]{2,}$/, '') : lastPart;
+  return slugify(part);
+}
+
 /** 6 characters, no look-alikes (0/O, 1/I/L). */
 export function randomJoinCode(): string {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
