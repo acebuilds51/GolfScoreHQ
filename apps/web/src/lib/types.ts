@@ -92,5 +92,81 @@ export interface NewCourse {
   source?: { provider: 'golfcourseapi'; id: string };
 }
 
+// ── Scoring ──────────────────────────────────────────────────────────────────
+
+export interface Season {
+  id: string;
+  leagueId: string;
+  year: number;
+  name: string;
+  /** Engine FormatRules (frozen for the season). */
+  rules: import('@golfscorehq/engine').FormatRules;
+  startDate: string | null;
+  /** 0 = Sunday … 6 = Saturday */
+  leagueDay: number | null;
+}
+
+export type EventStatus = 'scheduled' | 'in_progress' | 'settled' | 'rainout';
+
+export interface LeagueEvent {
+  id: string;
+  seasonId: string;
+  weekNumber: number;
+  eventDate: string | null;
+  layoutId: string | null;
+  status: EventStatus;
+}
+
+export interface RoundPlayer {
+  playerId: string;
+  /** 'A' / 'B' match side; null = skins and CTP only. */
+  side: 'A' | 'B' | null;
+  position: number;
+}
+
+export interface CtpEntry {
+  /** null = nobody in this group got inside the marker. */
+  playerId: string | null;
+  /** Whose ball they got inside of; null = there was no marker yet. */
+  beat: string | null;
+}
+
+export interface Press {
+  id: string;
+  startHole: number;
+  calledBy: 'A' | 'B';
+}
+
+export interface RoundData {
+  id: string;
+  eventId: string;
+  teeSlot: number;
+  status: 'live' | 'submitted';
+  currentHole: number;
+  players: RoundPlayer[];
+  /** playerId → holeNumber → strokes */
+  scores: Record<string, Record<number, number>>;
+  presses: Press[];
+  /** holeNumber → what this group reported */
+  ctp: Record<number, CtpEntry>;
+  submittedAt: string | null;
+}
+
+export type LedgerKind = 'match' | 'press' | 'skin' | 'ctp' | 'scramblePot';
+
+export interface LedgerRow {
+  playerId: string;
+  roundId: string | null;
+  kind: LedgerKind;
+  amountCents: number;
+  holeNumber: number | null;
+}
+
+export interface ScoreEntry {
+  playerId: string;
+  holeNumber: number;
+  strokes: number;
+}
+
 export const COMMISSIONER_ROLES: Role[] = ['owner', 'commissioner'];
 export const isCommissioner = (role: Role | undefined) => !!role && COMMISSIONER_ROLES.includes(role);

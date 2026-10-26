@@ -6,6 +6,9 @@ import { JoinInvitePage } from './pages/JoinInvitePage';
 import { LeagueLayout } from './pages/LeagueLayout';
 import { LeaguesPage } from './pages/LeaguesPage';
 import { OverviewPage } from './pages/OverviewPage';
+import { PlayPage } from './pages/PlayPage';
+import { ScoreRoundPage } from './pages/ScoreRoundPage';
+import { WeekPage } from './pages/WeekPage';
 import { RosterPage } from './pages/RosterPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SignInPage } from './pages/SignInPage';
@@ -29,6 +32,9 @@ export function App() {
           <Route path="/leagues" element={<RequireUser><LeaguesPage /></RequireUser>} />
           <Route path="/l/:slug" element={<RequireUser><LeagueLayout /></RequireUser>}>
             <Route index element={<OverviewPage />} />
+            <Route path="play" element={<PlayPage />} />
+            <Route path="week/:eventId" element={<WeekPage />} />
+            <Route path="round/:roundId" element={<ScoreRoundPage />} />
             <Route path="roster" element={<RosterPage />} />
             <Route path="courses" element={<CoursesPage />} />
             <Route path="settings" element={<SettingsPage />} />

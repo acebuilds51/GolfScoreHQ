@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Api, CourseSummary, LookupCourse } from './api';
-import type { Contact, Course, Layout, League, LeagueSummary, Plan, Role, User } from './types';
+import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, User } from './types';
 import { randomToken, sha256Hex } from './util';
 
 type Row = Record<string, any>;
@@ -193,5 +193,142 @@ export function supabaseApi(url: string, anonKey: string): Api {
     async deleteCourse(courseId) {
       check(await sb.from('courses').delete().eq('id', courseId));
     },
+
+    async seasons(leagueId) {
+      const rows = check(await sb.from('seasons').select('id, league_id, year, name, rules, start_date, league_day').eq('league_id', leagueId).order('year', { ascending: false }).order('created_at', { ascending: false })) as Row[];
+      return rows.map(toSeason);
+    },
+    async createSeason(leagueId, s) {
+      const r = check(
+        await sb.from('seasons').insert({ league_id: leagueId, year: s.year, name: s.name, rules: s.rules, start_date: s.startDate, league_day: s.leagueDay }).select('id').single(),
+      ) as Row;
+      return r.id;
+    },
+    async updateSeasonRules(seasonId, rules) {
+      check(await sb.from('seasons').update({ rules }).eq('id', seasonId));
+    },
+    async events(seasonId) {
+      const rows = check(await sb.from('events').select('id, season_id, week_number, event_date, layout_id, status').eq('season_id', seasonId).order('week_number')) as Row[];
+      return rows.map(toEvent);
+    },
+    async event(eventId) {
+      const r = check(await sb.from('events').select('id, season_id, week_number, event_date, layout_id, status').eq('id', eventId).maybeSingle()) as Row | null;
+      return r ? toEvent(r) : null;
+    },
+    async createEvent(leagueId, seasonId, e) {
+      const r = check(
+        await sb.from('events').insert({ league_id: leagueId, season_id: seasonId, week_number: e.weekNumber, event_date: e.eventDate, layout_id: e.layoutId }).select('id').single(),
+      ) as Row;
+      return r.id;
+    },
+    async updateEvent(eventId, patch) {
+      const row: Row = {};
+      if (patch.layoutId !== undefined) row.layout_id = patch.layoutId;
+      if (patch.eventDate !== undefined) row.event_date = patch.eventDate;
+      if (patch.status !== undefined) row.status = patch.status;
+      check(await sb.from('events').update(row).eq('id', eventId));
+    },
+
+    async eventRounds(eventId) {
+      const rows = check(await sb.from('rounds').select(ROUND_SELECT).eq('event_id', eventId).order('tee_slot')) as Row[];
+      return rows.map(toRound);
+    },
+    async round(roundId) {
+      const r = check(await sb.from('rounds').select(ROUND_SELECT).eq('id', roundId).maybeSingle()) as Row | null;
+      return r ? toRound(r) : null;
+    },
+    async startRound(leagueId, eventId, teeSlot, players) {
+      const r = check(await sb.from('rounds').insert({ league_id: leagueId, event_id: eventId, tee_slot: teeSlot }).select('id').single()) as Row;
+      check(await sb.from('round_players').insert(players.map((p) => ({ round_id: r.id, league_id: leagueId, player_id: p.playerId, side: p.side, position: p.position }))));
+      return r.id;
+    },
+    async saveScores(leagueId, roundId, entries) {
+      if (!entries.length) return;
+      const me = await uid();
+      check(
+        await sb.from('hole_scores').upsert(
+          entries.map((e) => ({ round_id: roundId, league_id: leagueId, player_id: e.playerId, hole_number: e.holeNumber, strokes: e.strokes, entered_by: me, updated_at: new Date().toISOString() })),
+          { onConflict: 'round_id,player_id,hole_number' },
+        ),
+      );
+    },
+    async setCurrentHole(roundId, holeIndex) {
+      check(await sb.from('rounds').update({ current_hole: holeIndex, updated_at: new Date().toISOString() }).eq('id', roundId));
+    },
+    async saveCtp(leagueId, roundId, holeNumber, entry) {
+      check(
+        await sb.from('ctp_reports').upsert(
+          { round_id: roundId, league_id: leagueId, hole_number: holeNumber, player_id: entry.playerId, beat_player_id: entry.playerId ? entry.beat : null },
+          { onConflict: 'round_id,hole_number' },
+        ),
+      );
+    },
+    async addPress(leagueId, roundId, startHole, calledBy) {
+      const r = check(await sb.from('presses').insert({ round_id: roundId, league_id: leagueId, start_hole_number: startHole, called_by: calledBy }).select('id').single()) as Row;
+      return r.id;
+    },
+    async removePress(pressId) {
+      check(await sb.from('presses').delete().eq('id', pressId));
+    },
+    async submitRound(roundId) {
+      check(await sb.from('rounds').update({ status: 'submitted', submitted_by: await uid(), submitted_at: new Date().toISOString() }).eq('id', roundId));
+    },
+    async addSub(leagueId, name) {
+      return check(await sb.rpc('add_sub_player', { p_league: leagueId, p_name: name })) as string;
+    },
+
+    async ledger(eventId) {
+      const rows = check(await sb.from('ledger_entries').select('player_id, round_id, kind, amount_cents, hole_number').eq('event_id', eventId)) as Row[];
+      return rows.map((r) => ({ playerId: r.player_id, roundId: r.round_id, kind: r.kind, amountCents: r.amount_cents, holeNumber: r.hole_number }));
+    },
+    async settleEvent(eventId, entries) {
+      check(
+        await sb.rpc('settle_event', {
+          p_event: eventId,
+          p_entries: entries.map((e) => ({ player_id: e.playerId, round_id: e.roundId, kind: e.kind, amount_cents: e.amountCents, hole_number: e.holeNumber })),
+        }),
+      );
+    },
+    async reopenEvent(eventId) {
+      check(await sb.rpc('reopen_event', { p_event: eventId }));
+    },
+    async ctpDecisions(eventId) {
+      const rows = check(await sb.from('ctp_decisions').select('hole_number, player_id').eq('event_id', eventId)) as Row[];
+      return Object.fromEntries(rows.map((r) => [r.hole_number, r.player_id]));
+    },
+    async setCtpDecision(leagueId, eventId, holeNumber, playerId) {
+      if (!playerId) {
+        check(await sb.from('ctp_decisions').delete().eq('event_id', eventId).eq('hole_number', holeNumber));
+        return;
+      }
+      check(await sb.from('ctp_decisions').upsert({ event_id: eventId, league_id: leagueId, hole_number: holeNumber, player_id: playerId, decided_by: await uid(), decided_at: new Date().toISOString() }));
+    },
+  };
+}
+
+const ROUND_SELECT =
+  'id, event_id, tee_slot, status, current_hole, submitted_at, round_players(player_id, side, position), hole_scores(player_id, hole_number, strokes), presses(id, start_hole_number, called_by, created_at), ctp_reports(hole_number, player_id, beat_player_id)';
+
+function toSeason(r: Row): Season {
+  return { id: r.id, leagueId: r.league_id, year: r.year, name: r.name, rules: r.rules, startDate: r.start_date, leagueDay: r.league_day };
+}
+
+function toEvent(r: Row): LeagueEvent {
+  return { id: r.id, seasonId: r.season_id, weekNumber: r.week_number, eventDate: r.event_date, layoutId: r.layout_id, status: r.status };
+}
+
+function toRound(r: Row): RoundData {
+  const scores: RoundData['scores'] = {};
+  for (const s of (r.hole_scores ?? []) as Row[]) (scores[s.player_id] ??= {})[s.hole_number] = s.strokes;
+  const ctp: RoundData['ctp'] = {};
+  for (const c of (r.ctp_reports ?? []) as Row[]) ctp[c.hole_number] = { playerId: c.player_id, beat: c.beat_player_id };
+  return {
+    id: r.id, eventId: r.event_id, teeSlot: r.tee_slot, status: r.status, currentHole: r.current_hole, submittedAt: r.submitted_at,
+    players: ((r.round_players ?? []) as Row[]).map((p) => ({ playerId: p.player_id, side: p.side, position: p.position })).sort((a, b) => a.position - b.position),
+    scores,
+    presses: ((r.presses ?? []) as Row[])
+      .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+      .map((p) => ({ id: p.id, startHole: p.start_hole_number, calledBy: p.called_by })),
+    ctp,
   };
 }
