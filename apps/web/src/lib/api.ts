@@ -70,6 +70,9 @@ export interface Api {
   addSub(leagueId: string, name: string): Promise<string>;
 
   ledger(eventId: string): Promise<LedgerRow[]>;
+  /** Every round and money entry in a season, for standings. */
+  seasonRounds(seasonId: string): Promise<RoundData[]>;
+  seasonLedger(seasonId: string): Promise<(LedgerRow & { eventId: string })[]>;
   /** Commissioner posts the week's money and marks it final. */
   settleEvent(eventId: string, entries: LedgerRow[]): Promise<void>;
   reopenEvent(eventId: string): Promise<void>;

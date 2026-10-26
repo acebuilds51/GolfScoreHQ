@@ -218,6 +218,24 @@ table.money th, table.money td { padding: 6px 6px; text-align: right; border-bot
 table.money th:first-child, table.money td.name { text-align: left; }
 table.money th { color: var(--text-2); font-weight: 600; }
 .settle { border-color: var(--brand-2); }
+
+/* Standings */
+.pills { gap: 6px; }
+.pill { font: inherit; font-size: 0.82rem; font-weight: 600; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.pill.on { background: var(--brand); border-color: var(--brand); color: var(--surface); }
+table.standings { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 0.88rem; }
+table.standings th, table.standings td { padding: 9px 8px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; background: var(--surface); }
+table.standings th { color: var(--text-2); font-weight: 600; font-size: 0.8rem; }
+table.standings .sticky { position: sticky; left: 0; z-index: 1; text-align: left; }
+table.standings td.name { font-weight: 600; }
+table.standings .rank { display: inline-block; min-width: 18px; color: var(--text-2); font-weight: 600; }
+table.standings tr.clickable { cursor: pointer; }
+table.standings tr.clickable:hover td { background: var(--surface-2); }
+table.standings tr.detail td { text-align: left; background: var(--surface-2); white-space: normal; }
+.week-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font-size: 0.82rem; }
+.awards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.awards li { background: var(--surface-2); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 2px; }
 label.dispute { color: var(--warn); }
 .linkish { all: unset; cursor: pointer; color: var(--brand-2); font-weight: 700; padding: 2px 4px; }
 

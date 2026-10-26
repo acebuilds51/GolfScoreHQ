@@ -449,6 +449,16 @@ export function demoApi(): DemoApi {
       const db = load();
       return db.ledger.filter((e) => e.eventId === eventId).map(({ eventId: _e, ...r }) => r);
     },
+    async seasonRounds(seasonId) {
+      const db = load();
+      const events = new Set(db.events.filter((e) => e.seasonId === seasonId).map((e) => e.id));
+      return db.rounds.filter((r) => events.has(r.eventId)).map(({ leagueId: _l, ...r }) => r);
+    },
+    async seasonLedger(seasonId) {
+      const db = load();
+      const events = new Set(db.events.filter((e) => e.seasonId === seasonId).map((e) => e.id));
+      return db.ledger.filter((e) => events.has(e.eventId));
+    },
     async settleEvent(eventId, entries) {
       const db = load();
       const ev = db.events.find((e) => e.id === eventId);
