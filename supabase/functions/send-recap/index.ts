@@ -1,0 +1,144 @@
+// Weekly recap email server function.
+//
+//   POST { eventId }                 → preview: subject, sample text, who gets it, who has no email
+//   POST { eventId, send: true }     → email every golfer their personal recap
+//   POST { eventId, send: true, force: true } → send again after it was already sent
+//
+// Commissioners of a Pro league only, and only for a settled week. Money comes
+// from the posted results. Golfers who turned the recap off are skipped.
+// Secrets: RESEND_API_KEY, RECAP_FROM_EMAIL (e.g. "GolfScoreHQ <recaps@yourdomain.com>"), APP_URL.
+import { createClient } from 'jsr:@supabase/supabase-js@2';
+// @ts-ignore generated JavaScript bundle of packages/engine (npm run build:functions)
+import { recapText, weeklyRecap, withPostedResults } from '../_shared/engine.js';
+import { buildRecapEmail } from './email.ts';
+
+const cors = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
+const env = (k: string) => Deno.env.get(k) ?? '';
+type Row = Record<string, any>;
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
+  if (req.method !== 'POST') return json({ error: 'Use POST.' }, 405);
+
+  const userClient = createClient(env('SUPABASE_URL'), env('SUPABASE_ANON_KEY'), { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } });
+  const { data: auth } = await userClient.auth.getUser();
+  if (!auth.user) return json({ error: 'Sign in first.' }, 401);
+
+  let body: { eventId?: string; send?: boolean; force?: boolean };
+  try { body = await req.json(); } catch { return json({ error: 'Bad request.' }, 400); }
+  if (!body.eventId) return json({ error: 'Which week?' }, 400);
+
+  const admin = createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'));
+  const { data: event } = await admin.from('events').select('id, league_id, season_id, week_number, status, layout_id').eq('id', body.eventId).maybeSingle();
+  if (!event) return json({ error: "That week wasn't found." }, 404);
+
+  const { data: isCommish } = await userClient.rpc('is_commissioner', { lid: event.league_id });
+  if (!isCommish) return json({ error: 'Only commissioners can send the recap.' }, 403);
+  const { data: allowed } = await admin.rpc('league_has_feature', { lid: event.league_id, feature: 'weekly_recap' });
+  if (!allowed) return json({ error: 'The weekly recap email needs GolfScoreHQ Pro.' }, 403);
+  if (event.status !== 'settled') return json({ error: 'Settle the week first, then send the recap.' }, 400);
+
+  const [{ data: league }, { data: season }, { data: layout }, { data: players }, { data: rounds }, { data: seasonLedger }, { data: contacts }, { data: prefs }, { data: payment }, { data: sent }] =
+    await Promise.all([
+      admin.from('leagues').select('name, slug').eq('id', event.league_id).single(),
+      admin.from('seasons').select('rules').eq('id', event.season_id).single(),
+      admin.from('layouts').select('id, name, holes').eq('id', event.layout_id).maybeSingle(),
+      admin.from('players').select('id, display_name, user_id, active').eq('league_id', event.league_id),
+      admin.from('rounds').select('id, tee_slot, round_players(player_id, side, position), hole_scores(player_id, hole_number, strokes), presses(start_hole_number, called_by, created_at), ctp_reports(hole_number, player_id, beat_player_id)').eq('event_id', event.id),
+      admin.from('ledger_entries').select('event_id, player_id, kind, amount_cents, hole_number, events!inner(season_id, status, week_number)').eq('events.season_id', event.season_id).eq('events.status', 'settled').lte('events.week_number', event.week_number),
+      admin.from('player_contacts').select('player_id, email').eq('league_id', event.league_id),
+      admin.from('notification_prefs').select('player_id, weekly_recap').eq('league_id', event.league_id),
+      admin.from('league_payment_settings').select('venmo_username, paypal_me, zelle_contact').eq('league_id', event.league_id).maybeSingle(),
+      admin.from('recap_sends').select('sent_at, recipients').eq('event_id', event.id).maybeSingle(),
+    ]);
+
+  if (!layout) return json({ error: 'This week has no course.' }, 400);
+  const rules = season?.rules;
+  if (rules?.format !== 'bestBallMatch') return json({ error: "Recap emails for this format aren't available yet." }, 400);
+
+  // Same shape the app gives the engine.
+  const engineRounds = (rounds ?? []).map((r: Row) => {
+    const scores: Record<string, (number | null)[]> = {};
+    for (const p of r.round_players as Row[]) {
+      scores[p.player_id] = (layout.holes as Row[]).map((h) => (r.hole_scores as Row[]).find((s) => s.player_id === p.player_id && s.hole_number === h.number)?.strokes ?? null);
+    }
+    const ctp: Record<number, unknown> = {};
+    for (const c of r.ctp_reports as Row[]) ctp[c.hole_number] = c.player_id ? { winner: c.player_id, beat: c.beat_player_id } : 'none';
+    return {
+      id: r.id, teeSlot: r.tee_slot,
+      players: (r.round_players as Row[]).sort((a, b) => a.position - b.position).map((p) => (p.side ? { id: p.player_id, side: p.side } : { id: p.player_id })),
+      scores,
+      presses: (r.presses as Row[]).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+        .map((p) => ({ startHoleIndex: (layout.holes as Row[]).findIndex((h) => h.number === p.start_hole_number), calledBy: p.called_by }))
+        .filter((p) => p.startHoleIndex >= 0),
+      ctp,
+    };
+  });
+  const toEntry = (e: Row) => ({ playerId: e.player_id, amount: e.amount_cents, kind: e.kind, ...(e.hole_number ? { holeNumber: e.hole_number } : {}) });
+  const weekLedger = (seasonLedger ?? []).filter((e: Row) => e.event_id === event.id).map(toEntry);
+  const recap = withPostedResults(weeklyRecap(event.week_number, engineRounds, layout, rules), weekLedger, (seasonLedger ?? []).map(toEntry));
+  const names = new Map((players ?? []).map((p: Row) => [p.id, p.display_name]));
+  const recapBody: string = recapText(recap, (id: string) => names.get(id) ?? '?', { leagueName: league!.name });
+  const playsForMoney = rules.match.stake > 0 || rules.presses.enabled || rules.skins.enabled || rules.ctp.enabled;
+
+  // Who gets it: active golfers with an email on file or a linked account, unless they opted out.
+  const optedOut = new Set((prefs ?? []).filter((p: Row) => p.weekly_recap === false).map((p: Row) => p.player_id));
+  const contactEmail = new Map((contacts ?? []).filter((c: Row) => c.email).map((c: Row) => [c.player_id, c.email as string]));
+  const recipients: { playerId: string; name: string; email: string }[] = [];
+  const missing: string[] = [];
+  const seen = new Set<string>();
+  for (const p of (players ?? []) as Row[]) {
+    if (!p.active || optedOut.has(p.id)) continue;
+    let email = contactEmail.get(p.id) ?? null;
+    if (!email && p.user_id) email = (await admin.auth.admin.getUserById(p.user_id)).data.user?.email ?? null;
+    if (!email) { missing.push(p.display_name); continue; }
+    const key = email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    recipients.push({ playerId: p.id, name: p.display_name, email });
+  }
+
+  const leagueUrl = `${env('APP_URL') || 'https://golfscorehq.com'}/l/${league!.slug}`;
+  const handles = { venmo: payment?.venmo_username, paypalMe: payment?.paypal_me, zelle: payment?.zelle_contact };
+  const emailFor = (r: { playerId: string; name: string }) =>
+    buildRecapEmail({
+      leagueName: league!.name, weekNumber: event.week_number, leagueUrl, recapBody, playerName: r.name, payment: handles,
+      weekCents: playsForMoney ? recap.weekBalances[r.playerId] ?? 0 : null,
+      seasonCents: playsForMoney ? recap.seasonBalances[r.playerId] ?? 0 : null,
+    });
+
+  if (!body.send) {
+    const sample = emailFor(recipients[0] ?? { playerId: '', name: 'Golfer' });
+    return json({ subject: sample.subject, text: sample.text, recipients: recipients.length, missing, alreadySent: sent ?? null });
+  }
+
+  if (sent && !body.force) return json({ error: 'already_sent', alreadySent: sent }, 409);
+  const key = env('RESEND_API_KEY');
+  if (!key) return json({ error: "Email isn't set up yet. Add the RESEND_API_KEY secret in Supabase." }, 503);
+  const from = env('RECAP_FROM_EMAIL') || 'GolfScoreHQ <onboarding@resend.dev>';
+
+  let delivered = 0;
+  for (let i = 0; i < recipients.length; i += 100) {
+    const batch = recipients.slice(i, i + 100).map((r) => {
+      const e = emailFor(r);
+      return { from, to: [r.email], subject: e.subject, html: e.html, text: e.text };
+    });
+    const res = await fetch('https://api.resend.com/emails/batch', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(batch),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      return json({ error: `The email service refused the send (${res.status}). ${detail.slice(0, 200)}`, delivered }, 502);
+    }
+    delivered += batch.length;
+  }
+  await admin.from('recap_sends').upsert({ event_id: event.id, league_id: event.league_id, sent_at: new Date().toISOString(), recipients: delivered });
+  return json({ sent: delivered, missing });
+});

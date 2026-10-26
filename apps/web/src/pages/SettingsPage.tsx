@@ -3,7 +3,7 @@ import { CopyField, ErrorText, ProLock } from '../components/ui';
 import { api } from '../lib/backend';
 import type { DemoApi } from '../lib/demoApi';
 import { useAction, useAsync, useAuth, useLeague } from '../lib/hooks';
-import { isCommissioner, type Plan, type Role, type TvDisplay, type TvPanel, type TvSettings } from '../lib/types';
+import { isCommissioner, type PaymentHandles, type Plan, type Role, type TvDisplay, type TvPanel, type TvSettings } from '../lib/types';
 import { randomJoinCode } from '../lib/util';
 
 export function SettingsPage() {
@@ -17,6 +17,7 @@ export function SettingsPage() {
       <JoinCode />
       <JoinRequests onApproved={() => setMembersVersion((v) => v + 1)} />
       <Members version={membersVersion} />
+      <PaymentLinks />
       <ClubhouseTv />
       {api.mode === 'demo' && <DemoPlan onChanged={reloadLeague} />}
     </div>
@@ -154,7 +155,52 @@ function Members({ version }: { version: number }) {
   );
 }
 
-const TV_PANELS: { key: TvPanel; label: string }[] = [
+/** Venmo / PayPal / Zelle handles. Shown to golfers who owe money in the recap email; the app never moves money. */
+function PaymentLinks() {
+  const { league } = useLeague();
+  const allowed = league.features.includes('payments');
+  const saved = useAsync(() => api.paymentHandles(league.id), [league.id]);
+  const [draft, setDraft] = useState<PaymentHandles | null>(null);
+  const [done, setDone] = useState(false);
+  const { busy, error, run } = useAction();
+  const h = draft ?? saved.data ?? { venmo: null, paypalMe: null, zelle: null };
+  const set = (k: keyof PaymentHandles) => (e: React.ChangeEvent<HTMLInputElement>) => { setDraft({ ...h, [k]: e.target.value }); setDone(false); };
+  const clean = (v: string | null) => v?.trim() || null;
+
+  return (
+    <form
+      className="card stack"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        const next = {
+          venmo: clean(h.venmo)?.replace(/^@?/, '@') ?? null,
+          paypalMe: clean(h.paypalMe)?.replace(/^(https?:\/\/)?(www\.)?paypal\.me\//i, '').replace(/\/.*$/, '') ?? null,
+          zelle: clean(h.zelle),
+        };
+        const ok = await run(async () => { await api.savePaymentHandles(league.id, next); return true; });
+        if (ok) { setDraft(null); setDone(true); saved.reload(); }
+      }}
+    >
+      <div className="row between">
+        <h2>How golfers pay you</h2>
+        {!allowed && <ProLock />}
+      </div>
+      <p className="small muted">
+        Golfers who owe money get a tap-to-pay link in their weekly recap email, with the amount filled in. Money goes straight to you; GolfScoreHQ never holds it. Leave any of these blank.
+      </p>
+      <label>Venmo username<input value={h.venmo ?? ''} onChange={set('venmo')} placeholder="@your-venmo" disabled={!allowed} /></label>
+      <label>PayPal.me name<input value={h.paypalMe ?? ''} onChange={set('paypalMe')} placeholder="yourname (from paypal.me/yourname)" disabled={!allowed} /></label>
+      <label>Zelle email or phone<input value={h.zelle ?? ''} onChange={set('zelle')} placeholder="you@example.com or 248-555-0100" disabled={!allowed} /></label>
+      <div className="row">
+        <button className="btn" disabled={!allowed || busy || !draft}>Save</button>
+        {done && <span className="small good">Saved ✓</span>}
+      </div>
+      <ErrorText>{error ?? saved.error}</ErrorText>
+    </form>
+  );
+}
+
+const TV_PANELS:{ key: TvPanel; label: string }[] = [
   { key: 'live', label: 'Leaderboard' }, { key: 'matches', label: 'Matches' }, { key: 'skins', label: 'Skins' },
   { key: 'ctp', label: 'Closest to the pin' }, { key: 'highlights', label: 'Highlights' }, { key: 'standings', label: 'Season standings' },
 ];

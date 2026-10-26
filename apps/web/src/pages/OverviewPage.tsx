@@ -57,7 +57,33 @@ export function OverviewPage() {
         <h2>Play</h2>
         <p className="muted">Scoring happens on the <Link to="play">Play</Link> tab: pick the week, start your group, and enter scores hole by hole.</p>
       </section>
+      {league.features.includes('weekly_recap') && <RecapPref players={players} />}
     </div>
+  );
+}
+
+/** The signed-in golfer's own "email me the weekly recap" switch. */
+function RecapPref({ players }: { players: Player[] }) {
+  const { league } = useLeague();
+  const { user } = useAuth();
+  const mine = players.find((p) => p.active && p.userId && p.userId === user?.id);
+  const pref = useAsync(() => (mine ? api.recapPref(mine.id) : Promise.resolve(true)), [mine?.id]);
+  const { busy, error, run } = useAction();
+  if (!mine || pref.data === undefined) return null;
+  return (
+    <section className="card stack">
+      <label className="row">
+        <input
+          type="checkbox"
+          checked={pref.data}
+          disabled={busy}
+          onChange={async (e) => { const on = e.target.checked; await run(() => api.setRecapPref(league.id, mine.id, on)); pref.reload(); }}
+        />
+        Email me the weekly recap
+      </label>
+      <p className="small muted">After each week is final: results, skins, highlights and what you won or owe.</p>
+      {error && <p className="error">{error}</p>}
+    </section>
   );
 }
 

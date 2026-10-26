@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Api, CourseSummary, LookupCourse } from './api';
-import type { SubOffer } from './types';
+import type { RecapPreview, SubOffer } from './types';
 import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, TvFeed, User } from './types';
 import { randomToken, sha256Hex } from './util';
 
@@ -22,6 +22,19 @@ async function invokeLookup(sb: SupabaseClient, body: Record<string, string>): P
     if (ctx.status === 404) throw new Error("Course lookup isn't set up yet. Enter the pars by hand for now.");
   }
   throw new Error("Course lookup isn't available right now. Enter the pars by hand for now.");
+}
+
+/** Call the send-recap server function; its { error } message becomes the thrown message. */
+async function invokeRecap(sb: SupabaseClient, body: Record<string, unknown>): Promise<unknown> {
+  const { data, error } = await sb.functions.invoke('send-recap', { body });
+  if (!error) return data;
+  const ctx = (error as { context?: Response }).context;
+  if (ctx && typeof ctx.json === 'function') {
+    const detail = await ctx.json().catch(() => null);
+    if (detail?.error) throw new Error(detail.error);
+    if (ctx.status === 404) throw new Error("Recap emails aren't set up yet (the send-recap function isn't deployed).");
+  }
+  throw new Error("Recap emails aren't available right now. Try again in a minute.");
 }
 
 const toUser =(u: { id: string; email?: string | null } | null | undefined): User | null =>
@@ -282,6 +295,37 @@ export function supabaseApi(url: string, anonKey: string): Api {
       const rows = check(await sb.from('ledger_entries').select('player_id, round_id, kind, amount_cents, hole_number').eq('event_id', eventId)) as Row[];
       return rows.map((r) => ({ playerId: r.player_id, roundId: r.round_id, kind: r.kind, amountCents: r.amount_cents, holeNumber: r.hole_number }));
     },
+    async recapPreview(eventId) {
+      return (await invokeRecap(sb, { eventId })) as RecapPreview;
+    },
+    async sendRecap(eventId, force = false) {
+      return (await invokeRecap(sb, { eventId, send: true, force })) as { sent: number; missing: string[] };
+    },
+    async recapPref(playerId) {
+      const row = check(await sb.from('notification_prefs').select('weekly_recap').eq('player_id', playerId).maybeSingle()) as Row | null;
+      return row?.weekly_recap ?? true;
+    },
+    async setRecapPref(leagueId, playerId, on) {
+      check(
+        await sb.from('notification_prefs').upsert(
+          { player_id: playerId, league_id: leagueId, weekly_recap: on, updated_at: new Date().toISOString() },
+          { onConflict: 'player_id' },
+        ),
+      );
+    },
+    async paymentHandles(leagueId) {
+      const row = check(await sb.from('league_payment_settings').select('venmo_username, paypal_me, zelle_contact').eq('league_id', leagueId).maybeSingle()) as Row | null;
+      return { venmo: row?.venmo_username ?? null, paypalMe: row?.paypal_me ?? null, zelle: row?.zelle_contact ?? null };
+    },
+    async savePaymentHandles(leagueId, h) {
+      check(
+        await sb.from('league_payment_settings').upsert(
+          { league_id: leagueId, venmo_username: h.venmo, paypal_me: h.paypalMe, zelle_contact: h.zelle, updated_at: new Date().toISOString() },
+          { onConflict: 'league_id' },
+        ),
+      );
+    },
+
     async rsvps(eventId) {
       const rows = check(await sb.from('event_rsvps').select('player_id, status').eq('event_id', eventId)) as Row[];
       return Object.fromEntries(rows.map((r) => [r.player_id, r.status]));

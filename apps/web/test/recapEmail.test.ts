@@ -1,0 +1,42 @@
+import { describe, expect, it } from 'vitest';
+import { buildRecapEmail, paymentOptions } from '../../../supabase/functions/send-recap/email';
+
+const base = {
+  leagueName: 'Maple <Thursday> League',
+  weekNumber: 3,
+  leagueUrl: 'https://golfscorehq.com/l/maple',
+  recapBody: 'Maple — Week 3 recap (Front 9)\n\nSKINS\n  Hole 1: Al (+$90)\n\nLOW ROUND: Al — 34 (-2)',
+  playerName: 'Bob Banks',
+  payment: { venmo: '@maple-commish', paypalMe: 'maplecommish', zelle: 'commish@example.com' },
+};
+
+describe('weekly recap email', () => {
+  it('tells a winner what they won and their season total', () => {
+    const e = buildRecapEmail({ ...base, weekCents: 9500, seasonCents: 18000 });
+    expect(e.subject).toBe('Maple <Thursday> League: week 3 results');
+    expect(e.text).toContain('Hi Bob,');
+    expect(e.text).toContain('You won $95 this week. Season to date: +$180.');
+    expect(e.text).not.toContain('Pay the commissioner');
+    expect(e.text).toContain('SKINS\n  Hole 1: Al (+$90)');
+  });
+
+  it('shows someone who owes how to pay, with the amount filled in', () => {
+    const e = buildRecapEmail({ ...base, weekCents: -1500, seasonCents: -500 });
+    expect(e.text).toContain('You owe $15 this week. Season to date: −$5.');
+    expect(e.text).toContain('Venmo @maple-commish — https://venmo.com/u/maple-commish');
+    expect(e.text).toContain('paypal.me/maplecommish/15.00');
+    expect(e.html).toContain('href="https://paypal.me/maplecommish/15.00"');
+    expect(e.text).toContain('Zelle commish@example.com');
+  });
+
+  it('leaves money out for leagues that do not play for it, and escapes HTML', () => {
+    const e = buildRecapEmail({ ...base, weekCents: null, seasonCents: null });
+    expect(e.text).not.toMatch(/won|owe/);
+    expect(e.html).toContain('Maple &lt;Thursday&gt; League');
+    expect(e.html).not.toContain('<Thursday>');
+  });
+
+  it('only lists the payment apps the commissioner set up', () => {
+    expect(paymentOptions({ venmo: '', paypalMe: null, zelle: '248-555-0100' }, 500).map((p) => p.label)).toEqual(['Zelle 248-555-0100']);
+  });
+});

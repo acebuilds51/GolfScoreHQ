@@ -152,6 +152,22 @@ export interface RoundData {
   submittedAt: string | null;
 }
 
+export interface RecapPreview {
+  subject: string;
+  /** A sample of what golfers receive. */
+  text: string;
+  recipients: number;
+  /** Golfers with no email on file. */
+  missing: string[];
+  alreadySent: { sent_at: string; recipients: number } | null;
+}
+
+export interface PaymentHandles {
+  venmo: string | null;
+  paypalMe: string | null;
+  zelle: string | null;
+}
+
 export type RsvpStatus = 'in' | 'out' | 'maybe';
 
 export interface SubOffer {

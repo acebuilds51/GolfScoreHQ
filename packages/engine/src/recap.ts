@@ -93,6 +93,21 @@ export function weeklyRecap(
   };
 }
 
+/**
+ * Use what the commissioner actually posted when settling the week (which
+ * includes their decisions on disputed CTPs) for the CTP winners and the
+ * week's and season's balances, instead of recalculating them.
+ */
+export function withPostedResults(recap: WeeklyRecap, weekLedger: LedgerEntry[], seasonLedger: LedgerEntry[]): WeeklyRecap {
+  const ctpWinners = new Map(weekLedger.filter((e) => e.kind === 'ctp' && e.holeNumber).map((e) => [e.holeNumber!, e.playerId]));
+  return {
+    ...recap,
+    ctp: recap.ctp.map((c) => (ctpWinners.has(c.holeNumber) ? { ...c, winner: ctpWinners.get(c.holeNumber)!, disputed: false } : c)),
+    weekBalances: totalsByPlayer(weekLedger),
+    seasonBalances: totalsByPlayer(seasonLedger),
+  };
+}
+
 const money = (c: Cents) => `${c < 0 ? '-' : '+'}$${(Math.abs(c) / 100).toFixed(2).replace(/\.00$/, '')}`;
 
 /**

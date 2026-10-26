@@ -88,3 +88,23 @@ npx supabase functions deploy course-lookup --use-api
 `--use-api` builds the function on Supabase's side, so Docker isn't needed.
 
 To try the lookup without a key, run `npm run dev:demo`: it uses made-up sample courses ("maple", "pine").
+
+## 6. Weekly recap email (Pro)
+
+After a week is settled, the commissioner taps **Email the recap** on the week page. Each golfer gets the week's results plus what they personally won or owe, with Venmo / PayPal / Zelle links (from **Settings → How golfers pay you**) when they owe. Golfers can turn it off on the league's Overview page.
+
+1. Sign up at [resend.com](https://resend.com) (free: 3,000 emails a month, 100 a day) and create an API key.
+2. To send from your own address, add your domain in Resend (**Domains**) and add the DNS records it shows you. Until then, Resend's test sender only delivers to your own Resend account's email, which is fine for trying it out.
+3. In Supabase **Edge Functions → Secrets**, add:
+   - `RESEND_API_KEY`: your Resend key. Keep it out of chat, email and the code.
+   - `RECAP_FROM_EMAIL`: who the email is from, for example `GolfScoreHQ <recaps@yourdomain.com>` (must be on the domain you verified).
+   - `APP_URL`: where the app lives, for example `https://golfscorehq.com`, so the email's link points to the league.
+4. Deploy the function from the `GolfScoreHQ` folder (after `npx supabase login` and `link` from step 5):
+
+```bash
+npx supabase functions deploy send-recap --use-api
+```
+
+The function uses a bundled copy of the scoring engine (`supabase/functions/_shared/engine.js`). After changing anything in `packages/engine`, run `npm run build:functions` and commit the result; a test fails if the copy is out of date.
+
+In demo mode the recap screens work but no email is sent.

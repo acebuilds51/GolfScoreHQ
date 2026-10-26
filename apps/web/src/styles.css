@@ -85,6 +85,13 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .card-link { text-decoration: none; color: inherit; display: block; }
 .card-link:hover { border-color: var(--brand-2); }
 .subcard { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--surface-2); }
+.recap { border-top: 1px solid var(--border); padding-top: 12px; }
+.recap-text {
+  margin: 0; padding: 12px; max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+}
+.recap details summary { cursor: pointer; color: var(--text-2); }
 
 label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-2); font-weight: 500; }
 input, select, textarea {
