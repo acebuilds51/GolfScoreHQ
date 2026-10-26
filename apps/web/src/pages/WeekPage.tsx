@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorText } from '../components/ui';
 import { api } from '../lib/backend';
-import { useAction, useAsync, useLeague } from '../lib/hooks';
+import { useAction, useAsync, useLeague, useLiveRefresh } from '../lib/hooks';
 import { allLayouts, fmtDate, matchSoFar } from '../lib/scoring';
 import { isCommissioner, type Layout, type Player, type RoundData, type RoundPlayer, type Season } from '../lib/types';
 import { WeekResults } from './WeekResults';
@@ -27,11 +27,8 @@ export function WeekPage() {
   const data = useAsync(() => loadWeek(league.id, eventId), [league.id, eventId]);
   const [starting, setStarting] = useState(false);
 
-  // Live: refresh every 20 seconds while the week is open.
-  useEffect(() => {
-    const t = setInterval(() => { if (document.visibilityState === 'visible') data.reload(); }, 20000);
-    return () => clearInterval(t);
-  }, [data.reload]);
+  // Live: refresh as groups enter scores while the week is open.
+  useLiveRefresh(league.id, data.reload, data.data?.event.status !== 'settled');
 
   if (data.error) return <div className="page"><ErrorText>{data.error}</ErrorText></div>;
   if (!data.data) return <div className="page muted">{data.loading ? 'Loading…' : 'Week not found.'}</div>;
@@ -60,7 +57,7 @@ export function WeekPage() {
       <section className="card flush">
         <div className="row between pad">
           <h2>Groups</h2>
-          {event.status !== 'settled' && <span className="small muted">Updates every 20 seconds</span>}
+          {rounds.length > 0 && <Link className="small" to={`../live/${event.id}`}>Live leaderboard →</Link>}
         </div>
         {rounds.length === 0 ? (
           <EmptyState title="No groups yet"><p className="muted">Each group starts scoring from their phone.</p></EmptyState>

@@ -281,6 +281,14 @@ export function supabaseApi(url: string, anonKey: string): Api {
       const rows = check(await sb.from('ledger_entries').select('player_id, round_id, kind, amount_cents, hole_number').eq('event_id', eventId)) as Row[];
       return rows.map((r) => ({ playerId: r.player_id, roundId: r.round_id, kind: r.kind, amountCents: r.amount_cents, holeNumber: r.hole_number }));
     },
+    watchLeague(leagueId, onChange) {
+      const channel = sb.channel(`league-${leagueId}-${Math.random().toString(36).slice(2)}`);
+      for (const table of ['hole_scores', 'rounds', 'ctp_reports', 'presses', 'events']) {
+        channel.on('postgres_changes', { event: '*', schema: 'public', table, filter: `league_id=eq.${leagueId}` }, () => onChange());
+      }
+      channel.subscribe();
+      return () => { sb.removeChannel(channel); };
+    },
     async seasonRounds(seasonId) {
       const rows = check(await sb.from('rounds').select(`${ROUND_SELECT}, events!inner(season_id)`).eq('events.season_id', seasonId)) as Row[];
       return rows.map(toRound);

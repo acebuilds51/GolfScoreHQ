@@ -53,6 +53,23 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
   return { ...state, reload: run };
 }
 
+/** Re-run `reload` when the league's scoring data changes, with a slow poll as a safety net. */
+export function useLiveRefresh(leagueId: string, reload: () => void, enabled = true) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [updatedAt, setUpdatedAt] = useState(() => new Date());
+  useEffect(() => {
+    if (!enabled) return;
+    const bump = () => {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => { reload(); setUpdatedAt(new Date()); }, 600);
+    };
+    const off = api.watchLeague(leagueId, bump);
+    const poll = setInterval(() => { if (document.visibilityState === 'visible') bump(); }, 30000);
+    return () => { off(); clearInterval(poll); if (timer.current) clearTimeout(timer.current); };
+  }, [leagueId, reload, enabled]);
+  return updatedAt;
+}
+
 /** Wrap an action: tracks busy state and turns failures into a message. */
 export function useAction() {
   const [busy, setBusy] = useState(false);

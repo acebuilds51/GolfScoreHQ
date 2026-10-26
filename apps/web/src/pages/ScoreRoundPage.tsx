@@ -166,9 +166,10 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
             <div key={p.playerId} className={`score-card side-${p.side ?? 'x'}`}>
               <div className="small strong-name">{names.get(p.playerId) ?? '?'}{p.side === null && <span className="muted"> · skins</span>}</div>
               <div className="stepper">
-                <button type="button" aria-label="One fewer stroke" onClick={() => setDraft((d) => ({ ...d, [p.playerId]: Math.max(1, v - 1) }))}>−</button>
+                {/* Count from the latest value, not the rendered one, so quick double-taps both count */}
+                <button type="button" aria-label="One fewer stroke" onClick={() => setDraft((d) => ({ ...d, [p.playerId]: Math.max(1, (d[p.playerId] ?? hole.par) - 1) }))}>−</button>
                 <span className="big">{v}</span>
-                <button type="button" aria-label="One more stroke" onClick={() => setDraft((d) => ({ ...d, [p.playerId]: Math.min(20, v + 1) }))}>+</button>
+                <button type="button" aria-label="One more stroke" onClick={() => setDraft((d) => ({ ...d, [p.playerId]: Math.min(20, (d[p.playerId] ?? hole.par) + 1) }))}>+</button>
               </div>
               <div className={`small ${v < hole.par ? 'good' : 'muted'}`}>{toParLabel(v - hole.par)}</div>
             </div>

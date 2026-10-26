@@ -4,6 +4,7 @@ import { AuthContext, useAuth, useAuthState } from './lib/hooks';
 import { CoursesPage } from './pages/CoursesPage';
 import { JoinInvitePage } from './pages/JoinInvitePage';
 import { LeagueLayout } from './pages/LeagueLayout';
+import { LivePage } from './pages/LivePage';
 import { LeaguesPage } from './pages/LeaguesPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { PlayPage } from './pages/PlayPage';
@@ -37,6 +38,8 @@ export function App() {
             <Route path="week/:eventId" element={<WeekPage />} />
             <Route path="round/:roundId" element={<ScoreRoundPage />} />
             <Route path="standings" element={<StandingsPage />} />
+            <Route path="live" element={<LivePage />} />
+            <Route path="live/:eventId" element={<LivePage />} />
             <Route path="roster" element={<RosterPage />} />
             <Route path="courses" element={<CoursesPage />} />
             <Route path="settings" element={<SettingsPage />} />
