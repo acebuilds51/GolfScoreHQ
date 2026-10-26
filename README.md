@@ -13,7 +13,10 @@ schedule) instead of each league getting custom code.
 | `packages/db` | Tests that run the migrations in an embedded Postgres (PGlite) and check tenant isolation, roles and plan limits. |
 | `legacy/ocbc` | The original OCBC Golf League PWA (v2.24) and its Apps Script backend, kept as a reference. OCBC itself runs from its own repo. |
 
-Planned: `apps/web` (React + Vite PWA) and the hosted Supabase project.
+| `apps/web` | React + Vite web app: sign-in, leagues, roster (bulk paste, invite links), courses, league code and join requests, member roles. Runs on Supabase, or in demo mode (browser storage) when Supabase isn't configured. |
+| `docs/` | [Roadmap](docs/roadmap.md) and [Supabase setup](docs/supabase-setup.md). |
+
+Run the web app with `npm run dev` (http://localhost:5173). Without `apps/web/.env.local` it starts in demo mode.
 
 ## Database conventions
 

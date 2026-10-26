@@ -321,6 +321,17 @@ describe('joining', () => {
     await expect(as(db, sam, () => db.query('select accept_invite($1)', [token]))).rejects.toThrow(/invalid or expired/);
   });
 
+  it("shows the commissioner who's asking, and approving adds them as a member", async () => {
+    await db.query(`update auth.users set email = 'sam@example.com' where id = $1`, [sam]);
+    await as(db, tony, () => db.query(`update leagues set join_code = 'OAK123' where id = $1`, [oak]));
+    await as(db, sam, () => db.query(`select request_to_join(' oak123 ', null, 'Sam Pine')`));
+    expect(await as(db, tony, () => rows(db, 'select requester_email, requester_name from join_requests'))).toEqual([{ requester_email: 'sam@example.com', requester_name: 'Sam Pine' }]);
+    await expect(as(db, joe, () => db.query('select decide_join_request($1, $2, true)', [oak, sam]))).rejects.toThrow(/commissioners only/);
+    await as(db, tony, () => db.query('select decide_join_request($1, $2, true)', [oak, sam]));
+    expect(await as(db, sam, () => rows<{ slug: string }>(db, 'select slug from leagues order by slug'))).toEqual([{ slug: 'oak-creek' }, { slug: 'pine-valley' }]);
+    await expect(as(db, tony, () => db.query('select decide_join_request($1, $2, true)', [oak, sam]))).rejects.toThrow(/no pending request/);
+  });
+
   it('turns a league code into a pending request the commissioner sees', async () => {
     await as(db, tony, () => db.query(`update leagues set join_code = 'OAK123' where id = $1`, [oak]));
     await as(db, sam, () => db.query(`select request_to_join('oak123', 'Can I sub?')`));

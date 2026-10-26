@@ -1,0 +1,41 @@
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { Header } from './components/Header';
+import { AuthContext, useAuth, useAuthState } from './lib/hooks';
+import { CoursesPage } from './pages/CoursesPage';
+import { JoinInvitePage } from './pages/JoinInvitePage';
+import { LeagueLayout } from './pages/LeagueLayout';
+import { LeaguesPage } from './pages/LeaguesPage';
+import { OverviewPage } from './pages/OverviewPage';
+import { RosterPage } from './pages/RosterPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { SignInPage } from './pages/SignInPage';
+
+function RequireUser({ children }: { children: JSX.Element }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="page muted">Loading…</div>;
+  if (!user) return <Navigate to="/" replace />;
+  return children;
+}
+
+export function App() {
+  const auth = useAuthState();
+  return (
+    <AuthContext.Provider value={auth}>
+      <Header />
+      <main>
+        <Routes>
+          <Route path="/" element={auth.loading ? <div className="page muted">Loading…</div> : auth.user ? <Navigate to="/leagues" replace /> : <SignInPage />} />
+          <Route path="/join/:token" element={<JoinInvitePage />} />
+          <Route path="/leagues" element={<RequireUser><LeaguesPage /></RequireUser>} />
+          <Route path="/l/:slug" element={<RequireUser><LeagueLayout /></RequireUser>}>
+            <Route index element={<OverviewPage />} />
+            <Route path="roster" element={<RosterPage />} />
+            <Route path="courses" element={<CoursesPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
+          <Route path="*" element={<div className="page"><h1>Page not found</h1></div>} />
+        </Routes>
+      </main>
+    </AuthContext.Provider>
+  );
+}
