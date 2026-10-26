@@ -4,6 +4,23 @@ import { as, createUser, freshDb, rows, type Db } from './harness';
 
 const FRONT_HOLES = JSON.stringify([4, 3, 5, 4, 3, 4, 4, 4, 4].map((par, i) => ({ number: i + 1, par })));
 
+// Engine FormatRules: a basic match with no money (Free) and OCBC's full format (Pro).
+const NO_MONEY = { enabled: false, tieRule: 'noSkin', payout: 'splitPot', pot: 0 };
+const FREE_RULES = JSON.stringify({
+  format: 'bestBallMatch', holeScoring: 'bestBall', match: { stake: 0 }, presses: { enabled: false, stake: 0 },
+  skins: NO_MONEY, ctp: { enabled: false, amountPerHole: 0, resolution: 'markerChain' },
+});
+const PRO_RULES = JSON.stringify({
+  format: 'bestBallMatch', holeScoring: 'bestBall', match: { stake: 500 }, presses: { enabled: true, stake: 1000 },
+  skins: { enabled: true, tieRule: 'noSkin', payout: 'splitPot', pot: 18000 },
+  ctp: { enabled: true, amountPerHole: 3600, resolution: 'markerChain' },
+});
+
+/** What the billing webhook (service role) does when a league subscribes. */
+async function setPlan(leagueId: string, plan: string, expiresAt: string | null = null) {
+  await db.query('update leagues set plan = $2, plan_expires_at = $3 where id = $1', [leagueId, plan, expiresAt]);
+}
+
 let db: Db;
 let tony: string; // commissioner of Oak Creek
 let joe: string; //  player in Oak Creek
@@ -22,9 +39,9 @@ async function addPlayer(user: string, leagueId: string, name: string, isSub = f
 }
 
 /** A season, one week on a front nine, and a round in it. Returns ids. */
-async function weekWithRound(user: string, leagueId: string) {
+async function weekWithRound(user: string, leagueId: string, rules = FREE_RULES, year = 2027) {
   return as(db, user, async () => {
-    const [season] = await rows<{ id: string }>(db, `insert into seasons (league_id, year, rules) values ($1, 2027, '{}') returning id`, [leagueId]);
+    const [season] = await rows<{ id: string }>(db, `insert into seasons (league_id, year, rules) values ($1, $2, $3) returning id`, [leagueId, year, rules]);
     const [course] = await rows<{ id: string }>(db, `insert into courses (league_id, name) values ($1, 'Home Course') returning id`, [leagueId]);
     const [layout] = await rows<{ id: string }>(db, `insert into layouts (course_id, name, holes) values ($1, 'Front 9', $2) returning id`, [course!.id, FRONT_HOLES]);
     const [event] = await rows<{ id: string }>(db, `insert into events (league_id, season_id, week_number, layout_id) values ($1, $2, 1, $3) returning id`, [leagueId, season!.id, layout!.id]);
@@ -102,6 +119,7 @@ describe('roles', () => {
   });
 
   it('records whose CTP marker a group beat, only within the same league', async () => {
+    await setPlan(oak, 'pro');
     const al = await addPlayer(tony, oak, 'Al');
     const bob = await addPlayer(tony, oak, 'Bob');
     const pineGuy = await addPlayer(sam, pine, 'Pine Guy');
@@ -130,17 +148,87 @@ describe('roles', () => {
   });
 });
 
-describe('plan limits', () => {
-  it('caps the free plan at 20 regular players but allows subs', async () => {
-    for (let i = 1; i <= 20; i++) await addPlayer(tony, oak, `Player ${i}`);
-    await expect(addPlayer(tony, oak, 'Player 21')).rejects.toThrow(/plan_limit/);
-    await addPlayer(tony, oak, 'Weekly Sub', true);
-    await db.query(`update leagues set plan = 'pilot' where id = $1`, [oak]); // as the billing webhook would
-    await addPlayer(tony, oak, 'Player 21');
+describe('plans (by feature, never by size)', () => {
+  it('publishes Free $0, Pro $149 and Club $299 with every golfer allowed', async () => {
+    const plans = await as(db, null, () => rows<{ code: string; price_cents: number }>(db, `select code, price_cents from plans where code in ('free','pro','club') order by price_cents`));
+    expect(plans).toEqual([{ code: 'free', price_cents: 0 }, { code: 'pro', price_cents: 14900 }, { code: 'club', price_cents: 29900 }]);
+    for (let i = 1; i <= 45; i++) await addPlayer(tony, oak, `Player ${i}`); // no size cap on Free
+    expect(await rows(db, 'select count(*)::int as n from players where league_id = $1', [oak])).toEqual([{ n: 45 }]);
   });
 
   it('allows one free league per owner', async () => {
     await expect(league(tony, 'Second League', 'second-league')).rejects.toThrow(/plan_limit/);
+    await setPlan(oak, 'pro');
+    await league(tony, 'Second League', 'second-league'); // the first league is paid, so a new free one is fine
+  });
+
+  it('keeps side games and money for Pro', async () => {
+    await expect(weekWithRound(tony, oak, PRO_RULES)).rejects.toThrow(/plan_feature: Side games/);
+    const { roundId } = await weekWithRound(tony, oak); // basic match with no money is fine on Free
+    const al = await addPlayer(tony, oak, 'Al');
+    await expect(
+      as(db, joe, () => db.query(`insert into ctp_reports (round_id, league_id, hole_number, player_id) values ($1, $2, 2, $3)`, [roundId, oak, al])),
+    ).rejects.toThrow(/row-level security/);
+    await expect(
+      as(db, joe, () => db.query(`insert into presses (round_id, league_id, start_hole_number, called_by) values ($1, $2, 3, 'A')`, [roundId, oak])),
+    ).rejects.toThrow(/row-level security/);
+
+    await setPlan(oak, 'pro');
+    await weekWithRound(tony, oak, PRO_RULES, 2028);
+    await as(db, joe, () => db.query(`insert into presses (round_id, league_id, start_hole_number, called_by) values ($1, $2, 3, 'A')`, [roundId, oak]));
+  });
+
+  it('keeps scramble and other advanced formats for Pro', async () => {
+    const scramble = JSON.stringify({ format: 'scramble', teamPot: 0, skins: NO_MONEY, ctp: { enabled: false, amountPerHole: 0, resolution: 'markerChain' } });
+    await expect(weekWithRound(tony, oak, scramble)).rejects.toThrow(/plan_feature: This format/);
+    await setPlan(oak, 'pilot'); // 2027 pilots get Pro features
+    await weekWithRound(tony, oak, scramble);
+  });
+
+  it('treats a lapsed Pro league as Free without deleting anything', async () => {
+    await setPlan(oak, 'pro', '2020-01-01T00:00:00Z');
+    expect(await as(db, tony, () => rows(db, `select effective_plan($1) as p`, [oak]))).toEqual([{ p: 'free' }]);
+    await expect(weekWithRound(tony, oak, PRO_RULES)).rejects.toThrow(/plan_feature/);
+  });
+
+  it('keeps co-commissioners, payments and a league logo for Pro', async () => {
+    const al = await addPlayer(tony, oak, 'Al');
+    await expect(as(db, tony, () => db.query(`update league_members set role = 'commissioner' where league_id = $1 and user_id = $2`, [oak, joe]))).rejects.toThrow(/plan_feature: Co-commissioners/);
+    await expect(as(db, tony, () => db.query(`insert into payments (league_id, player_id, amount_cents, method, recorded_by) values ($1, $2, 4000, 'venmo', $3)`, [oak, al, tony]))).rejects.toThrow(/row-level security/);
+    await expect(as(db, tony, () => db.query(`update leagues set logo_url = 'https://x/logo.png' where id = $1`, [oak]))).rejects.toThrow(/plan_feature: A league logo/);
+
+    await setPlan(oak, 'pro');
+    await as(db, tony, () => db.query(`update league_members set role = 'commissioner' where league_id = $1 and user_id = $2`, [oak, joe]));
+    await as(db, tony, () => db.query(`insert into payments (league_id, player_id, amount_cents, method, recorded_by) values ($1, $2, 4000, 'venmo', $3)`, [oak, al, tony]));
+    await as(db, tony, () => db.query(`update leagues set logo_url = 'https://x/logo.png' where id = $1`, [oak]));
+  });
+
+  it('shows Free leagues their current season only; Pro sees every season', async () => {
+    await weekWithRound(tony, oak, FREE_RULES, 2027);
+    await weekWithRound(tony, oak, FREE_RULES, 2028);
+    const seasonsSeen = () => as(db, joe, () => rows<{ year: number }>(db, 'select year from seasons order by year'));
+    const roundsSeen = () => as(db, joe, () => rows(db, 'select id from rounds'));
+    expect(await seasonsSeen()).toEqual([{ year: 2028 }]);
+    expect(await roundsSeen()).toHaveLength(1);
+    await setPlan(oak, 'pro');
+    expect(await seasonsSeen()).toEqual([{ year: 2027 }, { year: 2028 }]);
+    expect(await roundsSeen()).toHaveLength(2);
+  });
+
+  it('lets one Club cover up to 5 leagues, each with Pro features', async () => {
+    const [club] = await rows<{ id: string }>(db, `insert into clubs (name, owner_id) values ('Crystal Lake Golf', $1) returning id`, [tony]);
+    const ids = [oak];
+    await setPlan(oak, 'club');
+    for (let i = 2; i <= 6; i++) {
+      await db.query(`insert into leagues (name, slug, owner_id, plan) values ($1, $2, $3, 'club') returning id`, [`League ${i}`, `league-${i}`, tony]);
+      ids.push((await rows<{ id: string }>(db, 'select id from leagues where slug = $1', [`league-${i}`]))[0]!.id);
+    }
+    for (const id of ids.slice(0, 5)) await db.query('update leagues set club_id = $1 where id = $2', [club!.id, id]);
+    await expect(db.query('update leagues set club_id = $1 where id = $2', [club!.id, ids[5]])).rejects.toThrow(/plan_limit: a Club covers up to 5/);
+
+    await weekWithRound(tony, oak, PRO_RULES); // club league has Pro features
+    await db.query(`update clubs set plan_expires_at = '2020-01-01' where id = $1`, [club!.id]);
+    expect(await as(db, tony, () => rows(db, `select effective_plan($1) as p`, [oak]))).toEqual([{ p: 'free' }]);
   });
 });
 

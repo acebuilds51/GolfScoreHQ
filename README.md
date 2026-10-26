@@ -21,7 +21,11 @@ Planned: `apps/web` (React + Vite PWA) and the hosted Supabase project.
 - RLS: members read their league; commissioners manage it; any member can score until a week is settled, then only commissioners.
 - Contact details are in `player_contacts`, visible only to commissioners and the golfer.
 - `ledger_entries` is written only by settlement (service role). `payments` records money actually handed over; the app never moves money.
-- Plan limits are triggers (free: 1 league per owner, 20 regular players). Plan fields change only through the service role.
+- Plans are by feature, never by league size (unlimited golfers on every plan). The `plans` table lists price and features:
+  Free ($0), Pro ($149 per league per season), Club ($299 per season, up to 5 leagues), plus `pilot` (Pro features, no charge) and `comp` (free forever).
+- Features are enforced in the database with `league_has_feature(league_id, feature)`: triggers block Pro-only rules, roles and branding;
+  RLS blocks Pro-only writes (presses, CTP, payments) and hides past seasons from Free leagues. A lapsed plan falls back to Free; nothing is deleted.
+- Free allows one free league per owner. Plan, expiry and club fields change only through the service role (billing webhook).
 
 ## Engine conventions
 
