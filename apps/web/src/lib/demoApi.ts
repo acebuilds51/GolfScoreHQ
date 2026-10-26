@@ -201,6 +201,9 @@ export function demoApi(): DemoApi {
       notify(db);
       return 'signed-in';
     },
+    async verifyCode() {
+      // Demo signs in straight away, so there's never a code to check.
+    },
     async signOut() {
       const db = load();
       db.session = null;

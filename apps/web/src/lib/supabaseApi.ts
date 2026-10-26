@@ -84,6 +84,10 @@ export function supabaseApi(url: string, anonKey: string): Api {
       check(await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } }));
       return 'link-sent';
     },
+    async verifyCode(email, code) {
+      const { error } = await sb.auth.verifyOtp({ email, token: code, type: 'email' });
+      if (error) throw new Error(/expired|invalid/i.test(error.message) ? 'That code is wrong or has expired. Check the newest email, or send a new code.' : error.message);
+    },
     async signOut() {
       await sb.auth.signOut();
     },

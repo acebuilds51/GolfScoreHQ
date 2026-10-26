@@ -18,6 +18,11 @@ export interface Api {
   onAuthChange(cb: (user: User | null) => void): () => void;
   /** Email a sign-in link (Supabase) or sign in immediately (demo). */
   signIn(email: string, redirectTo: string): Promise<'link-sent' | 'signed-in'>;
+  /**
+   * Finish signing in with the code from the email. Needed for the iPhone home-screen
+   * app, which can't receive the emailed link (iOS opens links in Safari).
+   */
+  verifyCode(email: string, code: string): Promise<void>;
   signOut(): Promise<void>;
 
   myLeagues(): Promise<LeagueSummary[]>;
