@@ -449,6 +449,12 @@ export function demoApi(): DemoApi {
       const db = load();
       return db.ledger.filter((e) => e.eventId === eventId).map(({ eventId: _e, ...r }) => r);
     },
+    watchLeague(_leagueId, onChange) {
+      // Demo data lives in this browser: other tabs signal changes through storage events.
+      const onStorage = (e: StorageEvent) => { if (e.key === KEY) onChange(); };
+      window.addEventListener('storage', onStorage);
+      return () => window.removeEventListener('storage', onStorage);
+    },
     async seasonRounds(seasonId) {
       const db = load();
       const events = new Set(db.events.filter((e) => e.seasonId === seasonId).map((e) => e.id));

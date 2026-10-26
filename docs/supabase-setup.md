@@ -26,6 +26,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 6. `20261031000000_course_lookup.sql`
 7. `20261101000000_scoring.sql`
 8. `20261102000000_settlement.sql`
+9. `20261103000000_realtime.sql`
 
 **B. Command line**
 

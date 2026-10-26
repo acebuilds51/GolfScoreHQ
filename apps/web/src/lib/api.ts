@@ -69,6 +69,12 @@ export interface Api {
   /** Add a sub/guest to the roster from the first tee (any member). */
   addSub(leagueId: string, name: string): Promise<string>;
 
+  /**
+   * Call `onChange` whenever scoring data in the league changes (scores,
+   * rounds, CTP, presses, week status). Returns an unsubscribe function.
+   */
+  watchLeague(leagueId: string, onChange: () => void): () => void;
+
   ledger(eventId: string): Promise<LedgerRow[]>;
   /** Every round and money entry in a season, for standings. */
   seasonRounds(seasonId: string): Promise<RoundData[]>;
