@@ -54,4 +54,13 @@ describe('parseRoster', () => {
   it('flags lines without a name', () => {
     expect(parseRoster('someone@example.com').skipped).toEqual([{ line: 'someone@example.com', reason: 'No name found' }]);
   });
+
+  it('pulls an email and phone out of the name when only spaces separate them', () => {
+    const r = parseRoster('Jim Jones jim@Example.com 248-555-1212\nAnn Lee (248) 555-0100 sub\nBo Fox, bo@x.com 248.555.0199');
+    expect(r.players).toEqual([
+      { displayName: 'Jim Jones', isSub: false, email: 'jim@example.com', phone: '248-555-1212' },
+      { displayName: 'Ann Lee', isSub: true, phone: '(248) 555-0100' },
+      { displayName: 'Bo Fox', isSub: false, email: 'bo@x.com', phone: '248.555.0199' },
+    ]);
+  });
 });
