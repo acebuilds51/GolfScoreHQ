@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Api, CourseSummary, LookupCourse } from './api';
-import type { RecapPreview, SubOffer } from './types';
+import type { LeagueBilling, RecapPreview, SubOffer } from './types';
 import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, TvFeed, User } from './types';
 import { randomToken, sha256Hex } from './util';
 
@@ -24,6 +24,18 @@ async function invokeLookup(sb: SupabaseClient, body: Record<string, string>): P
     if (ctx.status === 404) throw new Error("Course lookup isn't set up yet. Enter the pars by hand for now.");
   }
   throw new Error("Course lookup isn't available right now. Enter the pars by hand for now.");
+}
+
+/** Call a server function; its { error } message becomes the thrown message. */
+async function invokeFn(sb: SupabaseClient, name: string, body: Record<string, unknown>, fallback: string): Promise<unknown> {
+  const { data, error } = await sb.functions.invoke(name, { body });
+  if (!error) return data;
+  const ctx = (error as { context?: Response }).context;
+  if (ctx && typeof ctx.json === 'function') {
+    const detail = await ctx.json().catch(() => null);
+    if (detail?.error) throw new Error(detail.error);
+  }
+  throw new Error(fallback);
 }
 
 /** Call the send-recap server function; its { error } message becomes the thrown message. */
@@ -332,6 +344,26 @@ export function supabaseApi(url: string, anonKey: string): Api {
       const rows = check(await sb.from('ledger_entries').select('player_id, round_id, kind, amount_cents, hole_number').eq('event_id', eventId)) as Row[];
       return rows.map((r) => ({ playerId: r.player_id, roundId: r.round_id, kind: r.kind, amountCents: r.amount_cents, holeNumber: r.hole_number }));
     },
+    async leagueBilling(leagueId) {
+      return (check(await sb.rpc('league_billing', { p_league: leagueId })) as LeagueBilling | null) ?? null;
+    },
+    async startCheckout(target) {
+      return ((await invokeFn(sb, 'billing', { action: 'checkout', ...target }, "Payments aren't available right now. Try again in a minute.")) as { url: string }).url;
+    },
+    async billingPortal(returnPath) {
+      return ((await invokeFn(sb, 'billing', { action: 'portal', returnPath }, "Payments aren't available right now. Try again in a minute.")) as { url: string }).url;
+    },
+    async myClubs() {
+      const rows = check(await sb.from('clubs').select('id, name, plan_expires_at, leagues(id, name, slug)').eq('owner_id', await uid()).order('created_at')) as Row[];
+      return rows.map((c) => ({ id: c.id, name: c.name, expiresAt: c.plan_expires_at, leagues: ((c.leagues ?? []) as Row[]).map((l) => ({ id: l.id, name: l.name, slug: l.slug })) }));
+    },
+    async createClub(name) {
+      return check(await sb.rpc('create_club', { p_name: name })) as string;
+    },
+    async setLeagueClub(leagueId, clubId) {
+      check(await sb.rpc('set_league_club', { p_league: leagueId, p_club: clubId }));
+    },
+
     async recapPreview(eventId, story) {
       return (await invokeRecap(sb, { eventId, story: story ?? null })) as RecapPreview;
     },

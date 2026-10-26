@@ -4,6 +4,7 @@ import { EmptyState, ErrorText, PlanBadge } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync } from '../lib/hooks';
 import { cleanSlugInput, SLUG_RE, slugify } from '../lib/util';
+import { ClubSection } from './ClubSection';
 
 const ROLE_LABEL = { owner: 'Commissioner (owner)', commissioner: 'Commissioner', scorer: 'Scorer', player: 'Golfer' } as const;
 
@@ -33,6 +34,7 @@ export function LeaguesPage() {
         <CreateLeague />
         <JoinWithCode onJoined={leagues.reload} />
       </div>
+      {leagues.data && <ClubSection leagues={leagues.data} onChanged={leagues.reload} />}
     </div>
   );
 }

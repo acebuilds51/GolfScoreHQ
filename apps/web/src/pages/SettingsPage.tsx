@@ -6,6 +6,7 @@ import type { DemoApi } from '../lib/demoApi';
 import { useAction, useAsync, useAuth, useLeague } from '../lib/hooks';
 import { isCommissioner, type PaymentHandles, type Plan, type Role, type TvDisplay, type TvPanel, type TvSettings } from '../lib/types';
 import { randomJoinCode } from '../lib/util';
+import { PlanSection } from './PlanSection';
 
 export function SettingsPage() {
   const { league, reloadLeague } = useLeague();
@@ -14,6 +15,7 @@ export function SettingsPage() {
   if (!isCommissioner(league.role)) return <div className="page"><p className="muted">Only commissioners can change league settings.</p></div>;
   return (
     <div className="page stack">
+      <PlanSection />
       <LeagueName />
       <LeagueLook />
       <JoinCode />

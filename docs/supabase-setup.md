@@ -31,6 +31,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 11. `20261105000000_branding.sql` (league logo and colors; also creates the `league-logos` storage bucket)
 12. `20261106000000_league_banner.sql` (course photo banner)
 13. `20261107000000_ctp_nobody_fix.sql` (lets "nobody got inside the marker" save)
+14. `20261108000000_billing.sql` (Stripe billing for Pro and Club)
 
 **B. Command line**
 

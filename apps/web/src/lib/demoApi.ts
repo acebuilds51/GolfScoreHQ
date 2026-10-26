@@ -1,5 +1,5 @@
 import type { Api } from './api';
-import type { Contact, Course, JoinRequest, League, LeagueEvent, LedgerRow, PaymentHandles, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SubRequest, TvDisplay, User } from './types';
+import type { Contact, Course, JoinRequest, League, LeagueBilling, LeagueEvent, LedgerRow, PaymentHandles, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SubRequest, TvDisplay, User } from './types';
 import { isCommissioner } from './types';
 import type { WeeklyRecap } from '@golfscorehq/engine';
 import { buildRecapEmail } from '../../../../supabase/functions/send-recap/email';
@@ -26,7 +26,9 @@ interface Db {
   leagues: {
     id: string; name: string; slug: string; ownerId: string; plan: Plan; joinCode: string | null; timezone: string;
     logoUrl?: string | null; bannerUrl?: string | null; brandColor?: string | null; accentColor?: string | null;
+    planExpiresAt?: string | null; clubId?: string | null; demoSub?: LeagueBilling['subscription'];
   }[];
+  clubs: { id: string; ownerId: string; name: string; expiresAt: string | null }[];
   members: { leagueId: string; userId: string; role: Role }[];
   players: { id: string; leagueId: string; displayName: string; isSub: boolean; active: boolean; userId: string | null }[];
   contacts: Record<string, Contact & { leagueId: string }>;
@@ -49,7 +51,7 @@ interface Db {
 const empty = (): Db => ({
   session: null, users: {}, leagues: [], members: [], players: [], contacts: {}, invites: [], joinRequests: [], courses: [],
   seasons: [], events: [], rounds: [], ledger: [], ctpDecisions: {}, tvDisplays: [], rsvps: {}, subRequests: [],
-  recapSends: {}, recapPrefs: {}, paymentHandles: {},
+  recapSends: {}, recapPrefs: {}, paymentHandles: {}, clubs: [],
 });
 
 /** Mirrors the database's plan check on season rules. */
@@ -538,6 +540,76 @@ export function demoApi(): DemoApi {
       const db = load();
       return db.ledger.filter((e) => e.eventId === eventId).map(({ eventId: _e, ...r }) => r);
     },
+    // Billing: demo pretends checkout succeeded straight away (Stripe isn't involved).
+    async leagueBilling(leagueId) {
+      const db = load();
+      if (!isCommissioner(roleIn(db, leagueId))) return null;
+      const l = db.leagues.find((x) => x.id === leagueId)!;
+      const club = l.clubId ? db.clubs.find((c) => c.id === l.clubId) : undefined;
+      return {
+        plan: l.plan, effectivePlan: l.plan, clubName: club?.name ?? null, isOwner: l.ownerId === db.session,
+        expiresAt: l.plan === 'club' ? club?.expiresAt ?? null : l.planExpiresAt ?? null,
+        subscription: l.demoSub ?? null,
+      };
+    },
+    async startCheckout(target) {
+      const db = load();
+      const yearOut = new Date(Date.now() + 365 * 86_400_000).toISOString();
+      if ('leagueId' in target) {
+        requireCommissioner(db, target.leagueId);
+        const l = db.leagues.find((x) => x.id === target.leagueId)!;
+        if (l.plan === 'pilot' || l.plan === 'comp') throw new Error('This league already has GolfScoreHQ Pro free.');
+        if (l.plan === 'club') throw new Error('This league is covered by a Club plan.');
+        Object.assign(l, { plan: 'pro', planExpiresAt: yearOut, demoSub: { status: 'active', renewsAt: yearOut, cancelAtPeriodEnd: false, paidByMe: true } });
+        save(db);
+        return `/l/${l.slug}/settings?billing=done`;
+      }
+      const c = db.clubs.find((x) => x.id === target.clubId && x.ownerId === db.session);
+      if (!c) throw new Error("That club isn't yours.");
+      c.expiresAt = yearOut;
+      save(db);
+      return '/leagues?billing=done';
+    },
+    async billingPortal() {
+      throw new Error("Demo mode: Stripe's billing page isn't available here. The live site opens it.");
+    },
+    async myClubs() {
+      const db = load();
+      return db.clubs.filter((c) => c.ownerId === db.session).map((c) => ({
+        id: c.id, name: c.name, expiresAt: c.expiresAt,
+        leagues: db.leagues.filter((l) => l.clubId === c.id).map((l) => ({ id: l.id, name: l.name, slug: l.slug })),
+      }));
+    },
+    async createClub(name) {
+      const db = load();
+      const u = me(db);
+      if (name.trim().length < 2) throw new Error('Give the club a name.');
+      const c = { id: id(), ownerId: u.id, name: name.trim(), expiresAt: null };
+      db.clubs.push(c);
+      save(db);
+      return c.id;
+    },
+    async setLeagueClub(leagueId, clubId) {
+      // Same rules as set_league_club() in the database.
+      const db = load();
+      const l = db.leagues.find((x) => x.id === leagueId);
+      if (!l || l.ownerId !== db.session) throw new Error("Only the league's owner can do that.");
+      if (!clubId) {
+        if (l.plan === 'club') l.plan = 'free';
+        l.clubId = null;
+        save(db);
+        return;
+      }
+      const c = db.clubs.find((x) => x.id === clubId && x.ownerId === db.session);
+      if (!c) throw new Error("That club isn't yours.");
+      if (!c.expiresAt || new Date(c.expiresAt) < new Date()) throw new Error('Start the Club plan first.');
+      if (l.plan === 'pilot' || l.plan === 'comp') throw new Error("This league already has GolfScoreHQ free; it doesn't need the Club.");
+      if (l.demoSub && !l.demoSub.cancelAtPeriodEnd) throw new Error("This league pays for its own Pro plan. Cancel it under Manage billing first, so you aren't charged twice.");
+      if (db.leagues.filter((x) => x.clubId === clubId && x.id !== leagueId).length >= 5) throw new Error('A Club covers up to 5 leagues.');
+      Object.assign(l, { clubId, plan: 'club', planExpiresAt: null });
+      save(db);
+    },
+
     async recapPreview(eventId, story) {
       return demoRecap(load(), eventId, story).preview;
     },
