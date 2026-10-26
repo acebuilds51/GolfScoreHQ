@@ -43,6 +43,18 @@ describe('weekly recap email', () => {
     expect(buildRecapEmail({ ...base, weekCents: null, seasonCents: null, story: '  ' }).text).not.toContain('\n\n\n');
   });
 
+  it("uses the league's colors and logo, with readable text", () => {
+    const logoUrl = 'https://abc.supabase.co/storage/v1/object/public/league-logos/x/logo-1.png';
+    const dark = buildRecapEmail({ ...base, weekCents: null, seasonCents: null, brand: { color: '#0b5d3b', accent: '#d4a017', logoUrl } });
+    expect(dark.html).toContain('background:#0b5d3b;color:#ffffff');
+    expect(dark.html).toContain('border-bottom:4px solid #d4a017');
+    expect(dark.html).toContain(`<img src="${logoUrl}"`);
+    const light = buildRecapEmail({ ...base, weekCents: null, seasonCents: null, brand: { color: '#f2d64b', logoUrl: 'http://insecure.example/logo.png' } });
+    expect(light.html).toContain('background:#f2d64b;color:#111111');
+    expect(light.html).not.toContain('<img');
+    expect(buildRecapEmail({ ...base, weekCents: null, seasonCents: null, brand: { color: 'red;x' } }).html).toContain('background:#14365c');
+  });
+
   it('only lists the payment apps the commissioner set up', () => {
     expect(paymentOptions({ venmo: '', paypalMe: null, zelle: '248-555-0100' }, 500).map((p) => p.label)).toEqual(['Zelle 248-555-0100']);
   });

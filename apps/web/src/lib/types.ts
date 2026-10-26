@@ -20,6 +20,10 @@ export interface League extends LeagueSummary {
   /** Plan after expiry is taken into account (a lapsed Pro league acts as Free). */
   effectivePlan: Plan;
   features: string[];
+  /** Branding (Pro): logo picture and two colors as #rrggbb. */
+  logoUrl: string | null;
+  brandColor: string | null;
+  accentColor: string | null;
 }
 
 export interface Player {
@@ -202,7 +206,7 @@ export interface TvDisplay {
 /** Everything a Clubhouse TV shows, from tv_feed(). */
 export interface TvFeed {
   error?: 'plan';
-  league: { name: string; slug?: string; logoUrl?: string | null };
+  league: { name: string; slug?: string; logoUrl?: string | null; brandColor?: string | null; accentColor?: string | null };
   display?: { name: string; settings: TvSettings };
   season?: { year: number; name: string; rules: import('@golfscorehq/engine').FormatRules } | null;
   event?: { id: string; weekNumber: number; eventDate: string | null; status: EventStatus } | null;

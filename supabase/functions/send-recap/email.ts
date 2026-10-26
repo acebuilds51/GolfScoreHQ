@@ -21,6 +21,18 @@ export interface RecapEmailInput {
   payment: PaymentHandles;
   /** The commissioner-approved write-up of the week (AI-drafted), shown above the results. */
   story?: string | null;
+  /** The league's branding (Pro): colors as #rrggbb and a logo URL. */
+  brand?: { color?: string | null; accent?: string | null; logoUrl?: string | null };
+}
+
+const HEX = /^#[0-9a-f]{6}$/i;
+const DEFAULT_COLOR = '#14365c';
+
+/** White or near-black text, whichever reads better on this background. */
+function textOn(hex: string): string {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  const l = 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+  return 1.05 / (l + 0.05) >= (l + 0.05) / 0.0556 ? '#ffffff' : '#111111';
 }
 
 export interface RecapEmail {
@@ -86,12 +98,22 @@ export function buildRecapEmail(i: RecapEmailInput): RecapEmail {
     })
     .join('\n');
 
+  const color = i.brand?.color && HEX.test(i.brand.color) ? i.brand.color : DEFAULT_COLOR;
+  const accent = i.brand?.accent && HEX.test(i.brand.accent) ? i.brand.accent : color;
+  const onColor = textOn(color);
+  const logo = i.brand?.logoUrl && /^https:\/\//.test(i.brand.logoUrl) ? i.brand.logoUrl : null;
+  const titleHtml = `<div style="font-size:18px;font-weight:700">${esc(i.leagueName)}</div>
+      <div style="font-size:13px;opacity:.85">Week ${i.weekNumber} results</div>`;
+
   const html = `<!doctype html>
 <html><body style="margin:0;background:#f6f7f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1d2321">
 <div style="max-width:560px;margin:0 auto;padding:24px 16px">
-  <div style="background:#14365c;color:#fff;border-radius:10px 10px 0 0;padding:16px 20px">
-    <div style="font-size:18px;font-weight:700">${esc(i.leagueName)}</div>
-    <div style="font-size:13px;opacity:.85">Week ${i.weekNumber} results</div>
+  <div style="background:${color};color:${onColor};border-radius:10px 10px 0 0;padding:16px 20px;border-bottom:4px solid ${accent}">
+    ${logo
+      ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td style="padding-right:12px;vertical-align:middle"><img src="${esc(logo)}" alt="" width="48" height="48" style="display:block;width:48px;height:48px;object-fit:contain;background:#fff;border-radius:6px;padding:2px"></td>
+      <td style="vertical-align:middle;color:${onColor}">${titleHtml}</td></tr></table>`
+      : titleHtml}
   </div>
   <div style="background:#fff;border:1px solid #dde1de;border-top:0;border-radius:0 0 10px 10px;padding:20px;font-size:15px;line-height:1.5">
     <p style="margin:0 0 12px">Hi ${esc(first)},</p>
@@ -99,9 +121,9 @@ export function buildRecapEmail(i: RecapEmailInput): RecapEmail {
     ${pay.length ? `<div style="background:#e1f5ee;border-radius:8px;padding:12px;margin:0 0 16px"><div style="font-weight:700;margin-bottom:6px">Pay the commissioner</div>${pay
       .map((p) => (p.url ? `<div><a href="${esc(p.url)}" style="color:#0b6247">${esc(p.label)}</a></div>` : `<div>${esc(p.label)}</div>`))
       .join('')}</div>` : ''}
-    ${story.length ? `<div style="border-left:3px solid #14365c;padding:2px 0 2px 12px;margin:0 0 16px">${story.map((p) => `<p style="margin:0 0 8px">${esc(p)}</p>`).join('')}</div>` : ''}
+    ${story.length ? `<div style="border-left:3px solid ${accent};padding:2px 0 2px 12px;margin:0 0 16px">${story.map((p) => `<p style="margin:0 0 8px">${esc(p)}</p>`).join('')}</div>` : ''}
     ${bodyHtml}
-    <p style="margin:20px 0 0"><a href="${esc(i.leagueUrl)}" style="display:inline-block;background:#14365c;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600">Open GolfScoreHQ</a></p>
+    <p style="margin:20px 0 0"><a href="${esc(i.leagueUrl)}" style="display:inline-block;background:${color};color:${onColor};text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600">Open GolfScoreHQ</a></p>
   </div>
   <p style="font-size:12px;color:#5b6461;margin:12px 4px">Don't want these emails? Turn off "Email me the weekly recap" on your league's Overview page.</p>
 </div></body></html>`;

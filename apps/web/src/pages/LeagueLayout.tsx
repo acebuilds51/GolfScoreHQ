@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useParams } from 'react-router-dom';
 import { ErrorText, PlanBadge } from '../components/ui';
 import { api } from '../lib/backend';
+import { brandLogo, brandStyle } from '../lib/brand';
 import { LeagueContext, useAsync } from '../lib/hooks';
 import { isCommissioner } from '../lib/types';
 
@@ -20,29 +21,39 @@ export function LeagueLayout() {
   }
   const l = league.data;
   const commish = isCommissioner(l.role);
+  const logo = brandLogo(l);
+  const banded = !!brandStyle(l) && !!l.brandColor;
   return (
     <LeagueContext.Provider value={{ league: l, reloadLeague: league.reload }}>
-      <div className="league-head">
-        <div className="page row between wrap">
-          <div>
-            <h1>{l.name}</h1>
-            <div className="row small muted">
-              <PlanBadge plan={l.effectivePlan} />
-              {l.effectivePlan !== l.plan && <span>Plan lapsed — Pro features are paused</span>}
+      {/* The league's colors (Pro) apply to everything inside its pages. */}
+      <div style={brandStyle(l)}>
+        <div className="league-head">
+          <div className={banded ? 'league-band' : undefined}>
+            <div className="page row between wrap">
+              <div className="league-title">
+                {logo && <img className="league-logo" src={logo} alt="" />}
+                <div>
+                  <h1>{l.name}</h1>
+                  <div className="row small muted">
+                    <PlanBadge plan={l.effectivePlan} />
+                    {l.effectivePlan !== l.plan && <span>Plan lapsed — Pro features are paused</span>}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
+          <nav className="tabs page" aria-label="League">
+            <NavLink end to="">Overview</NavLink>
+            <NavLink to="play" className={({ isActive }) => (isActive || /\/(week|round)\//.test(window.location.pathname) ? 'active' : '')}>Play</NavLink>
+            <NavLink to="live">Live</NavLink>
+            <NavLink to="standings">Standings</NavLink>
+            <NavLink to="roster">Roster</NavLink>
+            <NavLink to="courses">Courses</NavLink>
+            {commish && <NavLink to="settings">Settings</NavLink>}
+          </nav>
         </div>
-        <nav className="tabs page" aria-label="League">
-          <NavLink end to="">Overview</NavLink>
-          <NavLink to="play" className={({ isActive }) => (isActive || /\/(week|round)\//.test(window.location.pathname) ? 'active' : '')}>Play</NavLink>
-          <NavLink to="live">Live</NavLink>
-          <NavLink to="standings">Standings</NavLink>
-          <NavLink to="roster">Roster</NavLink>
-          <NavLink to="courses">Courses</NavLink>
-          {commish && <NavLink to="settings">Settings</NavLink>}
-        </nav>
+        <Outlet />
       </div>
-      <Outlet />
     </LeagueContext.Provider>
   );
 }
