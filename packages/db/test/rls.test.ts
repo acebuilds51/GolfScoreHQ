@@ -232,6 +232,81 @@ describe('plans (by feature, never by size)', () => {
   });
 });
 
+describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
+  async function linkedPlayer(user: string, name: string) {
+    const id = await addPlayer(tony, oak, name);
+    await db.query('update players set user_id = $1 where id = $2', [user, id]);
+    return id;
+  }
+
+  it('lets a golfer answer their own RSVP on Pro, not anyone else’s', async () => {
+    const { eventId } = await weekWithRound(tony, oak);
+    const joeSpot = await linkedPlayer(joe, 'Joe');
+    const other = await addPlayer(tony, oak, 'Other');
+    const rsvp = (user: string, player: string, status = 'in') =>
+      as(db, user, () => db.query(`insert into event_rsvps (event_id, player_id, league_id, status, responded_by) values ($1, $2, $3, $4, $5)
+        on conflict (event_id, player_id) do update set status = excluded.status, responded_by = excluded.responded_by`, [eventId, player, oak, status, user]));
+
+    await expect(rsvp(joe, joeSpot)).rejects.toThrow(/row-level security/); // Free league
+    await setPlan(oak, 'pro');
+    await rsvp(joe, joeSpot);
+    await rsvp(joe, joeSpot, 'out'); // can change their answer
+    await expect(rsvp(joe, other)).rejects.toThrow(/row-level security/);
+    await rsvp(tony, other, 'maybe'); // commissioner can answer for anyone
+    expect(await rows(db, 'select status from event_rsvps order by status')).toEqual([{ status: 'maybe' }, { status: 'out' }]);
+  });
+
+  it('gives an open spot to the first sub who accepts', async () => {
+    await setPlan(oak, 'pro');
+    const { eventId } = await weekWithRound(tony, oak);
+    const subA = await createUser(db, 'suba@example.com');
+    const subB = await createUser(db, 'subb@example.com');
+    for (const u of [subA, subB]) await db.query(`insert into league_members (league_id, user_id) values ($1, $2)`, [oak, u]);
+    const spotA = await linkedPlayer(subA, 'Sub A');
+    const spotB = await linkedPlayer(subB, 'Sub B');
+
+    const [req] = await as(db, tony, () => rows<{ id: string }>(db, `insert into sub_requests (league_id, event_id, tee_slot, spots, created_by) values ($1, $2, 4, 1, $3) returning id`, [oak, eventId, tony]));
+    await as(db, tony, () => db.query(`insert into sub_offers (request_id, player_id, league_id) values ($1, $2, $4), ($1, $3, $4)`, [req!.id, spotA, spotB, oak]));
+
+    const respond = (user: string, spot: string, yes: boolean) =>
+      as(db, user, async () => (await rows<{ r: string }>(db, 'select respond_to_sub_offer($1, $2, $3) as r', [req!.id, spot, yes]))[0]!.r);
+
+    await expect(respond(subA, spotB, true)).rejects.toThrow(/not your offer/);
+    expect(await respond(subB, spotB, true)).toBe('accepted');
+    expect(await respond(subA, spotA, true)).toBe('too_late');
+    expect(await rows(db, 'select filled, closed_at is not null as closed from sub_requests')).toEqual([{ filled: 1, closed: true }]);
+    expect(await rows(db, 'select player_id, status from event_rsvps')).toEqual([{ player_id: spotB, status: 'in' }]);
+  });
+
+  it('keeps Clubhouse TV links and the setup service for Pro commissioners', async () => {
+    const addTv = (user: string) => as(db, user, () => db.query(`insert into tv_displays (league_id, token_hash, created_by) values ($1, md5(random()::text), $2)`, [oak, user]));
+    const askSetup = (user: string) => as(db, user, () => db.query(`insert into setup_requests (league_id, requested_by, notes) values ($1, $2, 'Our 2026 spreadsheet')`, [oak, user]));
+    await expect(addTv(tony)).rejects.toThrow(/row-level security/);
+    await expect(askSetup(tony)).rejects.toThrow(/row-level security/);
+    await setPlan(oak, 'pro');
+    await addTv(tony);
+    await askSetup(tony);
+    await expect(addTv(joe)).rejects.toThrow(/row-level security/); // players can't
+    expect(await as(db, joe, () => rows(db, 'select * from tv_displays'))).toEqual([]); // and can't see the links
+  });
+
+  it('lets golfers manage their own notification settings only', async () => {
+    const joeSpot = await linkedPlayer(joe, 'Joe');
+    const other = await addPlayer(tony, oak, 'Other');
+    await as(db, joe, () => db.query(`insert into notification_prefs (player_id, league_id, weekly_recap) values ($1, $2, false)`, [joeSpot, oak]));
+    await expect(as(db, joe, () => db.query(`insert into notification_prefs (player_id, league_id) values ($1, $2)`, [other, oak]))).rejects.toThrow(/row-level security/);
+    expect(await as(db, joe, () => rows(db, 'select weekly_recap from notification_prefs'))).toEqual([{ weekly_recap: false }]);
+  });
+
+  it('lists the new features on every paid plan', async () => {
+    const feats = await rows<{ code: string; f: string[] }>(db, `select code, features as f from plans order by code`);
+    for (const p of feats) {
+      const has = ['weekly_recap', 'rsvp', 'setup_service', 'awards', 'tv_mode'].every((x) => p.f.includes(x));
+      expect([p.code, has]).toEqual([p.code, p.code !== 'free']);
+    }
+  });
+});
+
 describe('joining', () => {
   it('accepts an invite link and links the golfer to their roster spot', async () => {
     const newbie = await createUser(db, 'newbie@example.com');
