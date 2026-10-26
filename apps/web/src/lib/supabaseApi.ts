@@ -281,6 +281,16 @@ export function supabaseApi(url: string, anonKey: string): Api {
       const rows = check(await sb.from('ledger_entries').select('player_id, round_id, kind, amount_cents, hole_number').eq('event_id', eventId)) as Row[];
       return rows.map((r) => ({ playerId: r.player_id, roundId: r.round_id, kind: r.kind, amountCents: r.amount_cents, holeNumber: r.hole_number }));
     },
+    async seasonRounds(seasonId) {
+      const rows = check(await sb.from('rounds').select(`${ROUND_SELECT}, events!inner(season_id)`).eq('events.season_id', seasonId)) as Row[];
+      return rows.map(toRound);
+    },
+    async seasonLedger(seasonId) {
+      const rows = check(
+        await sb.from('ledger_entries').select('event_id, player_id, round_id, kind, amount_cents, hole_number, events!inner(season_id)').eq('events.season_id', seasonId),
+      ) as Row[];
+      return rows.map((r) => ({ eventId: r.event_id, playerId: r.player_id, roundId: r.round_id, kind: r.kind, amountCents: r.amount_cents, holeNumber: r.hole_number }));
+    },
     async settleEvent(eventId, entries) {
       check(
         await sb.rpc('settle_event', {

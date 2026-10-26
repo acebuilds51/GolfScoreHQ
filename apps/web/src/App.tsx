@@ -11,6 +11,7 @@ import { ScoreRoundPage } from './pages/ScoreRoundPage';
 import { WeekPage } from './pages/WeekPage';
 import { RosterPage } from './pages/RosterPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { StandingsPage } from './pages/StandingsPage';
 import { SignInPage } from './pages/SignInPage';
 
 function RequireUser({ children }: { children: JSX.Element }) {
@@ -35,6 +36,7 @@ export function App() {
             <Route path="play" element={<PlayPage />} />
             <Route path="week/:eventId" element={<WeekPage />} />
             <Route path="round/:roundId" element={<ScoreRoundPage />} />
+            <Route path="standings" element={<StandingsPage />} />
             <Route path="roster" element={<RosterPage />} />
             <Route path="courses" element={<CoursesPage />} />
             <Route path="settings" element={<SettingsPage />} />

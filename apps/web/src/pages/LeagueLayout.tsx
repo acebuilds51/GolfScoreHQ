@@ -35,6 +35,7 @@ export function LeagueLayout() {
         <nav className="tabs page" aria-label="League">
           <NavLink end to="">Overview</NavLink>
           <NavLink to="play" className={({ isActive }) => (isActive || /\/(week|round)\//.test(window.location.pathname) ? 'active' : '')}>Play</NavLink>
+          <NavLink to="standings">Standings</NavLink>
           <NavLink to="roster">Roster</NavLink>
           <NavLink to="courses">Courses</NavLink>
           {commish && <NavLink to="settings">Settings</NavLink>}
