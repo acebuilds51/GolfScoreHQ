@@ -1,4 +1,4 @@
-# Publishes the web app to Cloudflare Pages (https://golfscorehq.pages.dev)
+# Publishes the web app to Cloudflare Pages (https://golfscorehq.app; also golfscorehq.pages.dev)
 # every time main changes. Tests and type checks run first; if any fail,
 # nothing is published and the live site stays as it was.
 #
