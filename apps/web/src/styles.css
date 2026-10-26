@@ -85,6 +85,7 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .card-link { text-decoration: none; color: inherit; display: block; }
 .card-link:hover { border-color: var(--brand-2); }
 .subcard { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--surface-2); }
+.golfer-row { border-bottom: 1px solid var(--border); padding-bottom: 10px; display: grid; gap: 6px; }
 .recap { border-top: 1px solid var(--border); padding-top: 12px; }
 .recap-text {
   margin: 0; padding: 12px; max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;

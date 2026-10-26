@@ -72,7 +72,7 @@ function RecapPref({ players }: { players: Player[] }) {
   if (!mine || pref.data === undefined) return null;
   return (
     <section className="card stack">
-      <label className="row">
+      <label className="check-row">
         <input
           type="checkbox"
           checked={pref.data}
