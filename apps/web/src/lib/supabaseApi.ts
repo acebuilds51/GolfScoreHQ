@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Api, CourseSummary, LookupCourse } from './api';
+import type { SubOffer } from './types';
 import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, TvFeed, User } from './types';
 import { randomToken, sha256Hex } from './util';
 
@@ -280,6 +281,40 @@ export function supabaseApi(url: string, anonKey: string): Api {
     async ledger(eventId) {
       const rows = check(await sb.from('ledger_entries').select('player_id, round_id, kind, amount_cents, hole_number').eq('event_id', eventId)) as Row[];
       return rows.map((r) => ({ playerId: r.player_id, roundId: r.round_id, kind: r.kind, amountCents: r.amount_cents, holeNumber: r.hole_number }));
+    },
+    async rsvps(eventId) {
+      const rows = check(await sb.from('event_rsvps').select('player_id, status').eq('event_id', eventId)) as Row[];
+      return Object.fromEntries(rows.map((r) => [r.player_id, r.status]));
+    },
+    async setRsvp(leagueId, eventId, playerId, status) {
+      check(
+        await sb.from('event_rsvps').upsert(
+          { event_id: eventId, player_id: playerId, league_id: leagueId, status, responded_by: await uid(), responded_at: new Date().toISOString() },
+          { onConflict: 'event_id,player_id' },
+        ),
+      );
+    },
+    async subRequests(eventId) {
+      const rows = check(
+        await sb.from('sub_requests').select('id, tee_slot, spots, filled, closed_at, created_at, sub_offers(player_id, status)').eq('event_id', eventId).order('created_at'),
+      ) as Row[];
+      return rows.map((r) => ({
+        id: r.id, teeSlot: r.tee_slot, spots: r.spots, filled: r.filled, closed: !!r.closed_at,
+        offers: ((r.sub_offers ?? []) as Row[]).map((o) => ({ playerId: o.player_id, status: o.status })),
+      }));
+    },
+    async createSubRequest(leagueId, eventId, opts, askPlayerIds) {
+      const r = check(
+        await sb.from('sub_requests').insert({ league_id: leagueId, event_id: eventId, spots: opts.spots, tee_slot: opts.teeSlot, created_by: await uid() }).select('id').single(),
+      ) as Row;
+      if (askPlayerIds.length) check(await sb.from('sub_offers').insert(askPlayerIds.map((p) => ({ request_id: r.id, league_id: leagueId, player_id: p }))));
+      return r.id;
+    },
+    async respondSubOffer(requestId, playerId, accept) {
+      return check(await sb.rpc('respond_to_sub_offer', { p_request: requestId, p_player: playerId, p_accept: accept })) as SubOffer['status'];
+    },
+    async closeSubRequest(requestId) {
+      check(await sb.from('sub_requests').update({ closed_at: new Date().toISOString() }).eq('id', requestId));
     },
     async tvDisplays(leagueId) {
       const rows = check(await sb.from('tv_displays').select('id, name, settings, created_at').eq('league_id', leagueId).is('revoked_at', null).order('created_at')) as Row[];

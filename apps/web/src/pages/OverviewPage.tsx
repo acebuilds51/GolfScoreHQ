@@ -1,17 +1,21 @@
 import { Link } from 'react-router-dom';
 import { api } from '../lib/backend';
-import { useAsync, useLeague } from '../lib/hooks';
-import { isCommissioner } from '../lib/types';
+import { useAction, useAsync, useAuth, useLeague } from '../lib/hooks';
+import { fmtDate } from '../lib/scoring';
+import { isCommissioner, type LeagueEvent, type Player, type RsvpStatus } from '../lib/types';
+import { RsvpButtons } from './WhosPlaying';
 
 export function OverviewPage() {
   const { league } = useLeague();
   const data = useAsync(async () => {
-    const [players, courses, members] = await Promise.all([api.players(league.id), api.courses(league.id), api.members(league.id)]);
-    return { players, courses, members };
+    const [players, courses, members, seasons] = await Promise.all([api.players(league.id), api.courses(league.id), api.members(league.id), api.seasons(league.id)]);
+    const events = seasons[0] ? await api.events(seasons[0].id) : [];
+    const nextWeek = events.find((e) => e.status === 'scheduled') ?? null;
+    return { players, courses, members, nextWeek };
   }, [league.id]);
 
   if (!data.data) return <div className="page muted">Loading…</div>;
-  const { players, courses, members } = data.data;
+  const { players, courses, members, nextWeek } = data.data;
   const active = players.filter((p) => p.active);
   const regulars = active.filter((p) => !p.isSub).length;
   const subs = active.length - regulars;
@@ -27,6 +31,7 @@ export function OverviewPage() {
 
   return (
     <div className="page stack">
+      {nextWeek && league.features.includes('rsvp') && <NextWeekRsvp event={nextWeek} players={players} />}
       <div className="stats">
         <div className="stat"><span>Golfers</span><strong>{regulars}</strong></div>
         <div className="stat"><span>Subs</span><strong>{subs}</strong></div>
@@ -53,5 +58,29 @@ export function OverviewPage() {
         <p className="muted">Scoring happens on the <Link to="play">Play</Link> tab: pick the week, start your group, and enter scores hole by hole.</p>
       </section>
     </div>
+  );
+}
+
+/** "Are you playing week N?" for the signed-in golfer's own roster spot. */
+function NextWeekRsvp({ event, players }: { event: LeagueEvent; players: Player[] }) {
+  const { league } = useLeague();
+  const { user } = useAuth();
+  const mine = players.find((p) => p.active && p.userId && p.userId === user?.id);
+  const rsvps = useAsync(() => api.rsvps(event.id), [event.id]);
+  const { busy, error, run } = useAction();
+  if (!mine) return null;
+  const value = rsvps.data?.[mine.id] as RsvpStatus | undefined;
+  return (
+    <section className="card stack">
+      <div className="row between wrap">
+        <h2>Week {event.weekNumber}{event.eventDate ? ` · ${fmtDate(event.eventDate)}` : ''}</h2>
+        <Link className="small" to={`week/${event.id}`}>See who's playing →</Link>
+      </div>
+      <div className="row wrap">
+        <span>{value ? 'Your reply:' : 'Are you playing?'}</span>
+        <RsvpButtons value={value} busy={busy} onPick={async (s) => { await run(() => api.setRsvp(league.id, event.id, mine.id, s)); rsvps.reload(); }} />
+      </div>
+      {error && <p className="error">{error}</p>}
+    </section>
   );
 }

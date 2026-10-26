@@ -1,5 +1,5 @@
 import type { Api } from './api';
-import type { Contact, Course, JoinRequest, League, LeagueEvent, LedgerRow, Plan, Role, RoundData, Season, TvDisplay, User } from './types';
+import type { Contact, Course, JoinRequest, League, LeagueEvent, LedgerRow, Plan, Role, RoundData, RsvpStatus, Season, SubRequest, TvDisplay, User } from './types';
 import { isCommissioner } from './types';
 import { DEMO_COURSES } from './demoCourses';
 import { sha256Hex, randomToken } from './util';
@@ -32,11 +32,13 @@ interface Db {
   ledger: (LedgerRow & { eventId: string })[];
   ctpDecisions: Record<string, Record<number, string>>;
   tvDisplays: (TvDisplay & { leagueId: string; tokenHash: string; revokedAt: string | null })[];
+  rsvps: Record<string, Record<string, RsvpStatus>>;
+  subRequests: (SubRequest & { leagueId: string; eventId: string })[];
 }
 
 const empty = (): Db => ({
   session: null, users: {}, leagues: [], members: [], players: [], contacts: {}, invites: [], joinRequests: [], courses: [],
-  seasons: [], events: [], rounds: [], ledger: [], ctpDecisions: {}, tvDisplays: [],
+  seasons: [], events: [], rounds: [], ledger: [], ctpDecisions: {}, tvDisplays: [], rsvps: {}, subRequests: [],
 });
 
 /** Mirrors the database's plan check on season rules. */
@@ -449,6 +451,59 @@ export function demoApi(): DemoApi {
     async ledger(eventId) {
       const db = load();
       return db.ledger.filter((e) => e.eventId === eventId).map(({ eventId: _e, ...r }) => r);
+    },
+    async rsvps(eventId) {
+      const db = load();
+      return { ...(db.rsvps[eventId] ?? {}) };
+    },
+    async setRsvp(leagueId, eventId, playerId, status) {
+      const db = load();
+      const u = me(db);
+      const spot = db.players.find((p) => p.id === playerId);
+      if (!has(db, leagueId, 'rsvp') || !(isCommissioner(roleIn(db, leagueId)) || spot?.userId === u.id)) throw new Error("You don't have permission to do that.");
+      (db.rsvps[eventId] ??= {})[playerId] = status;
+      save(db);
+    },
+    async subRequests(eventId) {
+      const db = load();
+      return db.subRequests.filter((r) => r.eventId === eventId).map(({ eventId: _e, leagueId: _l, ...r }) => ({ ...r, offers: r.offers.map((o) => ({ ...o })) }));
+    },
+    async createSubRequest(leagueId, eventId, opts, askPlayerIds) {
+      const db = load();
+      requireCommissioner(db, leagueId);
+      if (!has(db, leagueId, 'rsvp')) throw new Error("You don't have permission to do that.");
+      const r = { id: id(), leagueId, eventId, teeSlot: opts.teeSlot, spots: opts.spots, filled: 0, closed: false, offers: askPlayerIds.map((p) => ({ playerId: p, status: 'offered' as const })) };
+      db.subRequests.push(r);
+      save(db);
+      return r.id;
+    },
+    async respondSubOffer(requestId, playerId, accept) {
+      // Same rules as respond_to_sub_offer(): the golfer (or commissioner) answers; first to accept wins.
+      const db = load();
+      const u = me(db);
+      const r = db.subRequests.find((x) => x.id === requestId);
+      const spot = db.players.find((p) => p.id === playerId);
+      if (!r || !(spot?.userId === u.id || isCommissioner(roleIn(db, r.leagueId)))) throw new Error('not your offer');
+      const offer = r.offers.find((o) => o.playerId === playerId);
+      if (!offer) throw new Error('no such offer');
+      if (offer.status !== 'offered') return offer.status;
+      if (!accept) offer.status = 'declined';
+      else if (r.closed || r.filled >= r.spots) offer.status = 'too_late';
+      else {
+        offer.status = 'accepted';
+        r.filled++;
+        if (r.filled >= r.spots) r.closed = true;
+        (db.rsvps[r.eventId] ??= {})[playerId] = 'in';
+      }
+      save(db);
+      return offer.status;
+    },
+    async closeSubRequest(requestId) {
+      const db = load();
+      const r = db.subRequests.find((x) => x.id === requestId)!;
+      requireCommissioner(db, r.leagueId);
+      r.closed = true;
+      save(db);
     },
     async tvDisplays(leagueId) {
       const db = load();

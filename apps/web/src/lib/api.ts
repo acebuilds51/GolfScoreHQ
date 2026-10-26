@@ -1,7 +1,7 @@
 import type { CourseSummary, LookupCourse } from '../../../../supabase/functions/course-lookup/normalize';
 import type {
   Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, LedgerRow, Member, NewCourse, NewPlayer, Player, Role,
-  RoundData, RoundPlayer, ScoreEntry, Season, TvDisplay, TvFeed, TvSettings, User,
+  RoundData, RoundPlayer, RsvpStatus, ScoreEntry, Season, SubOffer, SubRequest, TvDisplay, TvFeed, TvSettings, User,
 } from './types';
 
 export type { CourseSummary, LookupCourse, LookupTee } from '../../../../supabase/functions/course-lookup/normalize';
@@ -74,6 +74,15 @@ export interface Api {
    * rounds, CTP, presses, week status). Returns an unsubscribe function.
    */
   watchLeague(leagueId: string, onChange: () => void): () => void;
+
+  /** RSVP (Pro): playerId → answer for the week. */
+  rsvps(eventId: string): Promise<Record<string, RsvpStatus>>;
+  setRsvp(leagueId: string, eventId: string, playerId: string, status: RsvpStatus): Promise<void>;
+  /** Sub finder (Pro). */
+  subRequests(eventId: string): Promise<SubRequest[]>;
+  createSubRequest(leagueId: string, eventId: string, opts: { spots: number; teeSlot: number | null }, askPlayerIds: string[]): Promise<string>;
+  respondSubOffer(requestId: string, playerId: string, accept: boolean): Promise<SubOffer['status']>;
+  closeSubRequest(requestId: string): Promise<void>;
 
   /** Clubhouse TV links (commissioners, Pro). */
   tvDisplays(leagueId: string): Promise<TvDisplay[]>;

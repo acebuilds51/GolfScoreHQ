@@ -285,6 +285,15 @@ table.live-table td.under { color: #a32d2d; }
 .tv-qr { display: flex; align-items: center; gap: 0.5em; color: #85b7eb; font-size: 0.75em; }
 .tv-qr img { width: 3.2em; height: 3.2em; border-radius: 0.2em; background: #fff; }
 
+/* RSVP and subs */
+.rsvp-buttons { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.pill.rsvp-in.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pill.rsvp-out.on { background: #a32d2d; border-color: #a32d2d; color: #fff; }
+.pill.rsvp-maybe.on { background: #ba7517; border-color: #ba7517; color: #fff; }
+.card.offer { border: 2px solid var(--accent); }
+.chip.offer-accepted { background: var(--accent-bg); color: var(--accent-text); border-color: transparent; }
+.chip.offer-declined, .chip.offer-too_late { color: var(--text-2); text-decoration: line-through; }
+
 /* Standings */
 .pills { gap: 6px; }
 .pill { font: inherit; font-size: 0.82rem; font-weight: 600; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); border-radius: 999px; padding: 5px 12px; cursor: pointer; }

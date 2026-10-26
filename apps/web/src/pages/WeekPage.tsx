@@ -6,6 +6,7 @@ import { useAction, useAsync, useLeague, useLiveRefresh } from '../lib/hooks';
 import { allLayouts, fmtDate, matchSoFar } from '../lib/scoring';
 import { isCommissioner, type Layout, type Player, type RoundData, type RoundPlayer, type Season } from '../lib/types';
 import { WeekResults } from './WeekResults';
+import { WhosPlaying } from './WhosPlaying';
 
 /** Load everything a week needs; reused by the scoring screen. */
 export async function loadWeek(leagueId: string, eventId: string) {
@@ -51,6 +52,8 @@ export function WeekPage() {
           ? <StartGroup eventId={event.id} rounds={rounds} players={players} onCancel={() => setStarting(false)} />
           : <div><button className="btn btn-primary" onClick={() => setStarting(true)}>Start scoring a group</button></div>
       )}
+
+      {event.status === 'scheduled' && <WhosPlaying eventId={event.id} weekNumber={event.weekNumber} players={players} />}
 
       {layout && season && <WeekResults event={event} season={season} layout={layout} rounds={rounds} names={names} onChanged={data.reload} />}
 

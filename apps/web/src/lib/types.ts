@@ -152,6 +152,22 @@ export interface RoundData {
   submittedAt: string | null;
 }
 
+export type RsvpStatus = 'in' | 'out' | 'maybe';
+
+export interface SubOffer {
+  playerId: string;
+  status: 'offered' | 'accepted' | 'declined' | 'too_late';
+}
+
+export interface SubRequest {
+  id: string;
+  teeSlot: number | null;
+  spots: number;
+  filled: number;
+  closed: boolean;
+  offers: SubOffer[];
+}
+
 export type TvPanel = 'live' | 'matches' | 'skins' | 'ctp' | 'highlights' | 'standings';
 
 export interface TvSettings {
