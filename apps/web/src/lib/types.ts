@@ -152,6 +152,16 @@ export interface RoundData {
   submittedAt: string | null;
 }
 
+export type LedgerKind = 'match' | 'press' | 'skin' | 'ctp' | 'scramblePot';
+
+export interface LedgerRow {
+  playerId: string;
+  roundId: string | null;
+  kind: LedgerKind;
+  amountCents: number;
+  holeNumber: number | null;
+}
+
 export interface ScoreEntry {
   playerId: string;
   holeNumber: number;

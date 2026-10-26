@@ -5,6 +5,7 @@ import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
 import { allLayouts, fmtDate, matchSoFar } from '../lib/scoring';
 import { isCommissioner, type Layout, type Player, type RoundData, type RoundPlayer, type Season } from '../lib/types';
+import { WeekResults } from './WeekResults';
 
 /** Load everything a week needs; reused by the scoring screen. */
 export async function loadWeek(leagueId: string, eventId: string) {
@@ -45,7 +46,7 @@ export function WeekPage() {
           <h2>Week {event.weekNumber}{event.eventDate ? ` · ${fmtDate(event.eventDate)}` : ''}</h2>
           <p className="small muted">{layout ? `${layout.courseName} · ${layout.name} · par ${layout.holes.reduce((s, h) => s + h.par, 0)}` : 'No course picked for this week'}</p>
         </div>
-        {commish && <LayoutPicker eventId={event.id} layoutId={event.layoutId} layouts={layouts} onChanged={data.reload} />}
+        {commish && event.status === 'scheduled' && <LayoutPicker eventId={event.id} layoutId={event.layoutId} layouts={layouts} onChanged={data.reload} />}
       </div>
 
       {layout && season && event.status !== 'settled' && event.status !== 'rainout' && (
@@ -54,10 +55,12 @@ export function WeekPage() {
           : <div><button className="btn btn-primary" onClick={() => setStarting(true)}>Start scoring a group</button></div>
       )}
 
+      {layout && season && <WeekResults event={event} season={season} layout={layout} rounds={rounds} names={names} onChanged={data.reload} />}
+
       <section className="card flush">
         <div className="row between pad">
           <h2>Groups</h2>
-          <span className="small muted">Updates every 20 seconds</span>
+          {event.status !== 'settled' && <span className="small muted">Updates every 20 seconds</span>}
         </div>
         {rounds.length === 0 ? (
           <EmptyState title="No groups yet"><p className="muted">Each group starts scoring from their phone.</p></EmptyState>

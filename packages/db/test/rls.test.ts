@@ -148,6 +148,41 @@ describe('roles', () => {
     await expect(as(db, tony, () => db.query('insert into events (league_id, season_id, week_number) values ($1, $2, 1)', [oak, ev!.season_id]))).rejects.toThrow(/events_season_week_unique/);
   });
 
+  it('lets only the commissioner settle, only with golfers from that week, and money only on Pro', async () => {
+    const al = await addPlayer(tony, oak, 'Al');
+    const notPlaying = await addPlayer(tony, oak, 'Stayed Home');
+    const { eventId, roundId } = await weekWithRound(tony, oak);
+    await as(db, tony, () => db.query(`insert into round_players (round_id, player_id, league_id, side) values ($1, $2, $3, 'A')`, [roundId, al, oak]));
+    const entries = (player: string) => JSON.stringify([{ player_id: player, round_id: roundId, kind: 'skin', amount_cents: 9000, hole_number: 3 }]);
+    const settle = (user: string, json: string) => as(db, user, () => db.query('select settle_event($1, $2::jsonb)', [eventId, json]));
+
+    await expect(settle(tony, entries(al))).rejects.toThrow(/plan_feature: Side games/); // Free: no money
+    await settle(tony, '[]'); // Free can still make the week final
+    expect(await rows(db, 'select status from events where id = $1', [eventId])).toEqual([{ status: 'settled' }]);
+    await as(db, tony, () => db.query('select reopen_event($1)', [eventId]));
+
+    await setPlan(oak, 'pro');
+    await expect(settle(joe, entries(al))).rejects.toThrow(/commissioners only/);
+    await expect(settle(tony, entries(notPlaying))).rejects.toThrow(/not in this week/);
+    await settle(tony, entries(al));
+    expect(await as(db, joe, () => rows(db, 'select player_id, kind, amount_cents from ledger_entries'))).toEqual([{ player_id: al, kind: 'skin', amount_cents: 9000 }]);
+    await settle(tony, entries(al)); // settling again replaces, never doubles
+    expect(await rows(db, 'select count(*)::int as n from ledger_entries')).toEqual([{ n: 1 }]);
+
+    await as(db, tony, () => db.query('select reopen_event($1)', [eventId]));
+    expect(await rows(db, 'select count(*)::int as n from ledger_entries')).toEqual([{ n: 0 }]);
+    expect(await rows(db, 'select status from events where id = $1', [eventId])).toEqual([{ status: 'scheduled' }]);
+  });
+
+  it('lets only commissioners record a decision on a disputed CTP', async () => {
+    const al = await addPlayer(tony, oak, 'Al');
+    const { eventId } = await weekWithRound(tony, oak);
+    const decide = (user: string) => as(db, user, () => db.query('insert into ctp_decisions (event_id, league_id, hole_number, player_id, decided_by) values ($1, $2, 2, $3, $4)', [eventId, oak, al, user]));
+    await expect(decide(joe)).rejects.toThrow(/row-level security/);
+    await decide(tony);
+    expect(await as(db, joe, () => rows(db, 'select hole_number from ctp_decisions'))).toEqual([{ hole_number: 2 }]);
+  });
+
   it('keeps the ledger read-only for users', async () => {
     const al = await addPlayer(tony, oak, 'Al');
     const { eventId } = await weekWithRound(tony, oak);

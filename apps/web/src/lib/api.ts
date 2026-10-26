@@ -1,6 +1,6 @@
 import type { CourseSummary, LookupCourse } from '../../../../supabase/functions/course-lookup/normalize';
 import type {
-  Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, Member, NewCourse, NewPlayer, Player, Role,
+  Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, LedgerRow, Member, NewCourse, NewPlayer, Player, Role,
   RoundData, RoundPlayer, ScoreEntry, Season, User,
 } from './types';
 
@@ -68,6 +68,14 @@ export interface Api {
   submitRound(roundId: string): Promise<void>;
   /** Add a sub/guest to the roster from the first tee (any member). */
   addSub(leagueId: string, name: string): Promise<string>;
+
+  ledger(eventId: string): Promise<LedgerRow[]>;
+  /** Commissioner posts the week's money and marks it final. */
+  settleEvent(eventId: string, entries: LedgerRow[]): Promise<void>;
+  reopenEvent(eventId: string): Promise<void>;
+  /** holeNumber → playerId the commissioner picked for a disputed CTP. */
+  ctpDecisions(eventId: string): Promise<Record<number, string>>;
+  setCtpDecision(leagueId: string, eventId: string, holeNumber: number, playerId: string | null): Promise<void>;
 }
 
 /** Turn database errors into sentences a commissioner can act on. */
@@ -78,6 +86,8 @@ export function friendlyError(e: unknown): string {
   if (/leagues_slug_key|duplicate key.*slug/.test(msg)) return 'That web address is taken. Try another.';
   if (/leagues_join_code_key|duplicate key.*join_code/.test(msg)) return 'That join code is taken. Try another.';
   if (/row-level security|permission denied/.test(msg)) return "You don't have permission to do that.";
+  if (/commissioners only/.test(msg)) return 'Only commissioners can do that.';
+  if (/not in this week/.test(msg)) return "The results include a golfer who isn't in this week. Refresh and try again.";
   if (/invalid or expired/.test(msg)) return 'This invite link is invalid or has expired. Ask your commissioner for a new one.';
   if (/no league with that code/.test(msg)) return 'No league uses that code. Check it with your commissioner.';
   return msg || 'Something went wrong. Try again.';

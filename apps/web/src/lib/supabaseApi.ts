@@ -276,6 +276,33 @@ export function supabaseApi(url: string, anonKey: string): Api {
     async addSub(leagueId, name) {
       return check(await sb.rpc('add_sub_player', { p_league: leagueId, p_name: name })) as string;
     },
+
+    async ledger(eventId) {
+      const rows = check(await sb.from('ledger_entries').select('player_id, round_id, kind, amount_cents, hole_number').eq('event_id', eventId)) as Row[];
+      return rows.map((r) => ({ playerId: r.player_id, roundId: r.round_id, kind: r.kind, amountCents: r.amount_cents, holeNumber: r.hole_number }));
+    },
+    async settleEvent(eventId, entries) {
+      check(
+        await sb.rpc('settle_event', {
+          p_event: eventId,
+          p_entries: entries.map((e) => ({ player_id: e.playerId, round_id: e.roundId, kind: e.kind, amount_cents: e.amountCents, hole_number: e.holeNumber })),
+        }),
+      );
+    },
+    async reopenEvent(eventId) {
+      check(await sb.rpc('reopen_event', { p_event: eventId }));
+    },
+    async ctpDecisions(eventId) {
+      const rows = check(await sb.from('ctp_decisions').select('hole_number, player_id').eq('event_id', eventId)) as Row[];
+      return Object.fromEntries(rows.map((r) => [r.hole_number, r.player_id]));
+    },
+    async setCtpDecision(leagueId, eventId, holeNumber, playerId) {
+      if (!playerId) {
+        check(await sb.from('ctp_decisions').delete().eq('event_id', eventId).eq('hole_number', holeNumber));
+        return;
+      }
+      check(await sb.from('ctp_decisions').upsert({ event_id: eventId, league_id: leagueId, hole_number: holeNumber, player_id: playerId, decided_by: await uid(), decided_at: new Date().toISOString() }));
+    },
   };
 }
 

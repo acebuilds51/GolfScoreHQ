@@ -26,10 +26,11 @@ export function ScoreRoundPage() {
   if (!data.data) return <div className="page muted">{data.loading ? 'Loading…' : 'Round not found.'}</div>;
   const { round, layout, season, players, rounds, event } = data.data;
   if (!layout || !season) return <div className="page"><p className="muted">This week has no course or season set up yet.</p></div>;
-  return <Scorer key={round.id} initial={round} layout={layout} season={season} players={players} others={rounds.filter((r) => r.id !== round.id)} eventId={event.id} />;
+  const locked = event.status === 'settled' || event.status === 'rainout';
+  return <Scorer key={round.id} initial={round} layout={layout} season={season} players={players} others={rounds.filter((r) => r.id !== round.id)} eventId={event.id} locked={locked} />;
 }
 
-function Scorer({ initial, layout, season, players, others, eventId }: { initial: RoundData; layout: Layout; season: Season; players: Player[]; others: RoundData[]; eventId: string }) {
+function Scorer({ initial, layout, season, players, others, eventId, locked }: { initial: RoundData; layout: Layout; season: Season; players: Player[]; others: RoundData[]; eventId: string; locked: boolean }) {
   const { league } = useLeague();
   const nav = useNavigate();
   const rules = asBestBall(season.rules);
@@ -117,10 +118,10 @@ function Scorer({ initial, layout, season, players, others, eventId }: { initial
     window.scrollTo(0, 0);
   };
 
-  if (reviewing) {
+  if (reviewing || locked) {
     return (
       <Review
-        round={round} layout={layout} season={season} names={names} queueLength={queue.length} busy={busy} error={error}
+        round={round} layout={layout} season={season} names={names} queueLength={queue.length} busy={busy} error={error} locked={locked} eventId={eventId}
         onEditHole={(i) => { setReviewing(false); go(i); }}
         onSubmit={async () => {
           const left = await flush(league.id, round.id, queueRef.current);
@@ -261,9 +262,9 @@ function Presses({ round, layout, holeNumber, names, onChange }: { round: RoundD
   );
 }
 
-function Review({ round, layout, season, names, queueLength, busy, error, onEditHole, onSubmit }: {
+function Review({ round, layout, season, names, queueLength, busy, error, locked, eventId, onEditHole, onSubmit }: {
   round: RoundData; layout: Layout; season: Season; names: Map<string, string>; queueLength: number; busy: boolean; error: string | null;
-  onEditHole: (i: number) => void; onSubmit: () => void;
+  locked: boolean; eventId: string; onEditHole: (i: number) => void; onSubmit: () => void;
 }) {
   const rules = asBestBall(season.rules);
   const m = scoreMatch(toEngineRound(round, layout), layout.holes.length, rules);
@@ -275,14 +276,15 @@ function Review({ round, layout, season, names, queueLength, busy, error, onEdit
 
   return (
     <div className="page stack">
-      <h2>{round.status === 'submitted' ? 'Scorecard' : 'Review and submit'}</h2>
-      <p className="small muted">Tap a hole number to fix a score.</p>
+      <Link to={`../week/${eventId}`} className="small">← Week</Link>
+      <h2>{round.status === 'submitted' || locked ? 'Scorecard' : 'Review and submit'}</h2>
+      <p className="small muted">{locked ? 'This week is final. The commissioner can reopen it to fix a score.' : 'Tap a hole number to fix a score.'}</p>
       <div className="card flush scroll-x">
         <table className="scorecard">
           <thead>
             <tr>
               <th>Hole</th>
-              {layout.holes.map((h, i) => <th key={h.number}><button type="button" className="linkish" onClick={() => onEditHole(i)}>{h.number}</button></th>)}
+              {layout.holes.map((h, i) => <th key={h.number}>{locked ? h.number : <button type="button" className="linkish" onClick={() => onEditHole(i)}>{h.number}</button>}</th>)}
               <th>Tot</th>
             </tr>
             <tr className="muted"><td>Par</td>{layout.holes.map((h) => <td key={h.number}>{h.par}</td>)}<td>{par}</td></tr>
@@ -322,7 +324,7 @@ function Review({ round, layout, season, names, queueLength, busy, error, onEdit
                 const c = money[p.playerId] ?? 0;
                 return <div key={p.playerId} className="row between"><span>{names.get(p.playerId)}</span><span className={c > 0 ? 'good' : c < 0 ? 'warn' : 'muted'}>{c > 0 ? '+' : c < 0 ? '−' : ''}{fmtMoney(Math.abs(c))}</span></div>;
               })}
-              <p className="muted">Skins and closest to the pin are added when the week is settled.</p>
+              {!locked && <p className="muted">Skins and closest to the pin are added when the week is settled.</p>}
             </div>
           )}
         </section>
@@ -330,12 +332,12 @@ function Review({ round, layout, season, names, queueLength, busy, error, onEdit
 
       <ErrorText>{error}</ErrorText>
       {queueLength > 0 && <p className="warn small">{queueLength} change{queueLength === 1 ? '' : 's'} waiting to save.</p>}
-      <div className="row wrap">
+      {!locked && <div className="row wrap">
         <button type="button" className="btn btn-primary" disabled={busy || !complete} onClick={onSubmit}>
           {busy ? 'Submitting…' : round.status === 'submitted' ? 'Submit corrections' : 'Submit scores'}
         </button>
         {!complete && <span className="small muted">Every hole needs a score before submitting.</span>}
-      </div>
+      </div>}
     </div>
   );
 }

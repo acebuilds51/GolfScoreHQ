@@ -1,5 +1,5 @@
 import type { Api } from './api';
-import type { Contact, Course, JoinRequest, League, LeagueEvent, Plan, Role, RoundData, Season, User } from './types';
+import type { Contact, Course, JoinRequest, League, LeagueEvent, LedgerRow, Plan, Role, RoundData, Season, User } from './types';
 import { isCommissioner } from './types';
 import { DEMO_COURSES } from './demoCourses';
 import { sha256Hex, randomToken } from './util';
@@ -29,11 +29,13 @@ interface Db {
   seasons: Season[];
   events: (LeagueEvent & { leagueId: string })[];
   rounds: (RoundData & { leagueId: string })[];
+  ledger: (LedgerRow & { eventId: string })[];
+  ctpDecisions: Record<string, Record<number, string>>;
 }
 
 const empty = (): Db => ({
   session: null, users: {}, leagues: [], members: [], players: [], contacts: {}, invites: [], joinRequests: [], courses: [],
-  seasons: [], events: [], rounds: [],
+  seasons: [], events: [], rounds: [], ledger: [], ctpDecisions: {},
 });
 
 /** Mirrors the database's plan check on season rules. */
@@ -441,6 +443,44 @@ export function demoApi(): DemoApi {
       db.players.push(p);
       save(db);
       return p.id;
+    },
+
+    async ledger(eventId) {
+      const db = load();
+      return db.ledger.filter((e) => e.eventId === eventId).map(({ eventId: _e, ...r }) => r);
+    },
+    async settleEvent(eventId, entries) {
+      const db = load();
+      const ev = db.events.find((e) => e.id === eventId);
+      if (!ev) throw new Error('no such week');
+      if (!isCommissioner(roleIn(db, ev.leagueId))) throw new Error('commissioners only');
+      if (entries.length && !has(db, ev.leagueId, 'side_games')) throw new Error('plan_feature: Side games and money needs GolfScoreHQ Pro');
+      const weekRounds = db.rounds.filter((r) => r.eventId === eventId);
+      const ok = entries.every((e) => weekRounds.some((r) => (!e.roundId || r.id === e.roundId) && r.players.some((p) => p.playerId === e.playerId)));
+      if (!ok) throw new Error('settlement includes a golfer or group that is not in this week');
+      db.ledger = [...db.ledger.filter((e) => e.eventId !== eventId), ...entries.map((e) => ({ ...e, eventId }))];
+      ev.status = 'settled';
+      save(db);
+    },
+    async reopenEvent(eventId) {
+      const db = load();
+      const ev = db.events.find((e) => e.id === eventId)!;
+      if (!isCommissioner(roleIn(db, ev.leagueId))) throw new Error('commissioners only');
+      db.ledger = db.ledger.filter((e) => e.eventId !== eventId);
+      ev.status = 'scheduled';
+      save(db);
+    },
+    async ctpDecisions(eventId) {
+      const db = load();
+      return { ...(db.ctpDecisions[eventId] ?? {}) };
+    },
+    async setCtpDecision(leagueId, eventId, holeNumber, playerId) {
+      const db = load();
+      requireCommissioner(db, leagueId);
+      const d = (db.ctpDecisions[eventId] ??= {});
+      if (playerId) d[holeNumber] = playerId;
+      else delete d[holeNumber];
+      save(db);
     },
 
     async setPlan(leagueId, plan) {
