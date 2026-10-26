@@ -3,7 +3,7 @@ import { CopyField, EmptyState, ErrorText } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
 import { isCommissioner, type Contact, type Player } from '../lib/types';
-import { parseRoster } from '../lib/util';
+import { checkGolferRows, parseRoster, type GolferRow } from '../lib/util';
 
 export function RosterPage() {
   const { league } = useLeague();
@@ -40,7 +40,7 @@ export function RosterPage() {
           <h2>Roster <span className="muted">({active.length})</span></h2>
         </div>
         {data.data && active.length === 0 ? (
-          <EmptyState title="No golfers yet">{commish && <p className="muted">Paste your roster above, one golfer per line.</p>}</EmptyState>
+          <EmptyState title="No golfers yet">{commish && <p className="muted">Add your golfers above, one at a time or by pasting a list.</p>}</EmptyState>
         ) : (
           <ul className="list">
             {active.map((p) => (
@@ -89,7 +89,8 @@ function PlayerRow({ player, contact, commish, onChanged, onInvite }: { player: 
             className="btn btn-primary btn-sm"
             disabled={busy}
             onClick={async () => {
-              if (!name.trim()) return setError('Enter a name.');
+              const problem = checkGolferRows([{ name, email, phone, isSub: false }]).problems[0];
+              if (problem) return setError(problem);
               const ok = await run(async () => {
                 if (name.trim() !== player.displayName) await api.updatePlayer(player.id, { displayName: name.trim() });
                 if ((email || null) !== (contact?.email ?? null) || (phone || null) !== (contact?.phone ?? null)) {
@@ -148,7 +149,80 @@ function PlayerRow({ player, contact, commish, onChanged, onInvite }: { player: 
   );
 }
 
+const blankRow = (): GolferRow => ({ name: '', email: '', phone: '', isSub: false });
+
 function AddGolfers({ existing, onAdded }: { existing: string[]; onAdded: () => void }) {
+  const [pasting, setPasting] = useState(false);
+  return pasting
+    ? <PasteGolfers existing={existing} onAdded={onAdded} onForm={() => setPasting(false)} />
+    : <GolferForm existing={existing} onAdded={onAdded} onPaste={() => setPasting(true)} />;
+}
+
+/** One golfer per row, with name, email and phone in their own boxes (like Edit). */
+function GolferForm({ existing, onAdded, onPaste }: { existing: string[]; onAdded: () => void; onPaste: () => void }) {
+  const { league } = useLeague();
+  const [rows, setRows] = useState<GolferRow[]>([blankRow()]);
+  const [tried, setTried] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const { busy, error, run } = useAction();
+  const checked = useMemo(() => checkGolferRows(rows, existing), [rows, existing]);
+  const set = (i: number, patch: Partial<GolferRow>) => {
+    setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+    setMessage(null);
+  };
+  const problemCount = Object.keys(checked.problems).length;
+
+  async function save() {
+    setTried(true);
+    if (problemCount || !checked.players.length) return;
+    const n = checked.players.length;
+    const ok = await run(async () => { await api.addPlayers(league.id, checked.players); return true; });
+    if (ok) {
+      setRows([blankRow()]);
+      setTried(false);
+      setMessage(`Added ${n} golfer${n === 1 ? '' : 's'}.`);
+      onAdded();
+    }
+  }
+
+  return (
+    <section className="card stack">
+      <div className="row between wrap">
+        <h2>Add golfers</h2>
+        <button className="btn btn-ghost btn-sm" onClick={onPaste}>Paste a list instead</button>
+      </div>
+      <form className="stack" onSubmit={(e) => { e.preventDefault(); save(); }}>
+        {rows.map((r, i) => (
+          <div key={i} className="golfer-row">
+            <div className="grid three">
+              <label>Name<input value={r.name} autoFocus={i > 0 && i === rows.length - 1} onChange={(e) => set(i, { name: e.target.value })} /></label>
+              <label>Email<input type="email" value={r.email} placeholder="optional" onChange={(e) => set(i, { email: e.target.value })} /></label>
+              <label>Phone<input type="tel" value={r.phone} placeholder="optional" onChange={(e) => set(i, { phone: e.target.value })} /></label>
+            </div>
+            <div className="row between">
+              <label className="check-row"><input type="checkbox" checked={r.isSub} onChange={(e) => set(i, { isSub: e.target.checked })} /> Sub</label>
+              {rows.length > 1 && (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}>Remove</button>
+              )}
+            </div>
+            {tried && checked.problems[i] && <p className="small warn">{checked.problems[i]}</p>}
+          </div>
+        ))}
+        <ErrorText>{error}</ErrorText>
+        {message && <p className="ok">{message}</p>}
+        <div className="row wrap">
+          <button className="btn btn-primary" disabled={busy || (!checked.players.length && !problemCount)}>
+            {checked.players.length > 1 ? `Add ${checked.players.length} golfers` : 'Add golfer'}
+          </button>
+          <button type="button" className="btn" onClick={() => setRows((rs) => [...rs, blankRow()])}>+ Another golfer</button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+/** Paste from a spreadsheet or type one golfer per line. */
+function PasteGolfers({ existing, onAdded, onForm }: { existing: string[]; onAdded: () => void; onForm: () => void }) {
   const { league } = useLeague();
   const [text, setText] = useState('');
   const [message, setMessage] = useState<string | null>(null);
@@ -157,7 +231,10 @@ function AddGolfers({ existing, onAdded }: { existing: string[]; onAdded: () => 
 
   return (
     <section className="card stack">
-      <h2>Add golfers</h2>
+      <div className="row between wrap">
+        <h2>Add golfers</h2>
+        <button className="btn btn-ghost btn-sm" onClick={onForm}>Add one at a time instead</button>
+      </div>
       <p className="small muted">
         Paste from a spreadsheet or type one golfer per line. Add an email or phone and the word "sub" anywhere on the line if you like:
         <br />

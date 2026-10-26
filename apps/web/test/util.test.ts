@@ -1,5 +1,34 @@
 import { describe, expect, it } from 'vitest';
-import { cleanSlugInput, parseRoster, randomJoinCode, SLUG_RE, slugify } from '../src/lib/util';
+import { checkGolferRows, cleanSlugInput, parseRoster, randomJoinCode, SLUG_RE, slugify } from '../src/lib/util';
+
+describe('checkGolferRows', () => {
+  const row = (name: string, email = '', phone = '', isSub = false) => ({ name, email, phone, isSub });
+
+  it('adds filled rows and ignores blank ones', () => {
+    const r = checkGolferRows([row(' Jim  Jones ', 'Jim@Example.com', '248-555-1212'), row(''), row('Ann Lee', '', '', true)]);
+    expect(r.problems).toEqual({});
+    expect(r.players).toEqual([
+      { displayName: 'Jim Jones', isSub: false, email: 'jim@example.com', phone: '248-555-1212' },
+      { displayName: 'Ann Lee', isSub: true },
+    ]);
+  });
+
+  it('explains what to fix on each row', () => {
+    const r = checkGolferRows(
+      [row('Jim Jones jim@x.com'), row('', 'a@b.com'), row('Bo', 'not-an-email'), row('Cy', '', '12'), row('pat jones'), row('Al'), row('al')],
+      ['Pat Jones'],
+    );
+    expect(r.problems).toEqual({
+      0: 'Put the email and phone in their own boxes, not in the name.',
+      1: 'Enter a name.',
+      2: "That email doesn't look right.",
+      3: 'That phone number looks too short.',
+      4: 'pat jones is already on the roster.',
+      6: 'al is listed twice.',
+    });
+    expect(r.players.map((p) => p.displayName)).toEqual(['Al']);
+  });
+});
 
 describe('cleanSlugInput', () => {
   it('turns a pasted website into a league link', () => {

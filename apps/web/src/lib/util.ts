@@ -120,5 +120,41 @@ export function parseRoster(text: string, existingNames: string[] = []): ParsedR
   return { players, skipped };
 }
 
+export interface GolferRow {
+  name: string;
+  email: string;
+  phone: string;
+  isSub: boolean;
+}
+
+/**
+ * Check the "Add golfers" form. Blank rows are ignored. Returns the golfers
+ * to add, or a problem per row (by index) for the commissioner to fix.
+ */
+export function checkGolferRows(rows: GolferRow[], existingNames: string[] = []): { players: NewPlayer[]; problems: Record<number, string> } {
+  const onRoster = new Set(existingNames.map((n) => n.trim().toLowerCase()));
+  const seen = new Set<string>();
+  const players: NewPlayer[] = [];
+  const problems: Record<number, string> = {};
+  rows.forEach((r, i) => {
+    const name = r.name.replace(/\s+/g, ' ').trim();
+    const email = r.email.trim().toLowerCase();
+    const phone = r.phone.trim();
+    if (!name && !email && !phone) return;
+    const key = name.toLowerCase();
+    if (!name) problems[i] = 'Enter a name.';
+    else if (name.length > 60) problems[i] = 'Name is longer than 60 characters.';
+    else if (EMAIL_IN_RE.test(name) || PHONE_IN_RE.test(name)) problems[i] = 'Put the email and phone in their own boxes, not in the name.';
+    else if (email && !EMAIL_RE.test(email)) problems[i] = "That email doesn't look right.";
+    else if (phone && phone.replace(/\D/g, '').length < 7) problems[i] = "That phone number looks too short.";
+    else if (onRoster.has(key)) problems[i] = `${name} is already on the roster.`;
+    else if (seen.has(key)) problems[i] = `${name} is listed twice.`;
+    if (problems[i]) return;
+    seen.add(key);
+    players.push({ displayName: name, isSub: r.isSub, ...(email ? { email } : {}), ...(phone ? { phone } : {}) });
+  });
+  return { players, problems };
+}
+
 /** Standard pars to start a new nine from. */
 export const PAR_36 = [4, 4, 3, 5, 4, 4, 3, 5, 4];
