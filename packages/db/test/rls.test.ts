@@ -101,6 +101,21 @@ describe('roles', () => {
     expect(await rows(db, 'select hole_number from hole_scores order by 1')).toEqual([{ hole_number: 1 }, { hole_number: 2 }]);
   });
 
+  it('records whose CTP marker a group beat, only within the same league', async () => {
+    const al = await addPlayer(tony, oak, 'Al');
+    const bob = await addPlayer(tony, oak, 'Bob');
+    const pineGuy = await addPlayer(sam, pine, 'Pine Guy');
+    const { roundId } = await weekWithRound(tony, oak);
+    await as(db, joe, () => db.query(`insert into ctp_reports (round_id, league_id, hole_number, player_id, beat_player_id) values ($1, $2, 2, $3, $4)`, [roundId, oak, bob, al]));
+    await expect(
+      as(db, joe, () => db.query(`update ctp_reports set beat_player_id = $1 where round_id = $2`, [pineGuy, roundId])),
+    ).rejects.toThrow();
+    await expect(
+      as(db, joe, () => db.query(`update ctp_reports set beat_player_id = player_id where round_id = $1`, [roundId])),
+    ).rejects.toThrow(/ctp_reports_not_self/);
+    expect(await rows(db, 'select beat_player_id from ctp_reports')).toEqual([{ beat_player_id: al }]);
+  });
+
   it('keeps the ledger read-only for users', async () => {
     const al = await addPlayer(tony, oak, 'Al');
     const { eventId } = await weekWithRound(tony, oak);

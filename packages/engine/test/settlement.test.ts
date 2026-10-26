@@ -91,6 +91,53 @@ describe('closest to the pin (latest tee slot that reports a winner)', () => {
   });
 });
 
+describe('closest to the pin (marker chain: "whose ball were you inside of?")', () => {
+  const rules = { ...OCBC_BEST_BALL.ctp, resolution: 'markerChain' as const };
+  const claim = (roundId: string, teeSlot: number, winner: string, beat: string | null) =>
+    ({ roundId, teeSlot, ctp: { 2: { winner, beat } } });
+
+  it('awards the claim nobody beat, whatever order groups report in', () => {
+    const res = settleCtp(
+      [
+        claim('r6', 6, 'cy', 'bob'), //  reported first, played last
+        { roundId: 'r2', teeSlot: 2, ctp: { 2: 'none' } },
+        claim('r1', 1, 'al', null),
+        claim('r3', 3, 'bob', 'al'),
+      ],
+      [2],
+      rules,
+    );
+    expect(res.holes[0]).toMatchObject({ winner: 'cy', roundId: 'r6', conflict: false });
+    expect(totalsByPlayer(res.ledger)).toEqual({ cy: 3600 });
+  });
+
+  it('ignores tee slots entirely (a later tee time can lose to an earlier one)', () => {
+    const res = settleCtp([claim('r9', 9, 'dee', null), claim('r4', 4, 'eve', 'dee')], [2], rules);
+    expect(res.holes[0]!.winner).toBe('eve');
+  });
+
+  it('flags two groups that both claim to be inside the same marker', () => {
+    const res = settleCtp(
+      [claim('r1', 1, 'al', null), claim('r3', 3, 'bob', 'al'), claim('r5', 5, 'cy', 'al')],
+      [2],
+      rules,
+    );
+    expect(res.holes[0]).toMatchObject({ winner: null, conflict: true });
+    expect(res.holes[0]!.contenders.sort()).toEqual(['bob', 'cy']);
+    expect(res.ledger).toEqual([]);
+  });
+
+  it('flags two separate "no marker yet" claims', () => {
+    const res = settleCtp([claim('r1', 1, 'al', null), claim('r2', 2, 'bob', null)], [2], rules);
+    expect(res.holes[0]).toMatchObject({ conflict: true });
+  });
+
+  it('still resolves when the group that set the beaten marker never reported', () => {
+    const res = settleCtp([claim('r7', 7, 'cy', 'bob')], [2], rules);
+    expect(res.holes[0]!.winner).toBe('cy');
+  });
+});
+
 describe('a full OCBC week', () => {
   it('counts the skins-only "player 5" for skins (legacy bug: their scores were dropped)', () => {
     const r1 = round('r1', 1, { A: ['al', 'ann'], B: ['bob', 'bea'], skinsOnly: ['pete'] }, {

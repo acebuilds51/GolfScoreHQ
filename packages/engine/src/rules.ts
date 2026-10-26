@@ -23,11 +23,12 @@ export interface CtpRules {
   enabled: boolean;
   amountPerHole: Cents;
   /**
+   * markerChain: each claim names whose marker it beat. The winner is the one
+   * claim nobody else beat, so tee order and entry order don't matter.
    * latestTeeSlot: groups report their own closest player; the group with the
-   * highest tee slot that reported a winner takes it (later groups saw the
-   * earlier marker and only claim it if they beat it).
+   * highest tee slot that reported a winner takes it.
    */
-  resolution: 'latestTeeSlot';
+  resolution: 'markerChain' | 'latestTeeSlot';
 }
 
 export interface BestBallMatchRules {

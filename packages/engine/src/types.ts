@@ -41,8 +41,20 @@ export interface PressInput {
   calledBy: Side;
 }
 
-/** CTP report from one group for one par 3: a player in the group, or 'none'. */
-export type CtpReport = PlayerId | 'none';
+/**
+ * A group's claim on a par 3: their player is inside the marker left by
+ * `beat` (null = there was no marker yet; they were first on the green).
+ */
+export interface CtpClaim {
+  winner: PlayerId;
+  beat: PlayerId | null;
+}
+
+/**
+ * CTP report from one group for one par 3: 'none' (nobody in the group beat the
+ * marker), a bare player id (tee-order leagues), or a claim (marker-chain leagues).
+ */
+export type CtpReport = PlayerId | 'none' | CtpClaim;
 
 /** One group's round in a best-ball match format. */
 export interface MatchRoundInput {
