@@ -1,7 +1,7 @@
 import type { CourseSummary, LookupCourse } from '../../../../supabase/functions/course-lookup/normalize';
 import type {
   Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, LedgerRow, Member, NewCourse, NewPlayer, Player, Role,
-  RoundData, RoundPlayer, ScoreEntry, Season, User,
+  RoundData, RoundPlayer, ScoreEntry, Season, TvDisplay, TvFeed, TvSettings, User,
 } from './types';
 
 export type { CourseSummary, LookupCourse, LookupTee } from '../../../../supabase/functions/course-lookup/normalize';
@@ -74,6 +74,15 @@ export interface Api {
    * rounds, CTP, presses, week status). Returns an unsubscribe function.
    */
   watchLeague(leagueId: string, onChange: () => void): () => void;
+
+  /** Clubhouse TV links (commissioners, Pro). */
+  tvDisplays(leagueId: string): Promise<TvDisplay[]>;
+  /** Returns the raw token for the TV link; only its hash is stored. */
+  createTvDisplay(leagueId: string, name: string, settings: TvSettings): Promise<string>;
+  updateTvDisplay(id: string, patch: { name?: string; settings?: TvSettings }): Promise<void>;
+  revokeTvDisplay(id: string): Promise<void>;
+  /** What a TV link shows. Works without signing in. null = unknown or turned-off link. */
+  tvFeed(token: string): Promise<TvFeed | null>;
 
   ledger(eventId: string): Promise<LedgerRow[]>;
   /** Every round and money entry in a season, for standings. */

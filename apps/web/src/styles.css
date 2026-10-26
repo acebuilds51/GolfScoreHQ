@@ -237,6 +237,54 @@ table.live-table td.under { color: #a32d2d; }
 .chip.eagle, .chip.ace { background: var(--pro-bg); color: var(--pro-text); border-color: transparent; }
 .chip.birdie { background: var(--accent-bg); color: var(--accent-text); border-color: transparent; }
 
+/* Clubhouse TV — its own fixed look, independent of light/dark mode */
+.tv-root { position: fixed; inset: 0; background: #04213f; color: #e6f1fb; display: flex; flex-direction: column; font-size: clamp(14px, 1.6vw, 28px); overflow: hidden; }
+.tv-root .dim { color: #85b7eb; }
+.tv-root .small { font-size: 0.75em; }
+.tv-center { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5em; text-align: center; padding: 2em; }
+.tv-center h1, .tv-center h2 { color: #e6f1fb; }
+.tv-head { display: flex; align-items: center; gap: 0.8em; padding: 0.6em 1.2em; border-bottom: 2px solid #0c447c; }
+.tv-logo { width: 2.2em; height: 2.2em; border-radius: 0.35em; background: #e6f1fb; color: #04213f; display: flex; align-items: center; justify-content: center; font-weight: 800; }
+.tv-title { flex: 1; min-width: 0; }
+.tv-league { font-size: 1.25em; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tv-sub { color: #85b7eb; font-size: 0.8em; }
+.tv-clock { font-size: 1.2em; font-weight: 700; }
+.tv-pill { font-size: 0.7em; font-weight: 700; padding: 0.2em 0.7em; border-radius: 999px; white-space: nowrap; }
+.tv-pill.live { background: #a32d2d; color: #fcebeb; }
+.tv-pill.final { background: #085041; color: #e1f5ee; }
+.tv-pill.stale { background: #633806; color: #faeeda; }
+.tv-flash { background: #fac775; color: #412402; font-weight: 700; padding: 0.4em 1.2em; font-size: 1.05em; }
+.tv-main { flex: 1; min-height: 0; padding: 0.8em 1.2em; display: flex; flex-direction: column; }
+.tv-panel { flex: 1; min-height: 0; background: #0c447c; border-radius: 0.5em; padding: 0.6em 0.9em; overflow: hidden; animation: tv-in 0.4s ease-out; }
+@keyframes tv-in { from { opacity: 0; transform: translateY(0.4em); } }
+@media (prefers-reduced-motion: reduce) { .tv-panel { animation: none; } }
+.tv-panel-title { font-size: 0.8em; color: #85b7eb; font-weight: 600; margin-bottom: 0.4em; text-transform: none; }
+.tv-table { width: 100%; border-collapse: collapse; }
+.tv-table th { color: #85b7eb; font-weight: 600; font-size: 0.75em; text-align: right; padding: 0.2em 0.5em; }
+.tv-table td { text-align: right; padding: 0.28em 0.5em; border-top: 1px solid #185fa5; }
+.tv-table .left { text-align: left; }
+.tv-table td.under { color: #f09595; font-weight: 700; }
+.tv-table td.up { color: #9fe1cb; font-weight: 700; }
+.tv-table caption { caption-side: bottom; text-align: right; padding-top: 0.3em; }
+.tv-list { display: flex; flex-direction: column; }
+.tv-row { display: flex; align-items: center; gap: 0.7em; padding: 0.35em 0; border-top: 1px solid #185fa5; }
+.tv-row:first-child { border-top: 0; }
+.tv-row .grow { flex: 1; min-width: 0; }
+.tv-tee { width: 1.6em; height: 1.6em; border-radius: 50%; background: #185fa5; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85em; flex-shrink: 0; }
+.tv-status { color: #85b7eb; }
+.tv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9em, 1fr)); gap: 0.5em; }
+.tv-cell { background: #185fa5; border-radius: 0.4em; padding: 0.5em 0.7em; display: flex; flex-direction: column; gap: 0.1em; }
+.tv-cell strong { font-size: 1.05em; }
+.tv-cell.won { background: #085041; }
+.tv-cell.eagle, .tv-cell.ace { background: #3c3489; }
+.tv-dots { display: flex; gap: 0.4em; justify-content: center; padding-top: 0.5em; }
+.tv-dots span { width: 0.5em; height: 0.5em; border-radius: 50%; background: #185fa5; }
+.tv-dots span.on { background: #e6f1fb; }
+.tv-foot { display: flex; align-items: center; gap: 1em; padding: 0.4em 1.2em; border-top: 2px solid #0c447c; }
+.tv-ticker { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.85em; }
+.tv-qr { display: flex; align-items: center; gap: 0.5em; color: #85b7eb; font-size: 0.75em; }
+.tv-qr img { width: 3.2em; height: 3.2em; border-radius: 0.2em; background: #fff; }
+
 /* Standings */
 .pills { gap: 6px; }
 .pill { font: inherit; font-size: 0.82rem; font-weight: 600; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); border-radius: 999px; padding: 5px 12px; cursor: pointer; }

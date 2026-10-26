@@ -1,5 +1,5 @@
 import type { Api } from './api';
-import type { Contact, Course, JoinRequest, League, LeagueEvent, LedgerRow, Plan, Role, RoundData, Season, User } from './types';
+import type { Contact, Course, JoinRequest, League, LeagueEvent, LedgerRow, Plan, Role, RoundData, Season, TvDisplay, User } from './types';
 import { isCommissioner } from './types';
 import { DEMO_COURSES } from './demoCourses';
 import { sha256Hex, randomToken } from './util';
@@ -31,11 +31,12 @@ interface Db {
   rounds: (RoundData & { leagueId: string })[];
   ledger: (LedgerRow & { eventId: string })[];
   ctpDecisions: Record<string, Record<number, string>>;
+  tvDisplays: (TvDisplay & { leagueId: string; tokenHash: string; revokedAt: string | null })[];
 }
 
 const empty = (): Db => ({
   session: null, users: {}, leagues: [], members: [], players: [], contacts: {}, invites: [], joinRequests: [], courses: [],
-  seasons: [], events: [], rounds: [], ledger: [], ctpDecisions: {},
+  seasons: [], events: [], rounds: [], ledger: [], ctpDecisions: {}, tvDisplays: [],
 });
 
 /** Mirrors the database's plan check on season rules. */
@@ -448,6 +449,68 @@ export function demoApi(): DemoApi {
     async ledger(eventId) {
       const db = load();
       return db.ledger.filter((e) => e.eventId === eventId).map(({ eventId: _e, ...r }) => r);
+    },
+    async tvDisplays(leagueId) {
+      const db = load();
+      requireCommissioner(db, leagueId);
+      return db.tvDisplays.filter((d) => d.leagueId === leagueId && !d.revokedAt).map(({ id: did, name, settings, createdAt }) => ({ id: did, name, settings, createdAt }));
+    },
+    async createTvDisplay(leagueId, name, settings) {
+      const db = load();
+      requireCommissioner(db, leagueId);
+      if (!has(db, leagueId, 'tv_mode')) throw new Error("You don't have permission to do that.");
+      const token = randomToken();
+      db.tvDisplays.push({ id: id(), leagueId, name, settings, tokenHash: await sha256Hex(token), createdAt: new Date().toISOString(), revokedAt: null });
+      save(db);
+      return token;
+    },
+    async updateTvDisplay(did, patch) {
+      const db = load();
+      const d = db.tvDisplays.find((x) => x.id === did)!;
+      requireCommissioner(db, d.leagueId);
+      if (patch.name !== undefined) d.name = patch.name;
+      if (patch.settings !== undefined) d.settings = patch.settings;
+      save(db);
+    },
+    async revokeTvDisplay(did) {
+      const db = load();
+      const d = db.tvDisplays.find((x) => x.id === did)!;
+      requireCommissioner(db, d.leagueId);
+      d.revokedAt = new Date().toISOString();
+      save(db);
+    },
+    async tvFeed(token) {
+      // Same shape as the database's tv_feed(); no sign-in needed.
+      const db = load();
+      const hash = await sha256Hex(token);
+      const d = db.tvDisplays.find((x) => x.tokenHash === hash && !x.revokedAt);
+      if (!d) return null;
+      const lg = db.leagues.find((l) => l.id === d.leagueId)!;
+      if (!has(db, lg.id, 'tv_mode')) return { error: 'plan', league: { name: lg.name } };
+      const season = db.seasons.filter((s) => s.leagueId === lg.id).sort((a, b) => b.year - a.year)[0];
+      const events = season ? db.events.filter((e) => e.seasonId === season.id).sort((a, b) => b.weekNumber - a.weekNumber) : [];
+      const ev = events.find((e) => (e.status === 'scheduled' || e.status === 'in_progress') && db.rounds.some((r) => r.eventId === e.id)) ?? events[0];
+      const layout = ev?.layoutId ? db.courses.flatMap((c) => c.layouts.map((l) => ({ ...l, courseName: c.name }))).find((l) => l.id === ev.layoutId) ?? null : null;
+      const settled = new Set(events.filter((e) => e.status === 'settled').map((e) => e.id));
+      const totals = new Map<string, { playerId: string; money: number; skins: number; ctps: number }>();
+      for (const e of db.ledger.filter((x) => settled.has(x.eventId))) {
+        const t = totals.get(e.playerId) ?? { playerId: e.playerId, money: 0, skins: 0, ctps: 0 };
+        t.money += e.amountCents;
+        if (e.kind === 'skin') t.skins++;
+        if (e.kind === 'ctp') t.ctps++;
+        totals.set(e.playerId, t);
+      }
+      return {
+        league: { name: lg.name, slug: lg.slug, logoUrl: null },
+        display: { name: d.name, settings: d.settings },
+        season: season ? { year: season.year, name: season.name, rules: season.rules } : null,
+        event: ev ? { id: ev.id, weekNumber: ev.weekNumber, eventDate: ev.eventDate, status: ev.status } : null,
+        layout,
+        players: db.players.filter((p) => p.leagueId === lg.id).map((p) => ({ id: p.id, displayName: p.displayName, isSub: p.isSub })),
+        rounds: ev ? db.rounds.filter((r) => r.eventId === ev.id).map(({ leagueId: _l, ...r }) => ({ ...r, presses: [] })) : [],
+        standings: [...totals.values()].sort((a, b) => b.money - a.money),
+        generatedAt: new Date().toISOString(),
+      };
     },
     watchLeague(_leagueId, onChange) {
       // Demo data lives in this browser: other tabs signal changes through storage events.

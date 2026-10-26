@@ -3,7 +3,7 @@ import { CopyField, ErrorText, ProLock } from '../components/ui';
 import { api } from '../lib/backend';
 import type { DemoApi } from '../lib/demoApi';
 import { useAction, useAsync, useAuth, useLeague } from '../lib/hooks';
-import { isCommissioner, type Plan, type Role } from '../lib/types';
+import { isCommissioner, type Plan, type Role, type TvDisplay, type TvPanel, type TvSettings } from '../lib/types';
 import { randomJoinCode } from '../lib/util';
 
 export function SettingsPage() {
@@ -17,6 +17,7 @@ export function SettingsPage() {
       <JoinCode />
       <JoinRequests onApproved={() => setMembersVersion((v) => v + 1)} />
       <Members version={membersVersion} />
+      <ClubhouseTv />
       {api.mode === 'demo' && <DemoPlan onChanged={reloadLeague} />}
     </div>
   );
@@ -150,6 +151,105 @@ function Members({ version }: { version: number }) {
         <ErrorText>{error}</ErrorText>
       </div>
     </section>
+  );
+}
+
+const TV_PANELS: { key: TvPanel; label: string }[] = [
+  { key: 'live', label: 'Leaderboard' }, { key: 'matches', label: 'Matches' }, { key: 'skins', label: 'Skins' },
+  { key: 'ctp', label: 'Closest to the pin' }, { key: 'highlights', label: 'Highlights' }, { key: 'standings', label: 'Season standings' },
+];
+const DEFAULT_TV: TvSettings = { hideMoney: true, secondsPerPanel: 15, panels: TV_PANELS.map((p) => p.key) };
+
+function ClubhouseTv() {
+  const { league } = useLeague();
+  const allowed = league.features.includes('tv_mode');
+  const displays = useAsync(() => (allowed ? api.tvDisplays(league.id) : Promise.resolve([])), [league.id, allowed]);
+  const [newLink, setNewLink] = useState<string | null>(null);
+  const { busy, error, run } = useAction();
+
+  return (
+    <section className="card stack">
+      <div className="row between">
+        <h2>Clubhouse TV</h2>
+        {!allowed && <ProLock />}
+      </div>
+      <p className="small muted">
+        Put the live leaderboard on a TV at the course. Open the link on a smart TV's browser, a Fire Stick, a Chromecast or a laptop plugged into the TV. No sign-in needed on the TV; the link only shows this league's scores.
+      </p>
+      {allowed && (
+        <>
+          {newLink && (
+            <div className="subcard stack">
+              <strong>Your new TV link</strong>
+              <p className="small muted">Copy it now: for security it's only shown once. You can always make a new one.</p>
+              <CopyField value={newLink} />
+              <div><a className="btn btn-sm" href={newLink} target="_blank" rel="noreferrer">Open it here</a></div>
+            </div>
+          )}
+          {displays.data?.map((d) => (
+            <TvDisplayEditor key={d.id} display={d} onChanged={displays.reload} />
+          ))}
+          <div>
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={busy}
+              onClick={async () => {
+                const token = await run(() => api.createTvDisplay(league.id, displays.data?.length ? `Clubhouse TV ${displays.data.length + 1}` : 'Clubhouse TV', DEFAULT_TV));
+                if (token) { setNewLink(`${window.location.origin}/tv/${token}`); displays.reload(); }
+              }}
+            >
+              Create a TV link
+            </button>
+          </div>
+        </>
+      )}
+      <ErrorText>{error ?? displays.error}</ErrorText>
+    </section>
+  );
+}
+
+function TvDisplayEditor({ display, onChanged }: { display: TvDisplay; onChanged: () => void }) {
+  const { busy, error, run } = useAction();
+  const save = async (settings: TvSettings) => { await run(() => api.updateTvDisplay(display.id, { settings })); onChanged(); };
+  const s = display.settings;
+  return (
+    <div className="subcard stack">
+      <div className="row between wrap">
+        <strong>{display.name}</strong>
+        <button
+          className="btn btn-ghost btn-sm"
+          disabled={busy}
+          onClick={async () => {
+            if (!window.confirm(`Turn off ${display.name}? Any TV showing it stops updating.`)) return;
+            await run(() => api.revokeTvDisplay(display.id));
+            onChanged();
+          }}
+        >
+          Turn off link
+        </button>
+      </div>
+      <label className="check-row"><input type="checkbox" checked={s.hideMoney} disabled={busy} onChange={(e) => save({ ...s, hideMoney: e.target.checked })} /> Hide dollar amounts</label>
+      <label className="inline">
+        Seconds per screen
+        <select value={s.secondsPerPanel} disabled={busy} onChange={(e) => save({ ...s, secondsPerPanel: Number(e.target.value) })}>
+          {[8, 10, 15, 20, 30].map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </label>
+      <div className="row wrap">
+        {TV_PANELS.map((p) => (
+          <label key={p.key} className="check-row">
+            <input
+              type="checkbox"
+              checked={s.panels.includes(p.key)}
+              disabled={busy || (s.panels.length === 1 && s.panels.includes(p.key))}
+              onChange={(e) => save({ ...s, panels: TV_PANELS.map((x) => x.key).filter((k) => (k === p.key ? e.target.checked : s.panels.includes(k))) })}
+            />
+            {p.label}
+          </label>
+        ))}
+      </div>
+      <ErrorText>{error}</ErrorText>
+    </div>
   );
 }
 

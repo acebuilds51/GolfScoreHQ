@@ -152,6 +152,35 @@ export interface RoundData {
   submittedAt: string | null;
 }
 
+export type TvPanel = 'live' | 'matches' | 'skins' | 'ctp' | 'highlights' | 'standings';
+
+export interface TvSettings {
+  hideMoney: boolean;
+  secondsPerPanel: number;
+  panels: TvPanel[];
+}
+
+export interface TvDisplay {
+  id: string;
+  name: string;
+  settings: TvSettings;
+  createdAt: string;
+}
+
+/** Everything a Clubhouse TV shows, from tv_feed(). */
+export interface TvFeed {
+  error?: 'plan';
+  league: { name: string; slug?: string; logoUrl?: string | null };
+  display?: { name: string; settings: TvSettings };
+  season?: { year: number; name: string; rules: import('@golfscorehq/engine').FormatRules } | null;
+  event?: { id: string; weekNumber: number; eventDate: string | null; status: EventStatus } | null;
+  layout?: (Layout & { courseName: string | null }) | null;
+  players?: { id: string; displayName: string; isSub: boolean }[];
+  rounds?: RoundData[];
+  standings?: { playerId: string; money: number; skins: number; ctps: number }[];
+  generatedAt?: string;
+}
+
 export type LedgerKind = 'match' | 'press' | 'skin' | 'ctp' | 'scramblePot';
 
 export interface LedgerRow {

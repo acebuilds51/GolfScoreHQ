@@ -27,6 +27,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 7. `20261101000000_scoring.sql`
 8. `20261102000000_settlement.sql`
 9. `20261103000000_realtime.sql`
+10. `20261104000000_tv_feed.sql`
 
 **B. Command line**
 

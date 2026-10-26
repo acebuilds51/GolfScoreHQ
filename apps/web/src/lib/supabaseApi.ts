@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Api, CourseSummary, LookupCourse } from './api';
-import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, User } from './types';
+import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, TvFeed, User } from './types';
 import { randomToken, sha256Hex } from './util';
 
 type Row = Record<string, any>;
@@ -280,6 +280,27 @@ export function supabaseApi(url: string, anonKey: string): Api {
     async ledger(eventId) {
       const rows = check(await sb.from('ledger_entries').select('player_id, round_id, kind, amount_cents, hole_number').eq('event_id', eventId)) as Row[];
       return rows.map((r) => ({ playerId: r.player_id, roundId: r.round_id, kind: r.kind, amountCents: r.amount_cents, holeNumber: r.hole_number }));
+    },
+    async tvDisplays(leagueId) {
+      const rows = check(await sb.from('tv_displays').select('id, name, settings, created_at').eq('league_id', leagueId).is('revoked_at', null).order('created_at')) as Row[];
+      return rows.map((r) => ({ id: r.id, name: r.name, settings: r.settings, createdAt: r.created_at }));
+    },
+    async createTvDisplay(leagueId, name, settings) {
+      const token = randomToken();
+      check(await sb.from('tv_displays').insert({ league_id: leagueId, name, settings, token_hash: await sha256Hex(token), created_by: await uid() }));
+      return token;
+    },
+    async updateTvDisplay(id, patch) {
+      const row: Row = {};
+      if (patch.name !== undefined) row.name = patch.name;
+      if (patch.settings !== undefined) row.settings = patch.settings;
+      check(await sb.from('tv_displays').update(row).eq('id', id));
+    },
+    async revokeTvDisplay(id) {
+      check(await sb.from('tv_displays').update({ revoked_at: new Date().toISOString() }).eq('id', id));
+    },
+    async tvFeed(token) {
+      return (check(await sb.rpc('tv_feed', { p_token: token })) as TvFeed | null) ?? null;
     },
     watchLeague(leagueId, onChange) {
       const channel = sb.channel(`league-${leagueId}-${Math.random().toString(36).slice(2)}`);

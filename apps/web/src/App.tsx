@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Header } from './components/Header';
 import { AuthContext, useAuth, useAuthState } from './lib/hooks';
 import { CoursesPage } from './pages/CoursesPage';
@@ -14,6 +14,7 @@ import { RosterPage } from './pages/RosterPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { StandingsPage } from './pages/StandingsPage';
 import { SignInPage } from './pages/SignInPage';
+import { TvPage } from './pages/TvPage';
 
 function RequireUser({ children }: { children: JSX.Element }) {
   const { user, loading } = useAuth();
@@ -24,6 +25,10 @@ function RequireUser({ children }: { children: JSX.Element }) {
 
 export function App() {
   const auth = useAuthState();
+  // The clubhouse TV is a full-screen page with no app chrome and no sign-in.
+  if (useLocation().pathname.startsWith('/tv/')) {
+    return <Routes><Route path="/tv/:token" element={<TvPage />} /></Routes>;
+  }
   return (
     <AuthContext.Provider value={auth}>
       <Header />
