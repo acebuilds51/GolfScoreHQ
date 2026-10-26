@@ -1,6 +1,7 @@
 import type { Api } from './api';
 import type { Contact, Course, JoinRequest, League, Plan, Role, User } from './types';
 import { isCommissioner } from './types';
+import { DEMO_COURSES } from './demoCourses';
 import { sha256Hex, randomToken } from './util';
 
 // Demo mode keeps everything in this browser's storage. It follows the same
@@ -256,6 +257,17 @@ export function demoApi(): DemoApi {
       if (!m || m.role === 'owner') throw new Error("You don't have permission to do that.");
       m.role = role;
       save(db);
+    },
+
+    async searchCourses(query) {
+      const q = query.trim().toLowerCase();
+      if (q.length < 3) throw new Error('Type at least 3 letters of the course name.');
+      return DEMO_COURSES.filter((c) => `${c.clubName} ${c.courseName} ${c.city}`.toLowerCase().includes(q)).map(({ tees: _t, ...s }) => s);
+    },
+    async lookupCourse(courseId) {
+      const c = DEMO_COURSES.find((x) => x.id === courseId);
+      if (!c) throw new Error("That course wasn't found.");
+      return c;
     },
 
     async courses(leagueId) {

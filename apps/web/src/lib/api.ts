@@ -1,4 +1,7 @@
+import type { CourseSummary, LookupCourse } from '../../../../supabase/functions/course-lookup/normalize';
 import type { Contact, Course, JoinRequest, League, LeagueSummary, Member, NewCourse, NewPlayer, Player, Role, User } from './types';
+
+export type { CourseSummary, LookupCourse, LookupTee } from '../../../../supabase/functions/course-lookup/normalize';
 
 /**
  * Everything the screens need from the backend. Two implementations:
@@ -33,6 +36,10 @@ export interface Api {
   decideJoinRequest(leagueId: string, userId: string, approve: boolean): Promise<void>;
   members(leagueId: string): Promise<Member[]>;
   setMemberRole(leagueId: string, userId: string, role: Role): Promise<void>;
+
+  /** Course lookup (GolfCourseAPI through the course-lookup server function). */
+  searchCourses(query: string): Promise<CourseSummary[]>;
+  lookupCourse(id: string): Promise<LookupCourse>;
 
   courses(leagueId: string): Promise<Course[]>;
   createCourse(leagueId: string, course: NewCourse): Promise<string>;

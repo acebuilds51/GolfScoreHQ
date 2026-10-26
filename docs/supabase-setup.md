@@ -23,6 +23,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 3. `20261028000000_pricing_tiers.sql`
 4. `20261029000000_pro_features.sql`
 5. `20261030000000_join_request_identity.sql`
+6. `20261031000000_course_lookup.sql`
 
 **B. Command line**
 
@@ -59,3 +60,27 @@ VITE_SUPABASE_ANON_KEY=eyJ...
 The anon key is meant to be public: the database's access rules protect the data. **Never** put the `service_role` key in the app or share it.
 
 Restart the dev server and the demo banner disappears.
+
+## 5. Course lookup (optional, recommended)
+
+Lets commissioners search for their course and have the scorecard (pars, stroke index, rating, slope) fill in. Without it, they enter pars by hand.
+
+1. Sign up at [golfcourseapi.com](https://golfcourseapi.com) (free: 35 lookups a day; each course is only looked up once and then saved).
+2. In Supabase: **Edge Functions → Secrets** (or **Project Settings → Edge Functions**), add a secret named `GOLFCOURSEAPI_KEY` with your key. Keep the key out of chat, email and the code.
+3. Deploy the function from the `GolfScoreHQ` folder:
+
+```bash
+npx supabase login
+```
+
+```bash
+npx supabase link --project-ref YOUR_PROJECT_REF
+```
+
+```bash
+npx supabase functions deploy course-lookup --use-api
+```
+
+`--use-api` builds the function on Supabase's side, so Docker isn't needed.
+
+To try the lookup without a key, run `npm run dev:demo`: it uses made-up sample courses ("maple", "pine").
