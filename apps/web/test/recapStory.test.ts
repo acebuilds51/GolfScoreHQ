@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanStory, DEFAULT_STORY_MODEL, STORY_MAX_CHARS, storyFromResponse, storyRequest } from '../../../supabase/functions/send-recap/story';
+import { cleanStory, DEFAULT_STORY_MODEL, emptyStoryReason, STORY_MAX_CHARS, storyFromResponse, storyRequest } from '../../../supabase/functions/send-recap/story';
 
 describe('AI recap write-up', () => {
   it('asks for a short, fact-only write-up of the week', () => {
@@ -16,6 +16,12 @@ describe('AI recap write-up', () => {
     expect(storyFromResponse({ content: [{ type: 'text', text: '## Week 3\n\n**Al** went  low.\n\n\nBob   did not.' }] })).toBe('Week 3\n\nAl went low.\n\nBob did not.');
     expect(storyFromResponse({ content: [] })).toBeNull();
     expect(storyFromResponse(null)).toBeNull();
+  });
+
+  it('says why a reply had no write-up', () => {
+    expect(emptyStoryReason({ stop_reason: 'max_tokens', content: [{ type: 'thinking' }] })).toMatch(/ran out of room/);
+    expect(emptyStoryReason({ stop_reason: 'refusal', content: [] })).toMatch(/wouldn't write/);
+    expect(emptyStoryReason({ stop_reason: 'end_turn', content: [{ type: 'thinking' }] })).toContain('end_turn; got thinking');
   });
 
   it('caps the length at a word boundary', () => {

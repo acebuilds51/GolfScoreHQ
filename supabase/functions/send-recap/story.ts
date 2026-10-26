@@ -20,7 +20,8 @@ Rules:
 export function storyRequest(input: { leagueName: string; weekNumber: number; recapBody: string; model?: string }) {
   return {
     model: input.model || DEFAULT_STORY_MODEL,
-    max_tokens: 600,
+    // Room for the model to think before writing; the write-up itself is ~150 words.
+    max_tokens: 4000,
     system: SYSTEM,
     messages: [
       {
@@ -29,6 +30,14 @@ export function storyRequest(input: { leagueName: string; weekNumber: number; re
       },
     ],
   };
+}
+
+/** Why a response had no write-up, in words a commissioner can act on. */
+export function emptyStoryReason(res: { stop_reason?: string | null; content?: { type: string }[] } | null): string {
+  if (res?.stop_reason === 'max_tokens') return 'The AI ran out of room before it finished writing. Try again.';
+  if (res?.stop_reason === 'refusal') return "The AI wouldn't write this one. Write your own, or send without one.";
+  const kinds = (res?.content ?? []).map((b) => b.type).join(', ') || 'nothing';
+  return `The AI came back without a write-up (${res?.stop_reason ?? 'no reason given'}; got ${kinds}). Try again, or write your own.`;
 }
 
 /** Pull the text out of a Messages API response. */

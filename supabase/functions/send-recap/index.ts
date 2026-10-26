@@ -14,7 +14,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 // @ts-ignore generated JavaScript bundle of packages/engine (npm run build:functions)
 import { recapText, weeklyRecap, withPostedResults } from '../_shared/engine.js';
 import { buildRecapEmail } from './email.ts';
-import { cleanStory, storyFromResponse, storyRequest } from './story.ts';
+import { cleanStory, emptyStoryReason, storyFromResponse, storyRequest } from './story.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -103,8 +103,12 @@ Deno.serve(async (req) => {
       console.error('anthropic', res.status, detail.slice(0, 500));
       return json({ error: `The AI write-up isn't available right now (${res.status}). Write your own or send without one.` }, 502);
     }
-    const story = storyFromResponse(await res.json());
-    if (!story) return json({ error: 'The AI came back empty. Try again, or write your own.' }, 502);
+    const reply = await res.json();
+    const story = storyFromResponse(reply);
+    if (!story) {
+      console.error('anthropic empty', reply?.model, reply?.stop_reason, JSON.stringify(reply?.usage), (reply?.content ?? []).map((b: Row) => b.type));
+      return json({ error: emptyStoryReason(reply) }, 502);
+    }
     return json({ story });
   }
   const story = body.story ? cleanStory(String(body.story)) : null;
