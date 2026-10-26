@@ -24,6 +24,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 4. `20261029000000_pro_features.sql`
 5. `20261030000000_join_request_identity.sql`
 6. `20261031000000_course_lookup.sql`
+7. `20261101000000_scoring.sql`
 
 **B. Command line**
 

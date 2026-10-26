@@ -1,5 +1,5 @@
 import type { Api } from './api';
-import type { Contact, Course, JoinRequest, League, Plan, Role, User } from './types';
+import type { Contact, Course, JoinRequest, League, LeagueEvent, Plan, Role, RoundData, Season, User } from './types';
 import { isCommissioner } from './types';
 import { DEMO_COURSES } from './demoCourses';
 import { sha256Hex, randomToken } from './util';
@@ -26,9 +26,21 @@ interface Db {
   invites: { leagueId: string; tokenHash: string; playerId: string | null; role: Role; expiresAt: number; acceptedAt: number | null }[];
   joinRequests: (JoinRequest & { leagueId: string; status: 'pending' | 'approved' | 'declined' })[];
   courses: Course[];
+  seasons: Season[];
+  events: (LeagueEvent & { leagueId: string })[];
+  rounds: (RoundData & { leagueId: string })[];
 }
 
-const empty = (): Db => ({ session: null, users: {}, leagues: [], members: [], players: [], contacts: {}, invites: [], joinRequests: [], courses: [] });
+const empty = (): Db => ({
+  session: null, users: {}, leagues: [], members: [], players: [], contacts: {}, invites: [], joinRequests: [], courses: [],
+  seasons: [], events: [], rounds: [],
+});
+
+/** Mirrors the database's plan check on season rules. */
+function usesSideGames(r: Season['rules']): boolean {
+  const any = r as unknown as Record<string, any>;
+  return !!(any.skins?.enabled || any.ctp?.enabled || any.presses?.enabled || any.match?.stake > 0 || any.teamPot > 0);
+}
 
 function load(): Db {
   try {
@@ -73,6 +85,17 @@ export function demoApi(): DemoApi {
   }
   const has = (db: Db, leagueId: string, feature: string) =>
     FEATURES[db.leagues.find((l) => l.id === leagueId)?.plan ?? 'free'].includes(feature);
+  /** Same rule as the database: members score until the week is settled, then only commissioners. */
+  function scorable(db: Db, roundId: string) {
+    const r = db.rounds.find((x) => x.id === roundId);
+    if (!r) throw new Error('Round not found.');
+    const ev = db.events.find((e) => e.id === r.eventId);
+    const role = roleIn(db, r.leagueId);
+    if (!role || ((ev?.status === 'settled' || ev?.status === 'rainout') && !isCommissioner(role))) {
+      throw new Error("You don't have permission to do that.");
+    }
+    return r;
+  }
 
   return {
     mode: 'demo',
@@ -293,6 +316,131 @@ export function demoApi(): DemoApi {
       requireCommissioner(db, c.leagueId);
       db.courses = db.courses.filter((x) => x.id !== courseId);
       save(db);
+    },
+
+    async seasons(leagueId) {
+      const db = load();
+      requireMember(db, leagueId);
+      return db.seasons.filter((s) => s.leagueId === leagueId).sort((a, b) => b.year - a.year);
+    },
+    async createSeason(leagueId, s) {
+      const db = load();
+      requireCommissioner(db, leagueId);
+      if (usesSideGames(s.rules) && !has(db, leagueId, 'side_games')) throw new Error('plan_feature: Side games and money needs GolfScoreHQ Pro');
+      const season: Season = { ...s, id: id(), leagueId };
+      db.seasons.push(season);
+      save(db);
+      return season.id;
+    },
+    async updateSeasonRules(seasonId, rules) {
+      const db = load();
+      const s = db.seasons.find((x) => x.id === seasonId)!;
+      requireCommissioner(db, s.leagueId);
+      if (usesSideGames(rules) && !has(db, s.leagueId, 'side_games')) throw new Error('plan_feature: Side games and money needs GolfScoreHQ Pro');
+      s.rules = rules;
+      save(db);
+    },
+    async events(seasonId) {
+      const db = load();
+      return db.events.filter((e) => e.seasonId === seasonId).sort((a, b) => a.weekNumber - b.weekNumber).map(({ leagueId: _l, ...e }) => e);
+    },
+    async event(eventId) {
+      const db = load();
+      const e = db.events.find((x) => x.id === eventId);
+      if (!e || !roleIn(db, e.leagueId)) return null;
+      const { leagueId: _l, ...rest } = e;
+      return rest;
+    },
+    async createEvent(leagueId, seasonId, e) {
+      const db = load();
+      requireCommissioner(db, leagueId);
+      if (db.events.some((x) => x.seasonId === seasonId && x.weekNumber === e.weekNumber)) throw new Error(`Week ${e.weekNumber} already exists.`);
+      const ev = { id: id(), leagueId, seasonId, weekNumber: e.weekNumber, eventDate: e.eventDate, layoutId: e.layoutId, status: 'scheduled' as const };
+      db.events.push(ev);
+      save(db);
+      return ev.id;
+    },
+    async updateEvent(eventId, patch) {
+      const db = load();
+      const e = db.events.find((x) => x.id === eventId)!;
+      requireCommissioner(db, e.leagueId);
+      Object.assign(e, Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)));
+      save(db);
+    },
+
+    async eventRounds(eventId) {
+      const db = load();
+      return db.rounds.filter((r) => r.eventId === eventId).sort((a, b) => a.teeSlot - b.teeSlot).map(({ leagueId: _l, ...r }) => r);
+    },
+    async round(roundId) {
+      const db = load();
+      const r = db.rounds.find((x) => x.id === roundId);
+      if (!r || !roleIn(db, r.leagueId)) return null;
+      const { leagueId: _l, ...rest } = r;
+      return rest;
+    },
+    async startRound(leagueId, eventId, teeSlot, players) {
+      const db = load();
+      requireMember(db, leagueId);
+      const r = { id: id(), leagueId, eventId, teeSlot, status: 'live' as const, currentHole: 0, players, scores: {}, presses: [], ctp: {}, submittedAt: null };
+      db.rounds.push(r);
+      save(db);
+      return r.id;
+    },
+    async saveScores(_leagueId, roundId, entries) {
+      const db = load();
+      const r = scorable(db, roundId);
+      for (const e of entries) (r.scores[e.playerId] ??= {})[e.holeNumber] = e.strokes;
+      save(db);
+    },
+    async setCurrentHole(roundId, holeIndex) {
+      const db = load();
+      scorable(db, roundId).currentHole = holeIndex;
+      save(db);
+    },
+    async saveCtp(leagueId, roundId, holeNumber, entry) {
+      const db = load();
+      if (!has(db, leagueId, 'side_games')) throw new Error("You don't have permission to do that.");
+      scorable(db, roundId).ctp[holeNumber] = { playerId: entry.playerId, beat: entry.playerId ? entry.beat : null };
+      save(db);
+    },
+    async addPress(leagueId, roundId, startHole, calledBy) {
+      const db = load();
+      if (!has(db, leagueId, 'side_games')) throw new Error("You don't have permission to do that.");
+      const p = { id: id(), startHole, calledBy };
+      scorable(db, roundId).presses.push(p);
+      save(db);
+      return p.id;
+    },
+    async removePress(pressId) {
+      const db = load();
+      const r = db.rounds.find((x) => x.presses.some((p) => p.id === pressId));
+      if (!r) return;
+      scorable(db, r.id).presses = r.presses.filter((p) => p.id !== pressId);
+      save(db);
+    },
+    async submitRound(roundId) {
+      const db = load();
+      const r = scorable(db, roundId);
+      r.status = 'submitted';
+      r.submittedAt = new Date().toISOString();
+      save(db);
+    },
+    async addSub(leagueId, name) {
+      const db = load();
+      requireMember(db, leagueId);
+      const nm = name.trim().replace(/\s+/g, ' ');
+      if (!nm || nm.length > 60) throw new Error('Enter a name up to 60 characters.');
+      const existing = db.players.find((p) => p.leagueId === leagueId && p.displayName.toLowerCase() === nm.toLowerCase());
+      if (existing) {
+        existing.active = true;
+        save(db);
+        return existing.id;
+      }
+      const p = { id: id(), leagueId, displayName: nm, isSub: true, active: true, userId: null };
+      db.players.push(p);
+      save(db);
+      return p.id;
     },
 
     async setPlan(leagueId, plan) {

@@ -48,9 +48,9 @@ export function OverviewPage() {
         </section>
       )}
 
-      <section className="card">
-        <h2>Coming next</h2>
-        <p className="muted">Scoring, the live leaderboard and standings are the next screens being built. Your roster and course carry straight over.</p>
+      <section className="card stack">
+        <h2>Play</h2>
+        <p className="muted">Scoring happens on the <Link to="play">Play</Link> tab: pick the week, start your group, and enter scores hole by hole.</p>
       </section>
     </div>
   );

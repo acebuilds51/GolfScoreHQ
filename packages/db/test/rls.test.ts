@@ -134,6 +134,20 @@ describe('roles', () => {
     expect(await rows(db, 'select beat_player_id from ctp_reports')).toEqual([{ beat_player_id: al }]);
   });
 
+  it('lets any member add a sub from the first tee, reusing a matching name', async () => {
+    const first = await as(db, joe, async () => (await rows<{ id: string }>(db, `select add_sub_player($1, '  Pete   Price ') as id`, [oak]))[0]!.id);
+    const again = await as(db, joe, async () => (await rows<{ id: string }>(db, `select add_sub_player($1, 'pete price') as id`, [oak]))[0]!.id);
+    expect(again).toBe(first);
+    expect(await rows(db, 'select display_name, is_sub from players where id = $1', [first])).toEqual([{ display_name: 'Pete Price', is_sub: true }]);
+    await expect(as(db, sam, () => db.query(`select add_sub_player($1, 'Sneaky')`, [oak]))).rejects.toThrow(/members only/);
+  });
+
+  it('allows one week number per season', async () => {
+    const { eventId } = await weekWithRound(tony, oak);
+    const [ev] = await rows<{ season_id: string }>(db, 'select season_id from events where id = $1', [eventId]);
+    await expect(as(db, tony, () => db.query('insert into events (league_id, season_id, week_number) values ($1, $2, 1)', [oak, ev!.season_id]))).rejects.toThrow(/events_season_week_unique/);
+  });
+
   it('keeps the ledger read-only for users', async () => {
     const al = await addPlayer(tony, oak, 'Al');
     const { eventId } = await weekWithRound(tony, oak);

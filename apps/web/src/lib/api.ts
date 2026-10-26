@@ -1,5 +1,8 @@
 import type { CourseSummary, LookupCourse } from '../../../../supabase/functions/course-lookup/normalize';
-import type { Contact, Course, JoinRequest, League, LeagueSummary, Member, NewCourse, NewPlayer, Player, Role, User } from './types';
+import type {
+  Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, Member, NewCourse, NewPlayer, Player, Role,
+  RoundData, RoundPlayer, ScoreEntry, Season, User,
+} from './types';
 
 export type { CourseSummary, LookupCourse, LookupTee } from '../../../../supabase/functions/course-lookup/normalize';
 
@@ -44,6 +47,27 @@ export interface Api {
   courses(leagueId: string): Promise<Course[]>;
   createCourse(leagueId: string, course: NewCourse): Promise<string>;
   deleteCourse(courseId: string): Promise<void>;
+
+  seasons(leagueId: string): Promise<Season[]>;
+  createSeason(leagueId: string, season: Omit<Season, 'id' | 'leagueId'>): Promise<string>;
+  updateSeasonRules(seasonId: string, rules: Season['rules']): Promise<void>;
+  events(seasonId: string): Promise<LeagueEvent[]>;
+  event(eventId: string): Promise<LeagueEvent | null>;
+  createEvent(leagueId: string, seasonId: string, e: { weekNumber: number; eventDate: string | null; layoutId: string | null }): Promise<string>;
+  updateEvent(eventId: string, patch: { layoutId?: string | null; eventDate?: string | null; status?: LeagueEvent['status'] }): Promise<void>;
+
+  eventRounds(eventId: string): Promise<RoundData[]>;
+  round(roundId: string): Promise<RoundData | null>;
+  startRound(leagueId: string, eventId: string, teeSlot: number, players: RoundPlayer[]): Promise<string>;
+  saveScores(leagueId: string, roundId: string, entries: ScoreEntry[]): Promise<void>;
+  /** 0-based position of the hole the group is on, so others can follow along. */
+  setCurrentHole(roundId: string, holeIndex: number): Promise<void>;
+  saveCtp(leagueId: string, roundId: string, holeNumber: number, entry: CtpEntry): Promise<void>;
+  addPress(leagueId: string, roundId: string, startHole: number, calledBy: 'A' | 'B'): Promise<string>;
+  removePress(pressId: string): Promise<void>;
+  submitRound(roundId: string): Promise<void>;
+  /** Add a sub/guest to the roster from the first tee (any member). */
+  addSub(leagueId: string, name: string): Promise<string>;
 }
 
 /** Turn database errors into sentences a commissioner can act on. */
