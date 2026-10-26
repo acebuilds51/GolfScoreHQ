@@ -36,7 +36,7 @@ export function JoinInvitePage() {
       {!user && (
         <>
           <p className="muted">Sign in with your email to join. It takes a few seconds and there's no password.</p>
-          <SignInForm redirectTo={window.location.href} cta="Send link and join" />
+          <SignInForm redirectTo={window.location.href} cta="Email me a code to join" />
         </>
       )}
       {user && !error && <p className="muted">Joining…</p>}
