@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Api, CourseSummary, LookupCourse } from './api';
-import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, User } from './types';
+import type { RecapPreview, SubOffer } from './types';
+import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, TvFeed, User } from './types';
 import { randomToken, sha256Hex } from './util';
 
 type Row = Record<string, any>;
@@ -21,6 +22,19 @@ async function invokeLookup(sb: SupabaseClient, body: Record<string, string>): P
     if (ctx.status === 404) throw new Error("Course lookup isn't set up yet. Enter the pars by hand for now.");
   }
   throw new Error("Course lookup isn't available right now. Enter the pars by hand for now.");
+}
+
+/** Call the send-recap server function; its { error } message becomes the thrown message. */
+async function invokeRecap(sb: SupabaseClient, body: Record<string, unknown>): Promise<unknown> {
+  const { data, error } = await sb.functions.invoke('send-recap', { body });
+  if (!error) return data;
+  const ctx = (error as { context?: Response }).context;
+  if (ctx && typeof ctx.json === 'function') {
+    const detail = await ctx.json().catch(() => null);
+    if (detail?.error) throw new Error(detail.error);
+    if (ctx.status === 404) throw new Error("Recap emails aren't set up yet (the send-recap function isn't deployed).");
+  }
+  throw new Error("Recap emails aren't available right now. Try again in a minute.");
 }
 
 const toUser =(u: { id: string; email?: string | null } | null | undefined): User | null =>
@@ -280,6 +294,92 @@ export function supabaseApi(url: string, anonKey: string): Api {
     async ledger(eventId) {
       const rows = check(await sb.from('ledger_entries').select('player_id, round_id, kind, amount_cents, hole_number').eq('event_id', eventId)) as Row[];
       return rows.map((r) => ({ playerId: r.player_id, roundId: r.round_id, kind: r.kind, amountCents: r.amount_cents, holeNumber: r.hole_number }));
+    },
+    async recapPreview(eventId) {
+      return (await invokeRecap(sb, { eventId })) as RecapPreview;
+    },
+    async sendRecap(eventId, force = false) {
+      return (await invokeRecap(sb, { eventId, send: true, force })) as { sent: number; missing: string[] };
+    },
+    async recapPref(playerId) {
+      const row = check(await sb.from('notification_prefs').select('weekly_recap').eq('player_id', playerId).maybeSingle()) as Row | null;
+      return row?.weekly_recap ?? true;
+    },
+    async setRecapPref(leagueId, playerId, on) {
+      check(
+        await sb.from('notification_prefs').upsert(
+          { player_id: playerId, league_id: leagueId, weekly_recap: on, updated_at: new Date().toISOString() },
+          { onConflict: 'player_id' },
+        ),
+      );
+    },
+    async paymentHandles(leagueId) {
+      const row = check(await sb.from('league_payment_settings').select('venmo_username, paypal_me, zelle_contact').eq('league_id', leagueId).maybeSingle()) as Row | null;
+      return { venmo: row?.venmo_username ?? null, paypalMe: row?.paypal_me ?? null, zelle: row?.zelle_contact ?? null };
+    },
+    async savePaymentHandles(leagueId, h) {
+      check(
+        await sb.from('league_payment_settings').upsert(
+          { league_id: leagueId, venmo_username: h.venmo, paypal_me: h.paypalMe, zelle_contact: h.zelle, updated_at: new Date().toISOString() },
+          { onConflict: 'league_id' },
+        ),
+      );
+    },
+
+    async rsvps(eventId) {
+      const rows = check(await sb.from('event_rsvps').select('player_id, status').eq('event_id', eventId)) as Row[];
+      return Object.fromEntries(rows.map((r) => [r.player_id, r.status]));
+    },
+    async setRsvp(leagueId, eventId, playerId, status) {
+      check(
+        await sb.from('event_rsvps').upsert(
+          { event_id: eventId, player_id: playerId, league_id: leagueId, status, responded_by: await uid(), responded_at: new Date().toISOString() },
+          { onConflict: 'event_id,player_id' },
+        ),
+      );
+    },
+    async subRequests(eventId) {
+      const rows = check(
+        await sb.from('sub_requests').select('id, tee_slot, spots, filled, closed_at, created_at, sub_offers(player_id, status)').eq('event_id', eventId).order('created_at'),
+      ) as Row[];
+      return rows.map((r) => ({
+        id: r.id, teeSlot: r.tee_slot, spots: r.spots, filled: r.filled, closed: !!r.closed_at,
+        offers: ((r.sub_offers ?? []) as Row[]).map((o) => ({ playerId: o.player_id, status: o.status })),
+      }));
+    },
+    async createSubRequest(leagueId, eventId, opts, askPlayerIds) {
+      const r = check(
+        await sb.from('sub_requests').insert({ league_id: leagueId, event_id: eventId, spots: opts.spots, tee_slot: opts.teeSlot, created_by: await uid() }).select('id').single(),
+      ) as Row;
+      if (askPlayerIds.length) check(await sb.from('sub_offers').insert(askPlayerIds.map((p) => ({ request_id: r.id, league_id: leagueId, player_id: p }))));
+      return r.id;
+    },
+    async respondSubOffer(requestId, playerId, accept) {
+      return check(await sb.rpc('respond_to_sub_offer', { p_request: requestId, p_player: playerId, p_accept: accept })) as SubOffer['status'];
+    },
+    async closeSubRequest(requestId) {
+      check(await sb.from('sub_requests').update({ closed_at: new Date().toISOString() }).eq('id', requestId));
+    },
+    async tvDisplays(leagueId) {
+      const rows = check(await sb.from('tv_displays').select('id, name, settings, created_at').eq('league_id', leagueId).is('revoked_at', null).order('created_at')) as Row[];
+      return rows.map((r) => ({ id: r.id, name: r.name, settings: r.settings, createdAt: r.created_at }));
+    },
+    async createTvDisplay(leagueId, name, settings) {
+      const token = randomToken();
+      check(await sb.from('tv_displays').insert({ league_id: leagueId, name, settings, token_hash: await sha256Hex(token), created_by: await uid() }));
+      return token;
+    },
+    async updateTvDisplay(id, patch) {
+      const row: Row = {};
+      if (patch.name !== undefined) row.name = patch.name;
+      if (patch.settings !== undefined) row.settings = patch.settings;
+      check(await sb.from('tv_displays').update(row).eq('id', id));
+    },
+    async revokeTvDisplay(id) {
+      check(await sb.from('tv_displays').update({ revoked_at: new Date().toISOString() }).eq('id', id));
+    },
+    async tvFeed(token) {
+      return (check(await sb.rpc('tv_feed', { p_token: token })) as TvFeed | null) ?? null;
     },
     watchLeague(leagueId, onChange) {
       const channel = sb.channel(`league-${leagueId}-${Math.random().toString(36).slice(2)}`);

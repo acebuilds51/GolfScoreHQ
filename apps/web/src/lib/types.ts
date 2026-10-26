@@ -152,6 +152,67 @@ export interface RoundData {
   submittedAt: string | null;
 }
 
+export interface RecapPreview {
+  subject: string;
+  /** A sample of what golfers receive. */
+  text: string;
+  recipients: number;
+  /** Golfers with no email on file. */
+  missing: string[];
+  alreadySent: { sent_at: string; recipients: number } | null;
+}
+
+export interface PaymentHandles {
+  venmo: string | null;
+  paypalMe: string | null;
+  zelle: string | null;
+}
+
+export type RsvpStatus = 'in' | 'out' | 'maybe';
+
+export interface SubOffer {
+  playerId: string;
+  status: 'offered' | 'accepted' | 'declined' | 'too_late';
+}
+
+export interface SubRequest {
+  id: string;
+  teeSlot: number | null;
+  spots: number;
+  filled: number;
+  closed: boolean;
+  offers: SubOffer[];
+}
+
+export type TvPanel = 'live' | 'matches' | 'skins' | 'ctp' | 'highlights' | 'standings';
+
+export interface TvSettings {
+  hideMoney: boolean;
+  secondsPerPanel: number;
+  panels: TvPanel[];
+}
+
+export interface TvDisplay {
+  id: string;
+  name: string;
+  settings: TvSettings;
+  createdAt: string;
+}
+
+/** Everything a Clubhouse TV shows, from tv_feed(). */
+export interface TvFeed {
+  error?: 'plan';
+  league: { name: string; slug?: string; logoUrl?: string | null };
+  display?: { name: string; settings: TvSettings };
+  season?: { year: number; name: string; rules: import('@golfscorehq/engine').FormatRules } | null;
+  event?: { id: string; weekNumber: number; eventDate: string | null; status: EventStatus } | null;
+  layout?: (Layout & { courseName: string | null }) | null;
+  players?: { id: string; displayName: string; isSub: boolean }[];
+  rounds?: RoundData[];
+  standings?: { playerId: string; money: number; skins: number; ctps: number }[];
+  generatedAt?: string;
+}
+
 export type LedgerKind = 'match' | 'press' | 'skin' | 'ctp' | 'scramblePot';
 
 export interface LedgerRow {

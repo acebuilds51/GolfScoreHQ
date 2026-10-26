@@ -1,6 +1,8 @@
 import type { Api } from './api';
-import type { Contact, Course, JoinRequest, League, LeagueEvent, LedgerRow, Plan, Role, RoundData, Season, User } from './types';
+import type { Contact, Course, JoinRequest, League, LeagueEvent, LedgerRow, PaymentHandles, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SubRequest, TvDisplay, User } from './types';
 import { isCommissioner } from './types';
+import { buildRecapEmail } from '../../../../supabase/functions/send-recap/email';
+import { buildWeekRecap } from './recap';
 import { DEMO_COURSES } from './demoCourses';
 import { sha256Hex, randomToken } from './util';
 
@@ -31,11 +33,18 @@ interface Db {
   rounds: (RoundData & { leagueId: string })[];
   ledger: (LedgerRow & { eventId: string })[];
   ctpDecisions: Record<string, Record<number, string>>;
+  tvDisplays: (TvDisplay & { leagueId: string; tokenHash: string; revokedAt: string | null })[];
+  rsvps: Record<string, Record<string, RsvpStatus>>;
+  subRequests: (SubRequest & { leagueId: string; eventId: string })[];
+  recapSends: Record<string, NonNullable<RecapPreview['alreadySent']>>;
+  recapPrefs: Record<string, boolean>;
+  paymentHandles: Record<string, PaymentHandles>;
 }
 
 const empty = (): Db => ({
   session: null, users: {}, leagues: [], members: [], players: [], contacts: {}, invites: [], joinRequests: [], courses: [],
-  seasons: [], events: [], rounds: [], ledger: [], ctpDecisions: {},
+  seasons: [], events: [], rounds: [], ledger: [], ctpDecisions: {}, tvDisplays: [], rsvps: {}, subRequests: [],
+  recapSends: {}, recapPrefs: {}, paymentHandles: {},
 });
 
 /** Mirrors the database's plan check on season rules. */
@@ -97,6 +106,50 @@ export function demoApi(): DemoApi {
       throw new Error("You don't have permission to do that.");
     }
     return r;
+  }
+
+  /** Same checks and output as the send-recap server function. */
+  function demoRecap(db: Db, eventId: string): { preview: RecapPreview } {
+    const ev = db.events.find((e) => e.id === eventId);
+    if (!ev) throw new Error("That week wasn't found.");
+    if (!isCommissioner(roleIn(db, ev.leagueId))) throw new Error('Only commissioners can send the recap.');
+    if (!has(db, ev.leagueId, 'weekly_recap')) throw new Error('The weekly recap email needs GolfScoreHQ Pro.');
+    if (ev.status !== 'settled') throw new Error('Settle the week first, then send the recap.');
+    const season = db.seasons.find((s) => s.id === ev.seasonId)!;
+    if (season.rules.format !== 'bestBallMatch') throw new Error("Recap emails for this format aren't available yet.");
+    const layout = db.courses.flatMap((c) => c.layouts).find((l) => l.id === ev.layoutId);
+    if (!layout) throw new Error('This week has no course.');
+    const league = db.leagues.find((l) => l.id === ev.leagueId)!;
+    const players = db.players.filter((p) => p.leagueId === league.id);
+    const earlier = new Set(db.events.filter((e) => e.seasonId === ev.seasonId && e.status === 'settled' && e.weekNumber <= ev.weekNumber).map((e) => e.id));
+    const { recap, text } = buildWeekRecap({
+      leagueName: league.name, event: ev, season, layout, players,
+      rounds: db.rounds.filter((r) => r.eventId === eventId),
+      weekLedger: db.ledger.filter((e) => e.eventId === eventId),
+      seasonLedger: db.ledger.filter((e) => earlier.has(e.eventId)),
+    });
+    const rules = season.rules;
+    const playsForMoney = rules.match.stake > 0 || rules.presses.enabled || rules.skins.enabled || rules.ctp.enabled;
+
+    const recipients: typeof players = [];
+    const missing: string[] = [];
+    const seen = new Set<string>();
+    for (const p of players) {
+      if (!p.active || db.recapPrefs[p.id] === false) continue;
+      const email = db.contacts[p.id]?.email || (p.userId ? db.users[p.userId]?.email : null) || null;
+      if (!email) { missing.push(p.displayName); continue; }
+      if (seen.has(email.toLowerCase())) continue;
+      seen.add(email.toLowerCase());
+      recipients.push(p);
+    }
+    const first = recipients[0];
+    const sample = buildRecapEmail({
+      leagueName: league.name, weekNumber: ev.weekNumber, leagueUrl: `${location.origin}/l/${league.slug}`, recapBody: text,
+      playerName: first?.displayName ?? 'Golfer', payment: db.paymentHandles[league.id] ?? { venmo: null, paypalMe: null, zelle: null },
+      weekCents: playsForMoney && first ? recap.weekBalances[first.id] ?? 0 : null,
+      seasonCents: playsForMoney && first ? recap.seasonBalances[first.id] ?? 0 : null,
+    });
+    return { preview: { subject: sample.subject, text: sample.text, recipients: recipients.length, missing, alreadySent: db.recapSends[eventId] ?? null } };
   }
 
   return {
@@ -448,6 +501,157 @@ export function demoApi(): DemoApi {
     async ledger(eventId) {
       const db = load();
       return db.ledger.filter((e) => e.eventId === eventId).map(({ eventId: _e, ...r }) => r);
+    },
+    async recapPreview(eventId) {
+      return demoRecap(load(), eventId).preview;
+    },
+    async sendRecap(eventId, force = false) {
+      // Demo never emails anyone; it records the send so the screens behave the same.
+      const db = load();
+      const { preview } = demoRecap(db, eventId);
+      if (preview.alreadySent && !force) throw new Error('already_sent');
+      db.recapSends[eventId] = { sent_at: new Date().toISOString(), recipients: preview.recipients };
+      save(db);
+      return { sent: preview.recipients, missing: preview.missing };
+    },
+    async recapPref(playerId) {
+      return load().recapPrefs[playerId] ?? true;
+    },
+    async setRecapPref(leagueId, playerId, on) {
+      const db = load();
+      const u = me(db);
+      const spot = db.players.find((p) => p.id === playerId);
+      if (!(isCommissioner(roleIn(db, leagueId)) || spot?.userId === u.id)) throw new Error("You don't have permission to do that.");
+      db.recapPrefs[playerId] = on;
+      save(db);
+    },
+    async paymentHandles(leagueId) {
+      const db = load();
+      requireMember(db, leagueId);
+      return { ...(db.paymentHandles[leagueId] ?? { venmo: null, paypalMe: null, zelle: null }) };
+    },
+    async savePaymentHandles(leagueId, h) {
+      const db = load();
+      requireCommissioner(db, leagueId);
+      if (!has(db, leagueId, 'payments')) throw new Error('plan_feature: Payment links need GolfScoreHQ Pro');
+      db.paymentHandles[leagueId] = { ...h };
+      save(db);
+    },
+
+    async rsvps(eventId) {
+      const db = load();
+      return { ...(db.rsvps[eventId] ?? {}) };
+    },
+    async setRsvp(leagueId, eventId, playerId, status) {
+      const db = load();
+      const u = me(db);
+      const spot = db.players.find((p) => p.id === playerId);
+      if (!has(db, leagueId, 'rsvp') || !(isCommissioner(roleIn(db, leagueId)) || spot?.userId === u.id)) throw new Error("You don't have permission to do that.");
+      (db.rsvps[eventId] ??= {})[playerId] = status;
+      save(db);
+    },
+    async subRequests(eventId) {
+      const db = load();
+      return db.subRequests.filter((r) => r.eventId === eventId).map(({ eventId: _e, leagueId: _l, ...r }) => ({ ...r, offers: r.offers.map((o) => ({ ...o })) }));
+    },
+    async createSubRequest(leagueId, eventId, opts, askPlayerIds) {
+      const db = load();
+      requireCommissioner(db, leagueId);
+      if (!has(db, leagueId, 'rsvp')) throw new Error("You don't have permission to do that.");
+      const r = { id: id(), leagueId, eventId, teeSlot: opts.teeSlot, spots: opts.spots, filled: 0, closed: false, offers: askPlayerIds.map((p) => ({ playerId: p, status: 'offered' as const })) };
+      db.subRequests.push(r);
+      save(db);
+      return r.id;
+    },
+    async respondSubOffer(requestId, playerId, accept) {
+      // Same rules as respond_to_sub_offer(): the golfer (or commissioner) answers; first to accept wins.
+      const db = load();
+      const u = me(db);
+      const r = db.subRequests.find((x) => x.id === requestId);
+      const spot = db.players.find((p) => p.id === playerId);
+      if (!r || !(spot?.userId === u.id || isCommissioner(roleIn(db, r.leagueId)))) throw new Error('not your offer');
+      const offer = r.offers.find((o) => o.playerId === playerId);
+      if (!offer) throw new Error('no such offer');
+      if (offer.status !== 'offered') return offer.status;
+      if (!accept) offer.status = 'declined';
+      else if (r.closed || r.filled >= r.spots) offer.status = 'too_late';
+      else {
+        offer.status = 'accepted';
+        r.filled++;
+        if (r.filled >= r.spots) r.closed = true;
+        (db.rsvps[r.eventId] ??= {})[playerId] = 'in';
+      }
+      save(db);
+      return offer.status;
+    },
+    async closeSubRequest(requestId) {
+      const db = load();
+      const r = db.subRequests.find((x) => x.id === requestId)!;
+      requireCommissioner(db, r.leagueId);
+      r.closed = true;
+      save(db);
+    },
+    async tvDisplays(leagueId) {
+      const db = load();
+      requireCommissioner(db, leagueId);
+      return db.tvDisplays.filter((d) => d.leagueId === leagueId && !d.revokedAt).map(({ id: did, name, settings, createdAt }) => ({ id: did, name, settings, createdAt }));
+    },
+    async createTvDisplay(leagueId, name, settings) {
+      const db = load();
+      requireCommissioner(db, leagueId);
+      if (!has(db, leagueId, 'tv_mode')) throw new Error("You don't have permission to do that.");
+      const token = randomToken();
+      db.tvDisplays.push({ id: id(), leagueId, name, settings, tokenHash: await sha256Hex(token), createdAt: new Date().toISOString(), revokedAt: null });
+      save(db);
+      return token;
+    },
+    async updateTvDisplay(did, patch) {
+      const db = load();
+      const d = db.tvDisplays.find((x) => x.id === did)!;
+      requireCommissioner(db, d.leagueId);
+      if (patch.name !== undefined) d.name = patch.name;
+      if (patch.settings !== undefined) d.settings = patch.settings;
+      save(db);
+    },
+    async revokeTvDisplay(did) {
+      const db = load();
+      const d = db.tvDisplays.find((x) => x.id === did)!;
+      requireCommissioner(db, d.leagueId);
+      d.revokedAt = new Date().toISOString();
+      save(db);
+    },
+    async tvFeed(token) {
+      // Same shape as the database's tv_feed(); no sign-in needed.
+      const db = load();
+      const hash = await sha256Hex(token);
+      const d = db.tvDisplays.find((x) => x.tokenHash === hash && !x.revokedAt);
+      if (!d) return null;
+      const lg = db.leagues.find((l) => l.id === d.leagueId)!;
+      if (!has(db, lg.id, 'tv_mode')) return { error: 'plan', league: { name: lg.name } };
+      const season = db.seasons.filter((s) => s.leagueId === lg.id).sort((a, b) => b.year - a.year)[0];
+      const events = season ? db.events.filter((e) => e.seasonId === season.id).sort((a, b) => b.weekNumber - a.weekNumber) : [];
+      const ev = events.find((e) => (e.status === 'scheduled' || e.status === 'in_progress') && db.rounds.some((r) => r.eventId === e.id)) ?? events[0];
+      const layout = ev?.layoutId ? db.courses.flatMap((c) => c.layouts.map((l) => ({ ...l, courseName: c.name }))).find((l) => l.id === ev.layoutId) ?? null : null;
+      const settled = new Set(events.filter((e) => e.status === 'settled').map((e) => e.id));
+      const totals = new Map<string, { playerId: string; money: number; skins: number; ctps: number }>();
+      for (const e of db.ledger.filter((x) => settled.has(x.eventId))) {
+        const t = totals.get(e.playerId) ?? { playerId: e.playerId, money: 0, skins: 0, ctps: 0 };
+        t.money += e.amountCents;
+        if (e.kind === 'skin') t.skins++;
+        if (e.kind === 'ctp') t.ctps++;
+        totals.set(e.playerId, t);
+      }
+      return {
+        league: { name: lg.name, slug: lg.slug, logoUrl: null },
+        display: { name: d.name, settings: d.settings },
+        season: season ? { year: season.year, name: season.name, rules: season.rules } : null,
+        event: ev ? { id: ev.id, weekNumber: ev.weekNumber, eventDate: ev.eventDate, status: ev.status } : null,
+        layout,
+        players: db.players.filter((p) => p.leagueId === lg.id).map((p) => ({ id: p.id, displayName: p.displayName, isSub: p.isSub })),
+        rounds: ev ? db.rounds.filter((r) => r.eventId === ev.id).map(({ leagueId: _l, ...r }) => ({ ...r, presses: [] })) : [],
+        standings: [...totals.values()].sort((a, b) => b.money - a.money),
+        generatedAt: new Date().toISOString(),
+      };
     },
     watchLeague(_leagueId, onChange) {
       // Demo data lives in this browser: other tabs signal changes through storage events.

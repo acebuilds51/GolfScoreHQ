@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ErrorText } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
+import { buildWeekRecap } from '../lib/recap';
 import { asBestBall, fmtMoney } from '../lib/scoring';
 import { settleWeek, totalsFromLedger, type PlayerTotals } from '../lib/settlement';
 import { isCommissioner, type Layout, type LeagueEvent, type RoundData, type Season } from '../lib/types';
@@ -76,6 +77,9 @@ export function WeekResults({ event, season, layout, rounds, names, onChanged }:
         )}
         {totals.length > 0 && <MoneyTable totals={totals} name={name} />}
         <ErrorText>{error}</ErrorText>
+        {league.features.includes('weekly_recap') && season.rules.format === 'bestBallMatch' && (
+          <WeekRecap event={event} season={season} layout={layout} rounds={rounds} names={names} />
+        )}
       </section>
     );
   }
@@ -156,6 +160,94 @@ export function WeekResults({ event, season, layout, rounds, names, onChanged }:
         </button>
       </div>
     </section>
+  );
+}
+
+/** Pro: the week's recap. Everyone can copy it; commissioners can email it to the league. */
+function WeekRecap({ event, season, layout, rounds, names }: {
+  event: LeagueEvent; season: Season; layout: Layout; rounds: RoundData[]; names: Map<string, string>;
+}) {
+  const { league } = useLeague();
+  const commish = isCommissioner(league.role);
+  const [copied, setCopied] = useState(false);
+  const [sentMsg, setSentMsg] = useState<string | null>(null);
+  const { busy, error, run } = useAction();
+
+  const text = useAsync(async () => {
+    const [events, seasonLedger] = await Promise.all([api.events(season.id), api.seasonLedger(season.id)]);
+    const upTo = new Set(events.filter((e) => e.status === 'settled' && e.weekNumber <= event.weekNumber).map((e) => e.id));
+    return buildWeekRecap({
+      leagueName: league.name, event, season, layout, rounds,
+      players: [...names].map(([id, displayName]) => ({ id, displayName })),
+      weekLedger: seasonLedger.filter((e) => e.eventId === event.id),
+      seasonLedger: seasonLedger.filter((e) => upTo.has(e.eventId)),
+    }).text;
+  }, [event.id, event.status, rounds]);
+  const preview = useAsync(async () => (commish ? api.recapPreview(event.id) : null), [event.id, commish, sentMsg]);
+
+  async function copy() {
+    if (!text.data) return;
+    try {
+      await navigator.clipboard.writeText(text.data);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.prompt('Copy the recap:', text.data);
+    }
+  }
+
+  async function send(force: boolean) {
+    const p = preview.data;
+    if (!p) return;
+    const ask = force
+      ? `This week was already emailed. Send it again to ${p.recipients} golfer${p.recipients === 1 ? '' : 's'}?`
+      : `Email the week ${event.weekNumber} recap to ${p.recipients} golfer${p.recipients === 1 ? '' : 's'}?`;
+    if (!window.confirm(ask)) return;
+    const res = await run(() => api.sendRecap(event.id, force));
+    if (res) setSentMsg(`Sent to ${res.sent} golfer${res.sent === 1 ? '' : 's'}${api.mode === 'demo' ? ' (demo: no real emails go out)' : ''}.`);
+  }
+
+  const p = preview.data;
+  return (
+    <div className="stack recap">
+      <div className="row between wrap">
+        <h3>Weekly recap</h3>
+        <button className="btn btn-sm" disabled={!text.data} onClick={copy}>{copied ? 'Copied ✓' : 'Copy recap'}</button>
+      </div>
+      {text.data && <pre className="recap-text">{text.data}</pre>}
+      <ErrorText>{text.error}</ErrorText>
+      {commish && (
+        <div className="stack">
+          {preview.error ? (
+            <ErrorText>{preview.error}</ErrorText>
+          ) : p ? (
+            <>
+              <p className="small">
+                {p.recipients} golfer{p.recipients === 1 ? '' : 's'} will get an email with their own winnings and how to pay.
+                {p.alreadySent && <> Already sent {new Date(p.alreadySent.sent_at).toLocaleString()} to {p.alreadySent.recipients}.</>}
+              </p>
+              {p.missing.length > 0 && (
+                <p className="small warn">No email on file for {p.missing.join(', ')}. Add them on the Roster page.</p>
+              )}
+              {sentMsg && <p className="small good">{sentMsg}</p>}
+              <div className="row wrap">
+                <button className="btn btn-primary btn-sm" disabled={busy || p.recipients === 0} onClick={() => send(!!p.alreadySent)}>
+                  {busy ? 'Sending…' : p.alreadySent ? 'Send again' : 'Email the recap'}
+                </button>
+              </div>
+              <details className="small">
+                <summary>Preview the email</summary>
+                <p><strong>{p.subject}</strong></p>
+                <pre className="recap-text">{p.text}</pre>
+              </details>
+            </>
+          ) : (
+            <p className="small muted">Checking who gets the email…</p>
+          )}
+          <ErrorText>{error}</ErrorText>
+        </div>
+      )}
+    </div>
   );
 }
 

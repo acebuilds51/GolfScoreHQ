@@ -1,7 +1,7 @@
 import type { CourseSummary, LookupCourse } from '../../../../supabase/functions/course-lookup/normalize';
 import type {
   Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, LedgerRow, Member, NewCourse, NewPlayer, Player, Role,
-  RoundData, RoundPlayer, ScoreEntry, Season, User,
+  PaymentHandles, RecapPreview, RoundData, RoundPlayer, RsvpStatus, ScoreEntry, Season, SubOffer, SubRequest, TvDisplay, TvFeed, TvSettings, User,
 } from './types';
 
 export type { CourseSummary, LookupCourse, LookupTee } from '../../../../supabase/functions/course-lookup/normalize';
@@ -75,6 +75,35 @@ export interface Api {
    */
   watchLeague(leagueId: string, onChange: () => void): () => void;
 
+  /** Weekly recap email (Pro): preview who gets it, then send. */
+  recapPreview(eventId: string): Promise<RecapPreview>;
+  /** Throws Error('already_sent') if the week was already emailed and `force` isn't set. */
+  sendRecap(eventId: string, force?: boolean): Promise<{ sent: number; missing: string[] }>;
+  /** Golfer's own setting: email me the weekly recap (default on). */
+  recapPref(playerId: string): Promise<boolean>;
+  setRecapPref(leagueId: string, playerId: string, on: boolean): Promise<void>;
+  /** Where golfers pay the commissioner (shown in recap emails). */
+  paymentHandles(leagueId: string): Promise<PaymentHandles>;
+  savePaymentHandles(leagueId: string, h: PaymentHandles): Promise<void>;
+
+  /** RSVP (Pro): playerId → answer for the week. */
+  rsvps(eventId: string): Promise<Record<string, RsvpStatus>>;
+  setRsvp(leagueId: string, eventId: string, playerId: string, status: RsvpStatus): Promise<void>;
+  /** Sub finder (Pro). */
+  subRequests(eventId: string): Promise<SubRequest[]>;
+  createSubRequest(leagueId: string, eventId: string, opts: { spots: number; teeSlot: number | null }, askPlayerIds: string[]): Promise<string>;
+  respondSubOffer(requestId: string, playerId: string, accept: boolean): Promise<SubOffer['status']>;
+  closeSubRequest(requestId: string): Promise<void>;
+
+  /** Clubhouse TV links (commissioners, Pro). */
+  tvDisplays(leagueId: string): Promise<TvDisplay[]>;
+  /** Returns the raw token for the TV link; only its hash is stored. */
+  createTvDisplay(leagueId: string, name: string, settings: TvSettings): Promise<string>;
+  updateTvDisplay(id: string, patch: { name?: string; settings?: TvSettings }): Promise<void>;
+  revokeTvDisplay(id: string): Promise<void>;
+  /** What a TV link shows. Works without signing in. null = unknown or turned-off link. */
+  tvFeed(token: string): Promise<TvFeed | null>;
+
   ledger(eventId: string): Promise<LedgerRow[]>;
   /** Every round and money entry in a season, for standings. */
   seasonRounds(seasonId: string): Promise<RoundData[]>;
@@ -95,6 +124,7 @@ export function friendlyError(e: unknown): string {
   if (/leagues_slug_key|duplicate key.*slug/.test(msg)) return 'That web address is taken. Try another.';
   if (/leagues_join_code_key|duplicate key.*join_code/.test(msg)) return 'That join code is taken. Try another.';
   if (/row-level security|permission denied/.test(msg)) return "You don't have permission to do that.";
+  if (msg === 'already_sent') return 'This week was already emailed.';
   if (/commissioners only/.test(msg)) return 'Only commissioners can do that.';
   if (/not in this week/.test(msg)) return "The results include a golfer who isn't in this week. Refresh and try again.";
   if (/invalid or expired/.test(msg)) return 'This invite link is invalid or has expired. Ask your commissioner for a new one.';

@@ -356,6 +356,41 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
   });
 });
 
+describe('Clubhouse TV feed', () => {
+  it('serves the week to a valid TV link without sign-in, and nothing else', async () => {
+    await setPlan(oak, 'pro');
+    const al = await addPlayer(tony, oak, 'Al');
+    await as(db, tony, () => db.query(`insert into player_contacts (player_id, league_id, email, phone) values ($1, $2, 'al@secret.com', '555-0100')`, [al, oak]));
+    const { roundId } = await weekWithRound(tony, oak, PRO_RULES);
+    await as(db, tony, () => db.query(`insert into round_players (round_id, player_id, league_id, side) values ($1, $2, $3, 'A')`, [roundId, al, oak]));
+    await as(db, joe, () => db.query(`insert into hole_scores (round_id, player_id, league_id, hole_number, strokes, entered_by) values ($1, $2, $3, 1, 3, $4)`, [roundId, al, oak, joe]));
+
+    const token = 'tv-token-0123456789abcdef';
+    const hash = createHash('sha256').update(token).digest('hex');
+    await as(db, tony, () => db.query('insert into tv_displays (league_id, token_hash, created_by) values ($1, $2, $3)', [oak, hash, tony]));
+
+    const feed = async (t: string) => (await as(db, null, () => rows<{ f: any }>(db, 'select tv_feed($1) as f', [t])))[0]!.f;
+    const f = await feed(token);
+    expect(f.league.name).toBe('Oak Creek Men');
+    expect(f.event.weekNumber).toBe(1);
+    expect(f.layout.holes).toHaveLength(9);
+    expect(f.rounds[0].scores[al]).toEqual({ '1': 3 });
+    expect(f.display.settings.hideMoney).toBe(true);
+    expect(JSON.stringify(f)).not.toMatch(/secret\.com|555-0100/); // never contact details
+
+    expect(await feed('wrong-token-0123456789')).toBeNull();
+    await as(db, tony, () => db.query('update tv_displays set revoked_at = now()'));
+    expect(await feed(token)).toBeNull();
+  });
+
+  it('shows nothing for a league without Pro', async () => {
+    const token = 'tv-token-free-0123456789';
+    await db.query('insert into tv_displays (league_id, token_hash, created_by) values ($1, $2, $3)', [oak, createHash('sha256').update(token).digest('hex'), tony]);
+    const [r] = await as(db, null, () => rows<{ f: any }>(db, 'select tv_feed($1) as f', [token]));
+    expect(r!.f).toEqual({ error: 'plan', league: { name: 'Oak Creek Men' } });
+  });
+});
+
 describe('joining', () => {
   it('accepts an invite link and links the golfer to their roster spot', async () => {
     const newbie = await createUser(db, 'newbie@example.com');

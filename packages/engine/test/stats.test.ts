@@ -7,6 +7,7 @@ import {
   seasonStats,
   settleBestBallWeek,
   weeklyRecap,
+  withPostedResults,
   type PlayedRound,
 } from '../src';
 import { FRONT, parRound, round } from './fixtures';
@@ -86,6 +87,13 @@ describe('weekly recap', () => {
     const r2 = weeklyRecap(2, [week2], FRONT, OCBC_BEST_BALL, ledger1);
     expect(r2.weekBalances.bob).toBe(500 + 18000);
     expect(r2.seasonBalances.bob).toBe(-500 + 500 + 18000);
+  });
+
+  it('uses the posted results for CTP decisions and balances', () => {
+    const posted = withPostedResults(recap, [{ playerId: 'bea', amount: 3600, kind: 'ctp', holeNumber: 2 }], [{ playerId: 'bea', amount: 3600, kind: 'ctp' }, { playerId: 'al', amount: -500, kind: 'match' }]);
+    expect(posted.ctp.find((c) => c.holeNumber === 2)).toMatchObject({ winner: 'bea', disputed: false });
+    expect(posted.weekBalances).toEqual({ bea: 3600 });
+    expect(posted.seasonBalances).toEqual({ bea: 3600, al: -500 });
   });
 
   it('renders a plain-text recap, with or without dollar amounts', () => {

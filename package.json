@@ -8,7 +8,11 @@
   "scripts": {
     "dev": "npm run dev -w @golfscorehq/web",
     "build": "npm run build -w @golfscorehq/web",
+    "build:functions": "node scripts/build-shared.mjs",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.5"
   }
 }
