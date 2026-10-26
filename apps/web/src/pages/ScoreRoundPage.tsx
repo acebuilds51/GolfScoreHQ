@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
-import { enqueue, flush, readQueue, type PendingOp } from '../lib/pendingQueue';
+import { applyQueue, compact, enqueue, flush, readQueue, type FlushResult, type PendingOp } from '../lib/pendingQueue';
 import { asBestBall, basicRules, currentMarker, fmtMoney, holesCompleted, matchSoFar, scoreMark, toEngineRound } from '../lib/scoring';
 import type { CtpEntry, Layout, Player, RoundData, Season } from '../lib/types';
 import { loadWeek, teamName } from './WeekPage';
@@ -35,11 +35,13 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
   const nav = useNavigate();
   const rules = asBestBall(season.rules);
   const names = useMemo(() => new Map(players.map((p) => [p.id, p.displayName])), [players]);
-  const [round, setRound] = useState<RoundData>(initial);
-  const [holeIdx, setHoleIdx] = useState(() => Math.min(initial.currentHole, layout.holes.length - 1));
-  const [reviewing, setReviewing] = useState(initial.status === 'submitted' || holesCompleted(initial, layout) === layout.holes.length);
-  const [queue, setQueue] = useState<PendingOp[]>(() => readQueue(initial.id));
+  // Start from what the server has plus anything still waiting on this phone, so nothing looks lost.
+  const [round, setRound] = useState<RoundData>(() => applyQueue(initial, readQueue(initial.id)));
+  const [holeIdx, setHoleIdx] = useState(() => Math.min(applyQueue(initial, readQueue(initial.id)).currentHole, layout.holes.length - 1));
+  const [reviewing, setReviewing] = useState(() => initial.status === 'submitted' || holesCompleted(applyQueue(initial, readQueue(initial.id)), layout) === layout.holes.length);
+  const [queue, setQueue] = useState<PendingOp[]>(() => compact(readQueue(initial.id)));
   const [saving, setSaving] = useState(false);
+  const [problem, setProblem] = useState<FlushResult['problem']>(null);
   const [cheer, setCheer] = useState<string | null>(null);
   const clearCheer = useCallback(() => setCheer(null), []);
   // Swipe left for the next hole, right for the previous one.
@@ -62,8 +64,9 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
   const sendQueue = useCallback(async () => {
     if (!queueRef.current.length) return;
     setSaving(true);
-    const left = await flush(league.id, round.id, queueRef.current);
-    setQueue(left);
+    const r = await flush(league.id, round.id, queueRef.current);
+    setQueue(r.left);
+    setProblem(r.problem);
     setSaving(false);
   }, [league.id, round.id]);
 
@@ -128,9 +131,16 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
         round={round} layout={layout} season={season} names={names} queueLength={queue.length} busy={busy} error={error} locked={locked} eventId={eventId}
         onEditHole={(i) => { setReviewing(false); go(i); }}
         onSubmit={async () => {
-          const left = await flush(league.id, round.id, queueRef.current);
-          setQueue(left);
-          if (left.length) return setError("Some scores haven't saved yet. Check your connection and try again.");
+          const r = await flush(league.id, round.id, queueRef.current);
+          setQueue(r.left);
+          setProblem(r.problem);
+          if (r.left.length) {
+            return setError(
+              r.problem && r.problem !== 'offline'
+                ? r.problem
+                : 'No connection right now. Your scores are saved on this phone. Try again when you have signal.',
+            );
+          }
           const ok = await run(async () => { await api.submitRound(round.id); return true; });
           if (ok) nav(`../week/${eventId}`);
         }}
@@ -182,8 +192,9 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
       {cheer && <Cheer text={cheer} onDone={clearCheer} />}
       <div className="row between">
         <Link to={`../week/${eventId}`} className="small">← Week</Link>
-        <span className={`small ${queue.length ? 'warn' : 'muted'}`}>{saving ? 'Saving…' : queue.length ? `${queue.length} waiting to save` : 'Saved'}</span>
+        <span className={`small ${queue.length ? 'warn' : 'muted'}`}>{saving ? 'Saving…' : queue.length ? (problem === 'offline' ? 'No signal · saved on this phone' : 'Waiting to save') : 'Saved'}</span>
       </div>
+      {problem && problem !== 'offline' && <p className="small warn">{problem}</p>}
 
       <div className="hole-hero">
         <div className="hole-hero-top">
@@ -381,7 +392,7 @@ function Review({ round, layout, season, names, queueLength, busy, error, locked
       )}
 
       <ErrorText>{error}</ErrorText>
-      {queueLength > 0 && <p className="warn small">{queueLength} change{queueLength === 1 ? '' : 's'} waiting to save.</p>}
+      {queueLength > 0 && <p className="warn small">Some scores are saved on this phone but haven't reached the league yet.</p>}
       {!locked && <div className="row wrap">
         <button type="button" className="btn btn-primary" disabled={busy || !complete} onClick={onSubmit}>
           {busy ? 'Submitting…' : round.status === 'submitted' ? 'Submit corrections' : 'Submit scores'}
