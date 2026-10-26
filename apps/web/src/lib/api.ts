@@ -23,7 +23,10 @@ export interface Api {
   myLeagues(): Promise<LeagueSummary[]>;
   createLeague(name: string, slug: string): Promise<string>;
   league(slug: string): Promise<League | null>;
-  updateLeague(id: string, patch: { name?: string; joinCode?: string | null; timezone?: string }): Promise<void>;
+  updateLeague(id: string, patch: { name?: string; joinCode?: string | null; timezone?: string; brandColor?: string | null; accentColor?: string | null }): Promise<void>;
+  /** Branding (Pro): upload an already-resized PNG as the league logo. Returns its URL. */
+  uploadLogo(leagueId: string, png: Blob): Promise<string>;
+  removeLogo(leagueId: string): Promise<void>;
 
   players(leagueId: string): Promise<Player[]>;
   contacts(leagueId: string): Promise<Record<string, Contact>>;

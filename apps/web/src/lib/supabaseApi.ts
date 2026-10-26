@@ -6,6 +6,8 @@ import { randomToken, sha256Hex } from './util';
 
 type Row = Record<string, any>;
 
+const LOGO_BUCKET = 'league-logos';
+
 function check<T>(res: { data: T; error: { message: string } | null }): T {
   if (res.error) throw new Error(res.error.message);
   return res.data;
@@ -42,6 +44,13 @@ const toUser =(u: { id: string; email?: string | null } | null | undefined): Use
 
 export function supabaseApi(url: string, anonKey: string): Api {
   const sb: SupabaseClient = createClient(url, anonKey, { auth: { persistSession: true, detectSessionInUrl: true } });
+
+  /** Tidy up replaced logo files. Best effort: a leftover file is harmless. */
+  async function removeOldLogos(leagueId: string, keep: string | null) {
+    const { data } = await sb.storage.from(LOGO_BUCKET).list(leagueId);
+    const old = (data ?? []).map((f) => `${leagueId}/${f.name}`).filter((p) => p !== keep);
+    if (old.length) await sb.storage.from(LOGO_BUCKET).remove(old);
+  }
 
   async function uid(): Promise<string> {
     const { data } = await sb.auth.getUser();
@@ -81,7 +90,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
     },
     async league(slug) {
       const me = await uid();
-      const l = check(await sb.from('leagues').select('id, name, slug, plan, join_code, timezone').eq('slug', slug).maybeSingle()) as Row | null;
+      const l = check(await sb.from('leagues').select('id, name, slug, plan, join_code, timezone, logo_url, brand_color, accent_color').eq('slug', slug).maybeSingle()) as Row | null;
       if (!l) return null;
       const [member, eff] = await Promise.all([
         sb.from('league_members').select('role').eq('league_id', l.id).eq('user_id', me).maybeSingle(),
@@ -93,6 +102,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
         id: l.id, name: l.name, slug: l.slug, plan: l.plan, joinCode: l.join_code, timezone: l.timezone,
         role: ((check(member) as Row | null)?.role ?? 'player') as Role,
         effectivePlan, features: plan?.features ?? [],
+        logoUrl: l.logo_url, brandColor: l.brand_color, accentColor: l.accent_color,
       };
       return league;
     },
@@ -101,7 +111,23 @@ export function supabaseApi(url: string, anonKey: string): Api {
       if (patch.name !== undefined) row.name = patch.name;
       if (patch.joinCode !== undefined) row.join_code = patch.joinCode;
       if (patch.timezone !== undefined) row.timezone = patch.timezone;
+      if (patch.brandColor !== undefined) row.brand_color = patch.brandColor;
+      if (patch.accentColor !== undefined) row.accent_color = patch.accentColor;
       check(await sb.from('leagues').update(row).eq('id', id));
+    },
+    async uploadLogo(leagueId, png) {
+      // A new file name each time, so browsers and email clients never show a stale logo.
+      const path = `${leagueId}/logo-${Date.now()}.png`;
+      const up = await sb.storage.from(LOGO_BUCKET).upload(path, png, { contentType: 'image/png', cacheControl: '31536000', upsert: false });
+      if (up.error) throw new Error(/row-level security|Unauthorized|403/i.test(up.error.message) ? 'plan_feature: League logo and colors needs GolfScoreHQ Pro' : up.error.message);
+      const url = sb.storage.from(LOGO_BUCKET).getPublicUrl(path).data.publicUrl;
+      check(await sb.from('leagues').update({ logo_url: url }).eq('id', leagueId));
+      await removeOldLogos(leagueId, path);
+      return url;
+    },
+    async removeLogo(leagueId) {
+      check(await sb.from('leagues').update({ logo_url: null }).eq('id', leagueId));
+      await removeOldLogos(leagueId, null);
     },
 
     async players(leagueId) {

@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
 
   const [{ data: league }, { data: season }, { data: layout }, { data: players }, { data: rounds }, { data: seasonLedger }, { data: contacts }, { data: prefs }, { data: payment }, { data: sent }] =
     await Promise.all([
-      admin.from('leagues').select('name, slug').eq('id', event.league_id).single(),
+      admin.from('leagues').select('name, slug, logo_url, brand_color, accent_color').eq('id', event.league_id).single(),
       admin.from('seasons').select('rules').eq('id', event.season_id).single(),
       admin.from('layouts').select('id, name, holes').eq('id', event.layout_id).maybeSingle(),
       admin.from('players').select('id, display_name, user_id, active').eq('league_id', event.league_id),
@@ -132,9 +132,11 @@ Deno.serve(async (req) => {
 
   const leagueUrl = `${env('APP_URL') || 'https://golfscorehq.com'}/l/${league!.slug}`;
   const handles = { venmo: payment?.venmo_username, paypalMe: payment?.paypal_me, zelle: payment?.zelle_contact };
+  const { data: branded } = await admin.rpc('league_has_feature', { lid: event.league_id, feature: 'branding' });
+  const brand = branded ? { color: league!.brand_color, accent: league!.accent_color, logoUrl: league!.logo_url } : undefined;
   const emailFor = (r: { playerId: string; name: string }) =>
     buildRecapEmail({
-      leagueName: league!.name, weekNumber: event.week_number, leagueUrl, recapBody, playerName: r.name, payment: handles, story,
+      leagueName: league!.name, weekNumber: event.week_number, leagueUrl, recapBody, playerName: r.name, payment: handles, story, brand,
       weekCents: playsForMoney ? recap.weekBalances[r.playerId] ?? 0 : null,
       seasonCents: playsForMoney ? recap.seasonBalances[r.playerId] ?? 0 : null,
     });

@@ -28,6 +28,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 8. `20261102000000_settlement.sql`
 9. `20261103000000_realtime.sql`
 10. `20261104000000_tv_feed.sql`
+11. `20261105000000_branding.sql` (league logo and colors; also creates the `league-logos` storage bucket)
 
 **B. Command line**
 

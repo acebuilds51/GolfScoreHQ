@@ -2,6 +2,7 @@ import QRCode from 'qrcode';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../lib/backend';
+import { textOn } from '../lib/brand';
 import { fmtLiveToPar, liveBoard, type LiveBoard } from '../lib/live';
 import { asBestBall, fmtDate, fmtMoney } from '../lib/scoring';
 import type { TvFeed, TvPanel } from '../lib/types';
@@ -83,8 +84,18 @@ function TvScreen({ feed, stale }: { feed: TvFeed; stale: boolean }) {
 
   return (
     <div className="tv-root">
-      <header className="tv-head">
-        <div className="tv-logo" aria-hidden="true">{feed.league.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()}</div>
+      <header
+        className={`tv-head${feed.league.brandColor ? ' branded' : ''}`}
+        style={{
+          ...(feed.league.brandColor ? { background: feed.league.brandColor, color: textOn(feed.league.brandColor) } : {}),
+          ...(feed.league.accentColor ? { borderBottomColor: feed.league.accentColor } : {}),
+        }}
+      >
+        {feed.league.logoUrl ? (
+          <img className="tv-logo tv-logo-img" src={feed.league.logoUrl} alt="" />
+        ) : (
+          <div className="tv-logo" aria-hidden="true">{feed.league.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()}</div>
+        )}
         <div className="tv-title">
           <div className="tv-league">{feed.league.name}</div>
           <div className="tv-sub">Week {feed.event!.weekNumber}{feed.event!.eventDate ? ` · ${fmtDate(feed.event!.eventDate)}` : ''} · {layout.courseName ? `${layout.courseName} · ` : ''}{layout.name}</div>

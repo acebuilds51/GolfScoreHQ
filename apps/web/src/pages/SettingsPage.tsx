@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CopyField, ErrorText, ProLock } from '../components/ui';
 import { api } from '../lib/backend';
+import { brandLogo, brandStyle, PALETTES, resizeLogo } from '../lib/brand';
 import type { DemoApi } from '../lib/demoApi';
 import { useAction, useAsync, useAuth, useLeague } from '../lib/hooks';
 import { isCommissioner, type PaymentHandles, type Plan, type Role, type TvDisplay, type TvPanel, type TvSettings } from '../lib/types';
@@ -14,6 +15,7 @@ export function SettingsPage() {
   return (
     <div className="page stack">
       <LeagueName />
+      <LeagueLook />
       <JoinCode />
       <JoinRequests onApproved={() => setMembersVersion((v) => v + 1)} />
       <Members version={membersVersion} />
@@ -45,6 +47,121 @@ function LeagueName() {
       </div>
       <ErrorText>{error}</ErrorText>
     </form>
+  );
+}
+
+/** Branding (Pro): logo and colors, used in the app, on Clubhouse TV and in recap emails. */
+function LeagueLook() {
+  const { league, reloadLeague } = useLeague();
+  const allowed = league.features.includes('branding');
+  const [colors, setColors] = useState<{ brand: string | null; accent: string | null } | null>(null);
+  const [saved, setSaved] = useState(false);
+  const logoAction = useAction();
+  const colorAction = useAction();
+  const current = colors ?? { brand: league.brandColor, accent: league.accentColor };
+  const changed = !!colors && (colors.brand !== league.brandColor || colors.accent !== league.accentColor);
+  const pick = (brand: string | null, accent: string | null) => { setColors({ brand, accent }); setSaved(false); };
+  const preview = brandStyle({ features: ['branding'], brandColor: current.brand, accentColor: current.accent });
+  const logo = brandLogo(league);
+
+  async function onFile(file: File | undefined) {
+    if (!file) return;
+    const ok = await logoAction.run(async () => { await api.uploadLogo(league.id, await resizeLogo(file)); return true; });
+    if (ok) reloadLeague();
+  }
+
+  return (
+    <section className="card stack">
+      <div className="row between">
+        <h2>League look</h2>
+        {!allowed && <ProLock />}
+      </div>
+      <p className="small muted">Your logo and colors show at the top of your league's pages, on Clubhouse TV and in the weekly recap email.</p>
+
+      <div className="row wrap">
+        <div className="logo-box">{logo ? <img src={logo} alt="League logo" /> : <span className="muted small">No logo</span>}</div>
+        <div className="logo-actions">
+          <label className={`btn btn-sm${!allowed || logoAction.busy ? ' disabled' : ''}`}>
+            {logoAction.busy ? 'Uploading…' : logo ? 'Change logo' : 'Upload logo'}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              hidden
+              disabled={!allowed || logoAction.busy}
+              onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ''; }}
+            />
+          </label>
+          {logo && (
+            <button className="btn btn-ghost btn-sm" disabled={logoAction.busy} onClick={async () => { const ok = await logoAction.run(async () => { await api.removeLogo(league.id); return true; }); if (ok) reloadLeague(); }}>
+              Remove logo
+            </button>
+          )}
+          <span className="small muted">PNG or JPG. A square logo on a clear or white background looks best.</span>
+        </div>
+      </div>
+      <ErrorText>{logoAction.error}</ErrorText>
+
+      <div className="stack">
+        <strong className="small">Colors</strong>
+        <div className="palettes">
+          {PALETTES.map((p) => (
+            <button
+              key={p.name}
+              type="button"
+              className={`palette${current.brand === p.brand && current.accent === p.accent ? ' on' : ''}`}
+              disabled={!allowed}
+              onClick={() => pick(p.brand, p.accent)}
+            >
+              <span className="swatch" style={{ background: p.brand }} />
+              <span className="swatch" style={{ background: p.accent }} />
+              <span className="small">{p.name}</span>
+            </button>
+          ))}
+        </div>
+        <div className="row wrap">
+          <label className="check-row">
+            <input type="color" value={current.brand ?? '#14365c'} disabled={!allowed} onChange={(e) => pick(e.target.value.toLowerCase(), current.accent)} />
+            Main color
+          </label>
+          <label className="check-row">
+            <input type="color" value={current.accent ?? '#1d9e75'} disabled={!allowed} onChange={(e) => pick(current.brand, e.target.value.toLowerCase())} />
+            Accent color
+          </label>
+          {(current.brand || current.accent) && (
+            <button type="button" className="btn btn-ghost btn-sm" disabled={!allowed} onClick={() => pick(null, null)}>Use GolfScoreHQ colors</button>
+          )}
+        </div>
+      </div>
+
+      <div className="brand-preview" style={preview} aria-label="Preview">
+        <div className={current.brand ? 'league-band' : 'league-head'}>
+          <div className="league-title">
+            {logo && <img className="league-logo" src={logo} alt="" />}
+            <strong>{league.name}</strong>
+          </div>
+        </div>
+        <div className="row brand-preview-body">
+          <span className="brand-preview-tab">Standings</span>
+          <span className="btn btn-primary btn-sm" aria-hidden="true">Settle and post results</span>
+          <span className="hole-num" aria-hidden="true">7</span>
+        </div>
+      </div>
+
+      <div className="row">
+        <button
+          className="btn btn-primary"
+          disabled={!allowed || !changed || colorAction.busy}
+          onClick={async () => {
+            const ok = await colorAction.run(async () => { await api.updateLeague(league.id, { brandColor: current.brand, accentColor: current.accent }); return true; });
+            if (ok) { setColors(null); setSaved(true); reloadLeague(); }
+          }}
+        >
+          Save colors
+        </button>
+        {saved && <span className="small good">Saved ✓</span>}
+      </div>
+      <ErrorText>{colorAction.error}</ErrorText>
+    </section>
   );
 }
 

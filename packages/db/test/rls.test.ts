@@ -21,6 +21,8 @@ async function setPlan(leagueId: string, plan: string, expiresAt: string | null 
   await db.query('update leagues set plan = $2, plan_expires_at = $3 where id = $1', [leagueId, plan, expiresAt]);
 }
 
+const logoUrl = (leagueId: string) => `https://foxthtwxgfnoqxrcbxfc.supabase.co/storage/v1/object/public/league-logos/${leagueId}/logo-1.png`;
+
 let db: Db;
 let tony: string; // commissioner of Oak Creek
 let joe: string; //  player in Oak Creek
@@ -244,12 +246,12 @@ describe('plans (by feature, never by size)', () => {
     const al = await addPlayer(tony, oak, 'Al');
     await expect(as(db, tony, () => db.query(`update league_members set role = 'commissioner' where league_id = $1 and user_id = $2`, [oak, joe]))).rejects.toThrow(/plan_feature: Co-commissioners/);
     await expect(as(db, tony, () => db.query(`insert into payments (league_id, player_id, amount_cents, method, recorded_by) values ($1, $2, 4000, 'venmo', $3)`, [oak, al, tony]))).rejects.toThrow(/row-level security/);
-    await expect(as(db, tony, () => db.query(`update leagues set logo_url = 'https://x/logo.png' where id = $1`, [oak]))).rejects.toThrow(/plan_feature: A league logo/);
+    await expect(as(db, tony, () => db.query(`update leagues set logo_url = $2 where id = $1`, [oak, logoUrl(oak)]))).rejects.toThrow(/plan_feature: League logo and colors/);
 
     await setPlan(oak, 'pro');
     await as(db, tony, () => db.query(`update league_members set role = 'commissioner' where league_id = $1 and user_id = $2`, [oak, joe]));
     await as(db, tony, () => db.query(`insert into payments (league_id, player_id, amount_cents, method, recorded_by) values ($1, $2, 4000, 'venmo', $3)`, [oak, al, tony]));
-    await as(db, tony, () => db.query(`update leagues set logo_url = 'https://x/logo.png' where id = $1`, [oak]));
+    await as(db, tony, () => db.query(`update leagues set logo_url = $2 where id = $1`, [oak, logoUrl(oak)]));
   });
 
   it('shows Free leagues their current season only; Pro sees every season', async () => {
@@ -388,6 +390,48 @@ describe('Clubhouse TV feed', () => {
     await db.query('insert into tv_displays (league_id, token_hash, created_by) values ($1, $2, $3)', [oak, createHash('sha256').update(token).digest('hex'), tony]);
     const [r] = await as(db, null, () => rows<{ f: any }>(db, 'select tv_feed($1) as f', [token]));
     expect(r!.f).toEqual({ error: 'plan', league: { name: 'Oak Creek Men' } });
+  });
+});
+
+describe('league branding', () => {
+  const setColors = (user: string, lid: string, brand: string, accent: string) =>
+    as(db, user, () => db.query('update leagues set brand_color = $2, accent_color = $3 where id = $1', [lid, brand, accent]));
+  const upload = (user: string, path: string) =>
+    as(db, user, () => db.query(`insert into storage.objects (bucket_id, name) values ('league-logos', $1)`, [path]));
+
+  it('lets a Pro commissioner set colors and upload a logo for their own league only', async () => {
+    await expect(setColors(tony, oak, '#0b5d3b', '#d4a017')).rejects.toThrow(/plan_feature: League logo and colors/);
+    await expect(upload(tony, `${oak}/logo-1.png`)).rejects.toThrow(/row-level security/);
+
+    await setPlan(oak, 'pilot');
+    await setColors(tony, oak, '#0b5d3b', '#d4a017');
+    await upload(tony, `${oak}/logo-1.png`);
+    await as(db, tony, () => db.query('update leagues set logo_url = $2 where id = $1', [oak, logoUrl(oak)]));
+    const [l] = await rows(db, 'select brand_color, accent_color, logo_url from leagues where id = $1', [oak]);
+    expect(l).toEqual({ brand_color: '#0b5d3b', accent_color: '#d4a017', logo_url: logoUrl(oak) });
+
+    // Not a golfer, not another league's commissioner, not a bad path.
+    await expect(upload(joe, `${oak}/logo-2.png`)).rejects.toThrow(/row-level security/);
+    await expect(upload(sam, `${oak}/logo-2.png`)).rejects.toThrow(/row-level security/);
+    await expect(upload(tony, `${pine}/logo.png`)).rejects.toThrow(/row-level security/);
+    await expect(upload(tony, 'not-a-league/logo.png')).rejects.toThrow(/row-level security/);
+    await expect(setColors(joe, oak, '#000000', '#ffffff')).resolves.toBeTruthy(); // RLS: no rows updated for a golfer
+    expect((await rows(db, 'select brand_color from leagues where id = $1', [oak]))[0]).toEqual({ brand_color: '#0b5d3b' });
+  });
+
+  it('only accepts real colors and logos from the league-logos bucket', async () => {
+    await setPlan(oak, 'pro');
+    await expect(setColors(tony, oak, 'red', '#d4a017')).rejects.toThrow(/check constraint/);
+    await expect(as(db, tony, () => db.query(`update leagues set logo_url = 'https://evil.example.com/pixel.png' where id = $1`, [oak]))).rejects.toThrow(/leagues_logo_url_storage/);
+  });
+
+  it('sends colors to Clubhouse TV only while the league has branding', async () => {
+    await setPlan(oak, 'pro');
+    await setColors(tony, oak, '#0b5d3b', '#d4a017');
+    const token = 'tv-token-brand-0123456789';
+    await as(db, tony, () => db.query('insert into tv_displays (league_id, token_hash, created_by) values ($1, $2, $3)', [oak, createHash('sha256').update(token).digest('hex'), tony]));
+    const feed = async () => (await as(db, null, () => rows<{ f: any }>(db, 'select tv_feed($1) as f', [token])))[0]!.f;
+    expect((await feed()).league).toMatchObject({ brandColor: '#0b5d3b', accentColor: '#d4a017' });
   });
 });
 

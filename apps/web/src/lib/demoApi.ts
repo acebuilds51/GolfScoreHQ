@@ -23,7 +23,10 @@ const FEATURES: Record<Plan, string[]> = {
 interface Db {
   session: string | null;
   users: Record<string, User>;
-  leagues: { id: string; name: string; slug: string; ownerId: string; plan: Plan; joinCode: string | null; timezone: string }[];
+  leagues: {
+    id: string; name: string; slug: string; ownerId: string; plan: Plan; joinCode: string | null; timezone: string;
+    logoUrl?: string | null; brandColor?: string | null; accentColor?: string | null;
+  }[];
   members: { leagueId: string; userId: string; role: Role }[];
   players: { id: string; leagueId: string; displayName: string; isSub: boolean; active: boolean; userId: string | null }[];
   contacts: Record<string, Contact & { leagueId: string }>;
@@ -214,8 +217,31 @@ export function demoApi(): DemoApi {
       if (!l) return null;
       const role = roleIn(db, l.id);
       if (!role) return null;
-      const league: League = { id: l.id, name: l.name, slug: l.slug, plan: l.plan, role, joinCode: l.joinCode, timezone: l.timezone, effectivePlan: l.plan, features: FEATURES[l.plan] };
+      const league: League = { id: l.id, name: l.name, slug: l.slug, plan: l.plan, role, joinCode: l.joinCode, timezone: l.timezone, effectivePlan: l.plan, features: FEATURES[l.plan],
+        logoUrl: l.logoUrl ?? null, brandColor: l.brandColor ?? null, accentColor: l.accentColor ?? null };
       return league;
+    },
+    async uploadLogo(leagueId, png) {
+      const db = load();
+      requireCommissioner(db, leagueId);
+      if (!has(db, leagueId, 'branding')) throw new Error('plan_feature: League logo and colors needs GolfScoreHQ Pro');
+      // Demo keeps the picture in this browser, as a data URL.
+      const url = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result));
+        r.onerror = () => reject(new Error("That picture couldn't be read."));
+        r.readAsDataURL(png);
+      });
+      const fresh = load();
+      fresh.leagues.find((x) => x.id === leagueId)!.logoUrl = url;
+      save(fresh);
+      return url;
+    },
+    async removeLogo(leagueId) {
+      const db = load();
+      requireCommissioner(db, leagueId);
+      db.leagues.find((x) => x.id === leagueId)!.logoUrl = null;
+      save(db);
     },
     async updateLeague(leagueId, patch) {
       const db = load();
@@ -227,6 +253,9 @@ export function demoApi(): DemoApi {
       if (patch.name !== undefined) l.name = patch.name;
       if (patch.joinCode !== undefined) l.joinCode = patch.joinCode;
       if (patch.timezone !== undefined) l.timezone = patch.timezone;
+      if ((patch.brandColor || patch.accentColor) && !has(db, leagueId, 'branding')) throw new Error('plan_feature: League logo and colors needs GolfScoreHQ Pro');
+      if (patch.brandColor !== undefined) l.brandColor = patch.brandColor;
+      if (patch.accentColor !== undefined) l.accentColor = patch.accentColor;
       save(db);
     },
 
@@ -664,7 +693,9 @@ export function demoApi(): DemoApi {
         totals.set(e.playerId, t);
       }
       return {
-        league: { name: lg.name, slug: lg.slug, logoUrl: null },
+        league: has(db, lg.id, 'branding')
+          ? { name: lg.name, slug: lg.slug, logoUrl: lg.logoUrl ?? null, brandColor: lg.brandColor ?? null, accentColor: lg.accentColor ?? null }
+          : { name: lg.name, slug: lg.slug, logoUrl: null, brandColor: null, accentColor: null },
         display: { name: d.name, settings: d.settings },
         season: season ? { year: season.year, name: season.name, rules: season.rules } : null,
         event: ev ? { id: ev.id, weekNumber: ev.weekNumber, eventDate: ev.eventDate, status: ev.status } : null,
