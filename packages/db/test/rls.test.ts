@@ -393,6 +393,50 @@ describe('Clubhouse TV feed', () => {
   });
 });
 
+describe('scoring a round from the phone', () => {
+  it('saves what the app sends: scores, changed scores, CTP answers (changed too), current hole', async () => {
+    await setPlan(oak, 'pilot');
+    const [a, b, c, d] = [await addPlayer(tony, oak, 'Al'), await addPlayer(tony, oak, 'Bob'), await addPlayer(tony, oak, 'Cal'), await addPlayer(tony, oak, 'Dan')];
+    const other = await addPlayer(tony, oak, 'Eve');
+    const { roundId } = await weekWithRound(tony, oak, PRO_RULES);
+    await as(db, tony, async () => {
+      for (const [i, p] of [a, b, c, d].entries()) {
+        await db.query(`insert into round_players (round_id, player_id, league_id, side, position) values ($1, $2, $3, $4, $5)`, [roundId, p, oak, i < 2 ? 'A' : 'B', i]);
+      }
+      const upsertScores = (hole: number, strokes: number) =>
+        db.query(
+          `insert into hole_scores (round_id, player_id, league_id, hole_number, strokes, entered_by, updated_at)
+           select $1, p, $2, $3, $4, $5, now() from unnest($6::uuid[]) p
+           on conflict (round_id, player_id, hole_number) do update set strokes = excluded.strokes, entered_by = excluded.entered_by, updated_at = excluded.updated_at`,
+          [roundId, oak, hole, strokes, tony, [a, b, c, d]],
+        );
+      const upsertCtp = (hole: number, player: string | null, beat: string | null) =>
+        db.query(
+          `insert into ctp_reports (round_id, league_id, hole_number, player_id, beat_player_id) values ($1, $2, $3, $4, $5)
+           on conflict (round_id, hole_number) do update set player_id = excluded.player_id, beat_player_id = excluded.beat_player_id`,
+          [roundId, oak, hole, player, beat],
+        );
+      const setHole = (i: number) => db.query(`update rounds set current_hole = $2, updated_at = now() where id = $1`, [roundId, i]);
+
+      for (let h = 1; h <= 5; h++) { await upsertScores(h, 4); await setHole(h); }
+      await upsertCtp(2, null, null);         // nobody
+      await upsertCtp(5, a, null);            // Al, first ball on the green
+      await upsertScores(5, 3);               // went back and fixed hole 5
+      await upsertCtp(5, b, other);           // changed answer: Bob, inside Eve's marker
+      for (let h = 6; h <= 9; h++) { await upsertScores(h, 5); await setHole(h - 1); }
+    });
+    const [{ n }] = await rows<{ n: number }>(db, 'select count(*)::int as n from hole_scores where round_id = $1', [roundId]);
+    expect(n).toBe(36);
+    expect(await rows(db, 'select hole_number, player_id, beat_player_id from ctp_reports where round_id = $1 order by hole_number', [roundId])).toEqual([
+      { hole_number: 2, player_id: null, beat_player_id: null },
+      { hole_number: 5, player_id: b, beat_player_id: other },
+    ]);
+    // Still can't be "inside your own ball", or name a marker with no winner.
+    await expect(as(db, tony, () => db.query(`insert into ctp_reports (round_id, league_id, hole_number, player_id, beat_player_id) values ($1, $2, 7, $3, $3)`, [roundId, oak, a]))).rejects.toThrow(/ctp_reports_not_self/);
+    await expect(as(db, tony, () => db.query(`insert into ctp_reports (round_id, league_id, hole_number, player_id, beat_player_id) values ($1, $2, 7, null, $3)`, [roundId, oak, a]))).rejects.toThrow(/ctp_reports_beat_needs_winner/);
+  });
+});
+
 describe('league branding', () => {
   const setColors = (user: string, lid: string, brand: string, accent: string) =>
     as(db, user, () => db.query('update leagues set brand_color = $2, accent_color = $3 where id = $1', [lid, brand, accent]));
