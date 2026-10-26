@@ -22,6 +22,8 @@ export interface League extends LeagueSummary {
   features: string[];
   /** Branding (Pro): logo picture and two colors as #rrggbb. */
   logoUrl: string | null;
+  /** Course photo behind the league name. */
+  bannerUrl: string | null;
   brandColor: string | null;
   accentColor: string | null;
 }

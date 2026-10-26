@@ -3,6 +3,7 @@ import { ErrorText } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
 import { buildWeekRecap } from '../lib/recap';
+import { ShareWeek } from './ShareWeek';
 import { STORY_MAX_CHARS } from '../../../../supabase/functions/send-recap/story';
 import { asBestBall, fmtMoney } from '../lib/scoring';
 import { settleWeek, totalsFromLedger, type PlayerTotals } from '../lib/settlement';
@@ -12,7 +13,7 @@ const signed = (c: number) => (c > 0 ? `+${fmtMoney(c)}` : c < 0 ? `−${fmtMone
 
 /** Settlement controls for the commissioner, and the week's results for everyone. */
 export function WeekResults({ event, season, layout, rounds, names, onChanged }: {
-  event: LeagueEvent; season: Season; layout: Layout; rounds: RoundData[]; names: Map<string, string>; onChanged: () => void;
+  event: LeagueEvent; season: Season; layout: Layout & { courseName?: string | null }; rounds: RoundData[]; names: Map<string, string>; onChanged: () => void;
 }) {
   const { league } = useLeague();
   const commish = isCommissioner(league.role);
@@ -48,7 +49,7 @@ export function WeekResults({ event, season, layout, rounds, names, onChanged }:
     return (
       <section className="card stack">
         <div className="row between wrap">
-          <h2>Final results</h2>
+          <div className="row"><h2>Results</h2><span className="final-stamp num">Final</span></div>
           {commish && (
             <button
               className="btn btn-ghost btn-sm"
@@ -78,6 +79,7 @@ export function WeekResults({ event, season, layout, rounds, names, onChanged }:
         )}
         {totals.length > 0 && <MoneyTable totals={totals} name={name} />}
         <ErrorText>{error}</ErrorText>
+        {season.rules.format === 'bestBallMatch' && <ShareWeek event={event} season={season} layout={layout} rounds={rounds} names={names} />}
         {league.features.includes('weekly_recap') && season.rules.format === 'bestBallMatch' && (
           <WeekRecap event={event} season={season} layout={layout} rounds={rounds} names={names} />
         )}

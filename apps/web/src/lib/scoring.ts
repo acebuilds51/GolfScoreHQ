@@ -10,6 +10,15 @@ import {
 } from '@golfscorehq/engine';
 import type { Course, Layout, RoundData } from './types';
 
+/**
+ * Scorecard mark for a score relative to par, the way golfers draw it:
+ * circle = birdie, double circle = eagle or better, square = bogey, double square = double bogey or worse.
+ */
+export function scoreMark(toPar: number | null): '' | 'eagle' | 'birdie' | 'bogey' | 'double' {
+  if (toPar === null || toPar === 0) return '';
+  return toPar <= -2 ? 'eagle' : toPar === -1 ? 'birdie' : toPar === 1 ? 'bogey' : 'double';
+}
+
 /** Rules for a league with no side games (what Free allows). */
 export function basicRules(): BestBallMatchRules {
   return {

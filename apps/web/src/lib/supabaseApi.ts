@@ -45,11 +45,22 @@ const toUser =(u: { id: string; email?: string | null } | null | undefined): Use
 export function supabaseApi(url: string, anonKey: string): Api {
   const sb: SupabaseClient = createClient(url, anonKey, { auth: { persistSession: true, detectSessionInUrl: true } });
 
-  /** Tidy up replaced logo files. Best effort: a leftover file is harmless. */
-  async function removeOldLogos(leagueId: string, keep: string | null) {
+  /** Tidy up replaced logo or banner files. Best effort: a leftover file is harmless. */
+  async function removeOldFiles(leagueId: string, kind: 'logo' | 'banner', keep: string | null) {
     const { data } = await sb.storage.from(LOGO_BUCKET).list(leagueId);
-    const old = (data ?? []).map((f) => `${leagueId}/${f.name}`).filter((p) => p !== keep);
+    const old = (data ?? []).filter((f) => f.name.startsWith(`${kind}-`)).map((f) => `${leagueId}/${f.name}`).filter((p) => p !== keep);
     if (old.length) await sb.storage.from(LOGO_BUCKET).remove(old);
+  }
+
+  async function uploadBrandFile(leagueId: string, kind: 'logo' | 'banner', blob: Blob, type: 'image/png' | 'image/jpeg') {
+    // A new file name each time, so browsers and email clients never show a stale picture.
+    const path = `${leagueId}/${kind}-${Date.now()}.${type === 'image/png' ? 'png' : 'jpg'}`;
+    const up = await sb.storage.from(LOGO_BUCKET).upload(path, blob, { contentType: type, cacheControl: '31536000', upsert: false });
+    if (up.error) throw new Error(/row-level security|Unauthorized|403/i.test(up.error.message) ? 'plan_feature: League logo and colors needs GolfScoreHQ Pro' : up.error.message);
+    const url = sb.storage.from(LOGO_BUCKET).getPublicUrl(path).data.publicUrl;
+    check(await sb.from('leagues').update(kind === 'logo' ? { logo_url: url } : { banner_url: url }).eq('id', leagueId));
+    await removeOldFiles(leagueId, kind, path);
+    return url;
   }
 
   async function uid(): Promise<string> {
@@ -90,7 +101,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
     },
     async league(slug) {
       const me = await uid();
-      const l = check(await sb.from('leagues').select('id, name, slug, plan, join_code, timezone, logo_url, brand_color, accent_color').eq('slug', slug).maybeSingle()) as Row | null;
+      const l = check(await sb.from('leagues').select('id, name, slug, plan, join_code, timezone, logo_url, banner_url, brand_color, accent_color').eq('slug', slug).maybeSingle()) as Row | null;
       if (!l) return null;
       const [member, eff] = await Promise.all([
         sb.from('league_members').select('role').eq('league_id', l.id).eq('user_id', me).maybeSingle(),
@@ -102,7 +113,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
         id: l.id, name: l.name, slug: l.slug, plan: l.plan, joinCode: l.join_code, timezone: l.timezone,
         role: ((check(member) as Row | null)?.role ?? 'player') as Role,
         effectivePlan, features: plan?.features ?? [],
-        logoUrl: l.logo_url, brandColor: l.brand_color, accentColor: l.accent_color,
+        logoUrl: l.logo_url, bannerUrl: l.banner_url, brandColor: l.brand_color, accentColor: l.accent_color,
       };
       return league;
     },
@@ -115,19 +126,15 @@ export function supabaseApi(url: string, anonKey: string): Api {
       if (patch.accentColor !== undefined) row.accent_color = patch.accentColor;
       check(await sb.from('leagues').update(row).eq('id', id));
     },
-    async uploadLogo(leagueId, png) {
-      // A new file name each time, so browsers and email clients never show a stale logo.
-      const path = `${leagueId}/logo-${Date.now()}.png`;
-      const up = await sb.storage.from(LOGO_BUCKET).upload(path, png, { contentType: 'image/png', cacheControl: '31536000', upsert: false });
-      if (up.error) throw new Error(/row-level security|Unauthorized|403/i.test(up.error.message) ? 'plan_feature: League logo and colors needs GolfScoreHQ Pro' : up.error.message);
-      const url = sb.storage.from(LOGO_BUCKET).getPublicUrl(path).data.publicUrl;
-      check(await sb.from('leagues').update({ logo_url: url }).eq('id', leagueId));
-      await removeOldLogos(leagueId, path);
-      return url;
-    },
+    uploadLogo: (leagueId, png) => uploadBrandFile(leagueId, 'logo', png, 'image/png'),
     async removeLogo(leagueId) {
       check(await sb.from('leagues').update({ logo_url: null }).eq('id', leagueId));
-      await removeOldLogos(leagueId, null);
+      await removeOldFiles(leagueId, 'logo', null);
+    },
+    uploadBanner: (leagueId, jpeg) => uploadBrandFile(leagueId, 'banner', jpeg, 'image/jpeg'),
+    async removeBanner(leagueId) {
+      check(await sb.from('leagues').update({ banner_url: null }).eq('id', leagueId));
+      await removeOldFiles(leagueId, 'banner', null);
     },
 
     async players(leagueId) {

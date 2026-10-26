@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { EmptyState, ErrorText } from '../components/ui';
+import { EmptyState, ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAsync, useLeague, useLiveRefresh } from '../lib/hooks';
 import { fmtLiveToPar, liveBoard, type LiveBoard } from '../lib/live';
@@ -26,7 +26,7 @@ export function LivePage() {
   const { league } = useLeague();
   const target = useAsync(async () => fromUrl ?? (await currentEventId(league.id)), [league.id, fromUrl]);
   if (target.error) return <div className="page"><ErrorText>{target.error}</ErrorText></div>;
-  if (target.loading && !target.data) return <div className="page muted">Loading…</div>;
+  if (target.loading && !target.data) return <PageSkeleton />;
   if (!target.data) {
     return <div className="page"><EmptyState title="Nothing live yet"><p className="muted">The live leaderboard shows the week being played. Add a week on the <Link to="../play">Play</Link> tab.</p></EmptyState></div>;
   }
@@ -42,7 +42,7 @@ function LiveWeek({ eventId }: { eventId: string }) {
   const board = useMemo(() => (data.data?.layout && data.data.season ? liveBoard(data.data.rounds, data.data.layout, data.data.season.rules) : null), [data.data]);
 
   if (data.error) return <div className="page"><ErrorText>{data.error}</ErrorText></div>;
-  if (!data.data) return <div className="page muted">Loading…</div>;
+  if (!data.data) return <PageSkeleton />;
   const { event, layout, season } = data.data;
   if (!layout || !season || !board) return <div className="page"><p className="muted">This week has no course set up yet.</p></div>;
 
@@ -55,8 +55,9 @@ function LiveWeek({ eventId }: { eventId: string }) {
         </div>
         <div className="row small">
           {settled ? <span className="badge badge-ok">Final</span> : <span className="live-dot">Live</span>}
-          {!settled && <span className="muted">Updated {updatedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</span>}
-          <Link to={`../week/${event.id}`}>Week page</Link>
+          {!settled && <span className="muted">Updated {updatedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>}
+          <Link to={`../week/${event.id}`}>Week</Link>
+          <Link to="../standings">Season standings</Link>
         </div>
       </div>
       {board.lines.length === 0 ? (
@@ -80,30 +81,40 @@ function LiveWeek({ eventId }: { eventId: string }) {
 type PanelProps = { board: LiveBoard; names: Map<string, string> };
 const first = (names: Map<string, string>, id: string) => names.get(id) ?? '?';
 
+/** The leader big on a block of league color; everyone else a clean name and score. */
 export function LeaderPanel({ board, names, holes }: PanelProps & { holes: number }) {
-  let rank = 0;
-  let prev: number | null = null;
+  const lines = board.lines;
+  const top = lines[0]!;
+  const leaders = lines.filter((l) => l.toPar === top.toPar);
+  const rest = lines.slice(leaders.length);
+  const thruLabel = (l: (typeof lines)[number]) => (l.finished ? 'Final' : `Thru ${l.thru}`);
+  // Positions with ties: T2, T2, 4 …
+  const pos = (i: number) => {
+    const at = lines.findIndex((l) => l.toPar === lines[i]!.toPar);
+    const tied = lines.filter((l) => l.toPar === lines[i]!.toPar).length > 1;
+    return `${tied ? 'T' : ''}${at + 1}`;
+  };
   return (
-    <section className="card flush">
-      <h3 className="pad">Leaderboard</h3>
-      <table className="live-table">
-        <thead><tr><th>#</th><th className="left">Golfer</th><th>Thru</th><th>Score</th><th>To par</th></tr></thead>
-        <tbody>
-          {board.lines.map((l, i) => {
-            if (l.toPar !== prev) rank = i + 1;
-            prev = l.toPar;
-            return (
-              <tr key={`${l.roundId}-${l.playerId}`}>
-                <td className="muted">{rank}</td>
-                <td className="left"><strong>{first(names, l.playerId)}</strong>{l.side === null && <span className="small muted"> · skins</span>}</td>
-                <td>{l.finished ? 'F' : l.thru}<span className="muted small">{l.finished ? '' : `/${holes}`}</span></td>
-                <td>{l.strokes}</td>
-                <td className={l.toPar < 0 ? 'under' : ''}><strong>{fmtLiveToPar(l.toPar)}</strong></td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <section className="leader-card">
+      <div className="leader-hero">
+        <div className="leader-hero-label">{leaders.length > 1 ? `Tied for the lead · ${thruLabel(top)}` : `Leader · ${thruLabel(top).toLowerCase()}`}</div>
+        <div className="num leader-hero-name">{leaders.map((l) => first(names, l.playerId)).join(' · ')}</div>
+        <div className="num leader-hero-score">{fmtLiveToPar(top.toPar)}</div>
+      </div>
+      {rest.length > 0 && (
+        <ol className="leader-list">
+          {rest.map((l, i) => (
+            <li key={`${l.roundId}-${l.playerId}`}>
+              <span className="num leader-pos">{pos(i + leaders.length)}</span>
+              <span className="grow">
+                <span className="leader-name">{first(names, l.playerId)}</span>
+                <span className="small muted"> {l.finished ? 'F' : `${l.thru}/${holes}`}{l.side === null ? ' · skins' : ''}</span>
+              </span>
+              <span className={`num leader-score${l.toPar < 0 ? ' under' : ''}`}>{fmtLiveToPar(l.toPar)}</span>
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   );
 }

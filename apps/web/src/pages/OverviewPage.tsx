@@ -1,3 +1,4 @@
+import { PageSkeleton } from '../components/ui';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useAuth, useLeague } from '../lib/hooks';
@@ -14,7 +15,7 @@ export function OverviewPage() {
     return { players, courses, members, nextWeek };
   }, [league.id]);
 
-  if (!data.data) return <div className="page muted">Loading…</div>;
+  if (!data.data) return <PageSkeleton />;
   const { players, courses, members, nextWeek } = data.data;
   const active = players.filter((p) => p.active);
   const regulars = active.filter((p) => !p.isSub).length;

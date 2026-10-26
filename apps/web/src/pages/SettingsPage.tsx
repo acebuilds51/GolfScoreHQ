@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CopyField, ErrorText, ProLock } from '../components/ui';
 import { api } from '../lib/backend';
-import { brandLogo, brandStyle, PALETTES, parseHex, resizeLogo } from '../lib/brand';
+import { brandBanner, brandLogo, brandStyle, PALETTES, parseHex, resizeBanner, resizeLogo } from '../lib/brand';
 import type { DemoApi } from '../lib/demoApi';
 import { useAction, useAsync, useAuth, useLeague } from '../lib/hooks';
 import { isCommissioner, type PaymentHandles, type Plan, type Role, type TvDisplay, type TvPanel, type TvSettings } from '../lib/types';
@@ -63,6 +63,8 @@ function LeagueLook() {
   const pick = (brand: string | null, accent: string | null) => { setColors({ brand, accent }); setSaved(false); };
   const preview = brandStyle({ features: ['branding'], brandColor: current.brand, accentColor: current.accent });
   const logo = brandLogo(league);
+  const banner = brandBanner(league);
+  const bannerAction = useAction();
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -100,6 +102,38 @@ function LeagueLook() {
         </div>
       </div>
       <ErrorText>{logoAction.error}</ErrorText>
+
+      <div className="stack">
+        <strong className="small">Course photo</strong>
+        <div className="banner-box" style={banner ? { backgroundImage: `url("${banner}")` } : undefined}>
+          {!banner && <span className="muted small">No photo</span>}
+        </div>
+        <div className="row wrap">
+          <label className={`btn btn-sm${!allowed || bannerAction.busy ? ' disabled' : ''}`}>
+            {bannerAction.busy ? 'Uploading…' : banner ? 'Change photo' : 'Upload a course photo'}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              hidden
+              disabled={!allowed || bannerAction.busy}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file) return;
+                const ok = await bannerAction.run(async () => { await api.uploadBanner(league.id, await resizeBanner(file)); return true; });
+                if (ok) reloadLeague();
+              }}
+            />
+          </label>
+          {banner && (
+            <button className="btn btn-ghost btn-sm" disabled={bannerAction.busy} onClick={async () => { const ok = await bannerAction.run(async () => { await api.removeBanner(league.id); return true; }); if (ok) reloadLeague(); }}>
+              Remove photo
+            </button>
+          )}
+        </div>
+        <span className="small muted">Shows behind your league's name. A wide shot of the course or clubhouse works best.</span>
+        <ErrorText>{bannerAction.error}</ErrorText>
+      </div>
 
       <div className="stack">
         <strong>Your colors</strong>

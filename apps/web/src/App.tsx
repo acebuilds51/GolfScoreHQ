@@ -1,10 +1,12 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Header } from './components/Header';
+import { PageSkeleton } from './components/ui';
 import { AuthContext, useAuth, useAuthState } from './lib/hooks';
 import { CoursesPage } from './pages/CoursesPage';
 import { JoinInvitePage } from './pages/JoinInvitePage';
 import { LeagueLayout } from './pages/LeagueLayout';
 import { LivePage } from './pages/LivePage';
+import { MorePage } from './pages/MorePage';
 import { LeaguesPage } from './pages/LeaguesPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { PlayPage } from './pages/PlayPage';
@@ -18,7 +20,7 @@ import { TvPage } from './pages/TvPage';
 
 function RequireUser({ children }: { children: JSX.Element }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="page muted">Loading…</div>;
+  if (loading) return <PageSkeleton />;
   if (!user) return <Navigate to="/" replace />;
   return children;
 }
@@ -34,7 +36,7 @@ export function App() {
       <Header />
       <main>
         <Routes>
-          <Route path="/" element={auth.loading ? <div className="page muted">Loading…</div> : auth.user ? <Navigate to="/leagues" replace /> : <SignInPage />} />
+          <Route path="/" element={auth.loading ? <PageSkeleton /> : auth.user ? <Navigate to="/leagues" replace /> : <SignInPage />} />
           <Route path="/join/:token" element={<JoinInvitePage />} />
           <Route path="/leagues" element={<RequireUser><LeaguesPage /></RequireUser>} />
           <Route path="/l/:slug" element={<RequireUser><LeagueLayout /></RequireUser>}>
@@ -48,6 +50,7 @@ export function App() {
             <Route path="roster" element={<RosterPage />} />
             <Route path="courses" element={<CoursesPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="more" element={<MorePage />} />
           </Route>
           <Route path="*" element={<div className="page"><h1>Page not found</h1></div>} />
         </Routes>

@@ -419,6 +419,15 @@ describe('league branding', () => {
     expect((await rows(db, 'select brand_color from leagues where id = $1', [oak]))[0]).toEqual({ brand_color: '#0b5d3b' });
   });
 
+  it('lets a Pro commissioner set a banner photo from the bucket only', async () => {
+    const banner = logoUrl(oak).replace('logo-1.png', 'banner-1.jpg');
+    await expect(as(db, tony, () => db.query('update leagues set banner_url = $2 where id = $1', [oak, banner]))).rejects.toThrow(/plan_feature: League logo and colors/);
+    await setPlan(oak, 'pro');
+    await as(db, tony, () => db.query('update leagues set banner_url = $2 where id = $1', [oak, banner]));
+    expect((await rows(db, 'select banner_url from leagues where id = $1', [oak]))[0]).toEqual({ banner_url: banner });
+    await expect(as(db, tony, () => db.query(`update leagues set banner_url = 'https://evil.example.com/x.jpg' where id = $1`, [oak]))).rejects.toThrow(/leagues_banner_url_storage/);
+  });
+
   it('only accepts real colors and logos from the league-logos bucket', async () => {
     await setPlan(oak, 'pro');
     await expect(setColors(tony, oak, 'red', '#d4a017')).rejects.toThrow(/check constraint/);

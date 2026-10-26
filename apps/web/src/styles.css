@@ -14,8 +14,11 @@
   --pro-text: #3c3489;
   --warn: #8a5300;
   --danger: #b42318;
-  --radius: 10px;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+  --radius: 14px;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 2px 8px rgb(0 0 0 / 0.04);
+  --font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  /* Under par is red, the way TV leaderboards show it. */
+  --under: #c0392b;
   /* A league's own colors (Pro branding) override these inside its pages. */
   --league: var(--brand);
   --on-league: var(--surface);
@@ -40,6 +43,7 @@
     --pro-text: #cecbf6;
     --warn: #f0b45c;
     --danger: #f59a91;
+    --under: #ff8577;
     color-scheme: dark;
   }
 }
@@ -54,7 +58,13 @@ body {
   line-height: 1.5;
 }
 h1, h2, h3 { margin: 0; line-height: 1.25; font-weight: 650; }
-h1 { font-size: 1.6rem; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 2rem; line-height: 1.05; letter-spacing: 0.01em; }
+/* Scores, money and other numbers: the athletic condensed face, digits lined up in columns. */
+.num { font-family: var(--font-display); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+table td, table th { font-variant-numeric: tabular-nums; }
+.skel { border-radius: 6px; background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 50%, var(--surface-2) 75%); background-size: 200% 100%; animation: skel 1.2s ease-in-out infinite; }
+@keyframes skel { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
 h2 { font-size: 1.15rem; }
 h3 { font-size: 1rem; }
 p { margin: 0; }
@@ -80,11 +90,11 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .pad { padding: 14px 16px; }
 
 .demo-bar { background: var(--pro-bg); color: var(--pro-text); text-align: center; font-size: 0.8rem; padding: 6px 12px; }
-.topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: calc(10px + env(safe-area-inset-top)) 16px 10px; background: var(--surface); border-bottom: 1px solid var(--border); }
 .brand { display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text); font-weight: 700; font-size: 1.05rem; }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+.card { background: var(--surface); border: 1px solid color-mix(in srgb, var(--border) 55%, transparent); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); }
 .card.flush { padding: 0; }
 .card.highlight { border-color: var(--accent); }
 .card-link { text-decoration: none; color: inherit; display: block; }
@@ -113,7 +123,7 @@ textarea { resize: vertical; }
 .prefixed input { border: 0; padding-left: 2px; }
 
 .btn {
-  font: inherit; font-size: 0.95rem; font-weight: 600; border-radius: 8px; padding: 9px 14px; cursor: pointer;
+  font: inherit; font-size: 0.95rem; font-weight: 600; border-radius: 10px; padding: 10px 16px; cursor: pointer;
   border: 1px solid var(--border); background: var(--surface); color: var(--text); white-space: nowrap;
 }
 .btn:hover:not(:disabled) { background: var(--surface-2); }
@@ -141,6 +151,11 @@ textarea { resize: vertical; }
 .league-band .page { padding-top: 14px; padding-bottom: 14px; }
 .league-band .muted, .league-band .small { color: inherit; opacity: 0.85; }
 .league-band h1 { color: inherit; }
+/* Course photo behind the name; a dark fade keeps the name readable on any photo. */
+.league-band.has-banner { background-size: cover; background-position: center; color: #ffffff; text-shadow: 0 1px 6px rgb(0 0 0 / 0.45); border-bottom: 5px solid var(--league-accent); }
+.league-band.has-banner .page { padding-top: 64px; padding-bottom: 18px; }
+.league-band.has-banner .badge { text-shadow: none; }
+.banner-box { width: 100%; aspect-ratio: 16 / 5; border: 1px dashed var(--border); border-radius: var(--radius); background: var(--surface-2) center / cover no-repeat; display: flex; align-items: center; justify-content: center; }
 .logo-box { width: 96px; height: 96px; border: 1px dashed var(--border); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; background: #fff; overflow: hidden; }
 .logo-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
 label.btn { flex-direction: row; display: inline-flex; color: var(--text); font-size: 0.82rem; cursor: pointer; width: fit-content; }
@@ -225,6 +240,35 @@ label.check-row input { width: auto; }
 
 /* Scoring */
 .scorer { max-width: 560px; }
+.center { text-align: center; }
+/* Big hole number on a block of league color. */
+.hole-hero { background: var(--league); color: var(--on-league); border-radius: var(--radius); padding: 14px 18px 16px; }
+.hole-hero-top { display: flex; align-items: flex-end; justify-content: space-between; }
+.hole-hero-label { font-size: 0.8rem; opacity: 0.75; }
+.hole-hero-num { font-size: 5.5rem; line-height: 0.85; }
+.hole-hero-par { font-size: 1.6rem; opacity: 0.85; margin-bottom: 4px; }
+.hole-hero { border-bottom: 5px solid var(--league-accent); }
+.hole-hero-match { font-size: 0.85rem; opacity: 0.85; margin-top: 8px; }
+.score-list { display: flex; flex-direction: column; }
+.score-row { display: flex; align-items: center; gap: 10px; padding: 12px 2px; border-bottom: 1px solid var(--border); }
+.score-row:last-child { border-bottom: 0; }
+.score-name { font-size: 1.05rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.score-big { font-size: 2.6rem; min-width: 44px; text-align: center; line-height: 1; }
+.under { color: var(--under); }
+.step { width: 52px; height: 52px; border-radius: 50%; font-size: 1.7rem; line-height: 1; cursor: pointer; flex-shrink: 0; touch-action: manipulation; }
+.step.minus { border: 1px solid var(--border); background: var(--surface); color: var(--text-2); }
+.step.plus { border: 1px solid var(--league); background: var(--league); color: var(--on-league); }
+.step:active { transform: scale(0.94); }
+.hint-swipe { display: none; }
+@media (hover: none) { .hint-swipe { display: block; } }
+.cheer { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--league) 88%, transparent); color: var(--on-league); animation: cheer-in 0.25s ease-out; }
+.cheer-text { font-size: 3rem; text-align: center; padding: 0 20px; animation: cheer-pop 0.5s cubic-bezier(.2, 1.6, .4, 1); }
+.cheer-burst i { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; border-radius: 2px; background: var(--league-accent); transform: rotate(calc(var(--i) * 25.7deg)) translateY(0); animation: burst 0.9s ease-out forwards; }
+.cheer-burst i:nth-child(odd) { background: var(--on-league); }
+@keyframes cheer-in { from { opacity: 0; } }
+@keyframes cheer-pop { from { transform: scale(0.4); opacity: 0; } }
+@keyframes burst { to { transform: rotate(calc(var(--i) * 25.7deg)) translateY(-38vmin); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cheer, .cheer-text, .cheer-burst i { animation: none; } .cheer-burst { display: none; } }
 .hole-head { display: flex; align-items: center; gap: 12px; }
 .hole-num { width: 48px; height: 48px; border-radius: 50%; background: var(--league); color: var(--on-league); display: flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 800; flex-shrink: 0; }
 .match-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; }
@@ -249,9 +293,13 @@ table.scorecard { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
 table.scorecard th, table.scorecard td { padding: 6px 4px; text-align: center; border-bottom: 1px solid var(--border); }
 table.scorecard td.name { text-align: left; font-weight: 600; padding-left: 10px; white-space: nowrap; }
 table.scorecard td.won { background: var(--accent-bg); }
-table.scorecard td.birdie span, table.scorecard td.eagle span { display: inline-flex; width: 24px; height: 24px; border-radius: 50%; align-items: center; justify-content: center; }
-table.scorecard td.birdie span { border: 2px solid var(--brand-2); }
-table.scorecard td.eagle span { background: var(--brand-2); color: var(--surface); }
+/* Scorecard marks golfers know: ○ birdie, ◎ eagle, □ bogey, ⧈ double or worse. */
+table.scorecard td span { display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center; font-family: var(--font-display); font-weight: 700; font-size: 1rem; }
+table.scorecard td.birdie span, table.scorecard td.eagle span { border-radius: 50%; border: 1.5px solid var(--under); color: var(--under); }
+table.scorecard td.eagle span { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--under); }
+table.scorecard td.bogey span, table.scorecard td.double span { border: 1.5px solid var(--text-2); border-radius: 2px; }
+table.scorecard td.double span { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--text-2); }
+table.scorecard td.won span { background: var(--accent-bg); }
 table.money { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
 table.money th, table.money td { padding: 6px 6px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
 table.money th:first-child, table.money td.name { text-align: left; }
@@ -260,6 +308,27 @@ table.money th { color: var(--text-2); font-weight: 600; }
 
 /* Live */
 .live { max-width: 1100px; }
+.final-stamp {
+  display: inline-block; font-size: 1.15rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--under);
+  border: 3px solid var(--under); border-radius: 6px; padding: 0 10px; transform: rotate(-6deg); margin-left: 6px;
+  animation: stamp 0.45s cubic-bezier(.2, 1.4, .4, 1);
+}
+@keyframes stamp { from { transform: rotate(-6deg) scale(2.2); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .final-stamp { animation: none; } }
+.share-week { border-top: 1px solid var(--border); padding-top: 14px; }
+.share-week .btn { display: inline-flex; align-items: center; gap: 6px; }
+.share-preview img { width: 100%; max-width: 360px; border-radius: 12px; box-shadow: var(--shadow); }
+.leader-card { background: var(--surface); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+.leader-hero { background: var(--league); color: var(--on-league); padding: 16px 18px 18px; border-bottom: 5px solid var(--league-accent); }
+.leader-hero-label { font-size: 0.8rem; opacity: 0.8; }
+.leader-hero-name { font-size: 1.9rem; line-height: 1.05; margin-top: 4px; }
+.leader-hero-score { font-size: 5rem; line-height: 0.9; }
+.leader-list { list-style: none; margin: 0; padding: 0 16px; }
+.leader-list li { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.leader-list li:last-child { border-bottom: 0; }
+.leader-pos { width: 2.2em; color: var(--text-2); font-size: 1.1rem; }
+.leader-name { font-weight: 600; }
+.leader-score { font-size: 1.8rem; line-height: 1; }
 .live-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
 @media (max-width: 760px) { .live-grid { grid-template-columns: 1fr; } }
 .live-dot { color: #a32d2d; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
@@ -358,5 +427,22 @@ label.dispute { color: var(--warn); }
 
 @media (max-width: 560px) {
   .hide-narrow { display: none; }
-  h1 { font-size: 1.35rem; }
+  h1 { font-size: 1.6rem; }
 }
+
+/* Phones: bottom bar instead of the top tabs. */
+.bottom-bar { display: none; }
+@media (max-width: 700px) {
+  .top-tabs { display: none; }
+  .league-head { border-bottom: 0; }
+  .bottom-bar {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; justify-content: space-around;
+    background: var(--surface); border-top: 1px solid var(--border); padding: 6px 8px calc(8px + env(safe-area-inset-bottom));
+  }
+  .bottom-bar a { flex: 1; display: flex; justify-content: center; padding: 10px 0; color: var(--text-2); border-radius: 12px; }
+  .bottom-bar a.on { color: var(--league); }
+  .bottom-bar a.on::after { content: ''; }
+  main { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+}
+.more-list a { display: flex; align-items: center; gap: 12px; padding: 16px; color: var(--text); text-decoration: none; font-weight: 600; }
+.more-list li + li { border-top: 1px solid var(--border); }

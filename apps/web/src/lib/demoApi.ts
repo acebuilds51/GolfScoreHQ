@@ -25,7 +25,7 @@ interface Db {
   users: Record<string, User>;
   leagues: {
     id: string; name: string; slug: string; ownerId: string; plan: Plan; joinCode: string | null; timezone: string;
-    logoUrl?: string | null; brandColor?: string | null; accentColor?: string | null;
+    logoUrl?: string | null; bannerUrl?: string | null; brandColor?: string | null; accentColor?: string | null;
   }[];
   members: { leagueId: string; userId: string; role: Role }[];
   players: { id: string; leagueId: string; displayName: string; isSub: boolean; active: boolean; userId: string | null }[];
@@ -111,6 +111,25 @@ export function demoApi(): DemoApi {
       throw new Error("You don't have permission to do that.");
     }
     return r;
+  }
+
+  /** Logo or banner: demo keeps the picture in this browser as a data URL. null removes it. */
+  async function demoBrandFile(leagueId: string, field: 'logoUrl' | 'bannerUrl', blob: Blob | null): Promise<string> {
+    const db = load();
+    requireCommissioner(db, leagueId);
+    if (blob && !has(db, leagueId, 'branding')) throw new Error('plan_feature: League logo and colors needs GolfScoreHQ Pro');
+    const url = blob
+      ? await new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result));
+          r.onerror = () => reject(new Error("That picture couldn't be read."));
+          r.readAsDataURL(blob);
+        })
+      : null;
+    const fresh = load();
+    fresh.leagues.find((x) => x.id === leagueId)![field] = url;
+    save(fresh);
+    return url ?? '';
   }
 
   /** Same checks and output as the send-recap server function. */
@@ -218,31 +237,13 @@ export function demoApi(): DemoApi {
       const role = roleIn(db, l.id);
       if (!role) return null;
       const league: League = { id: l.id, name: l.name, slug: l.slug, plan: l.plan, role, joinCode: l.joinCode, timezone: l.timezone, effectivePlan: l.plan, features: FEATURES[l.plan],
-        logoUrl: l.logoUrl ?? null, brandColor: l.brandColor ?? null, accentColor: l.accentColor ?? null };
+        logoUrl: l.logoUrl ?? null, bannerUrl: l.bannerUrl ?? null, brandColor: l.brandColor ?? null, accentColor: l.accentColor ?? null };
       return league;
     },
-    async uploadLogo(leagueId, png) {
-      const db = load();
-      requireCommissioner(db, leagueId);
-      if (!has(db, leagueId, 'branding')) throw new Error('plan_feature: League logo and colors needs GolfScoreHQ Pro');
-      // Demo keeps the picture in this browser, as a data URL.
-      const url = await new Promise<string>((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(String(r.result));
-        r.onerror = () => reject(new Error("That picture couldn't be read."));
-        r.readAsDataURL(png);
-      });
-      const fresh = load();
-      fresh.leagues.find((x) => x.id === leagueId)!.logoUrl = url;
-      save(fresh);
-      return url;
-    },
-    async removeLogo(leagueId) {
-      const db = load();
-      requireCommissioner(db, leagueId);
-      db.leagues.find((x) => x.id === leagueId)!.logoUrl = null;
-      save(db);
-    },
+    uploadLogo: (leagueId, png) => demoBrandFile(leagueId, 'logoUrl', png),
+    removeLogo: async (leagueId) => void (await demoBrandFile(leagueId, 'logoUrl', null)),
+    uploadBanner: (leagueId, jpeg) => demoBrandFile(leagueId, 'bannerUrl', jpeg),
+    removeBanner: async (leagueId) => void (await demoBrandFile(leagueId, 'bannerUrl', null)),
     async updateLeague(leagueId, patch) {
       const db = load();
       requireCommissioner(db, leagueId);
