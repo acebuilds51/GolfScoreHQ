@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - name: Check the key is set (otherwise the site would build in demo mode)
@@ -34,9 +34,10 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      # Wrangler is pinned: newer versions hand Pages deploys to Cloudflare Workers,
+      # which needs more token permissions than "Cloudflare Pages: Edit".
       - name: Publish to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: 3aed8b3c298c05cae272b310d9ea4864
-          command: pages deploy apps/web/dist --project-name golfscorehq --branch main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 3aed8b3c298c05cae272b310d9ea4864
+        run: npx --yes wrangler@4.83.0 pages deploy apps/web/dist --project-name golfscorehq --branch main --commit-hash "$GITHUB_SHA" --commit-message "deploy $GITHUB_SHA"
