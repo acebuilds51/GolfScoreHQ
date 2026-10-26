@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+*.log
+# Never commit real league exports (names, emails, phone numbers)
+*.xlsx
+data/private/
