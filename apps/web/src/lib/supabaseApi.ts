@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Api } from './api';
+import type { Api, CourseSummary, LookupCourse } from './api';
 import type { Contact, Course, Layout, League, LeagueSummary, Plan, Role, User } from './types';
 import { randomToken, sha256Hex } from './util';
 
@@ -10,7 +10,20 @@ function check<T>(res: { data: T; error: { message: string } | null }): T {
   return res.data;
 }
 
-const toUser = (u: { id: string; email?: string | null } | null | undefined): User | null =>
+/** Call the course-lookup server function and surface its message on failure. */
+async function invokeLookup(sb: SupabaseClient, body: Record<string, string>): Promise<unknown> {
+  const { data, error } = await sb.functions.invoke('course-lookup', { body });
+  if (!error) return data;
+  const ctx = (error as { context?: Response }).context;
+  if (ctx && typeof ctx.json === 'function') {
+    const detail = await ctx.json().catch(() => null);
+    if (detail?.error) throw new Error(detail.error);
+    if (ctx.status === 404) throw new Error("Course lookup isn't set up yet. Enter the pars by hand for now.");
+  }
+  throw new Error("Course lookup isn't available right now. Enter the pars by hand for now.");
+}
+
+const toUser =(u: { id: string; email?: string | null } | null | undefined): User | null =>
   u ? { id: u.id, email: u.email ?? '' } : null;
 
 export function supabaseApi(url: string, anonKey: string): Api {
@@ -145,6 +158,13 @@ export function supabaseApi(url: string, anonKey: string): Api {
       check(await sb.from('league_members').update({ role }).eq('league_id', leagueId).eq('user_id', userId));
     },
 
+    async searchCourses(query) {
+      return ((await invokeLookup(sb, { action: 'search', query })) as { courses: CourseSummary[] }).courses;
+    },
+    async lookupCourse(id) {
+      return ((await invokeLookup(sb, { action: 'course', id })) as { course: LookupCourse }).course;
+    },
+
     async courses(leagueId) {
       const rows = check(
         await sb.from('courses').select('id, name, city, state, league_id, layouts(id, name, tees, holes, rating, slope)').or(`league_id.eq.${leagueId},league_id.is.null`).order('name'),
@@ -158,7 +178,14 @@ export function supabaseApi(url: string, anonKey: string): Api {
     },
     async createCourse(leagueId, course) {
       const c = check(
-        await sb.from('courses').insert({ league_id: leagueId, name: course.name, city: course.city || null, state: course.state || null }).select('id').single(),
+        await sb
+          .from('courses')
+          .insert({
+            league_id: leagueId, name: course.name, city: course.city || null, state: course.state || null,
+            external_source: course.source?.provider ?? null, external_id: course.source?.id ?? null,
+          })
+          .select('id')
+          .single(),
       ) as Row;
       check(await sb.from('layouts').insert(course.layouts.map((l) => ({ course_id: c.id, name: l.name, tees: l.tees, holes: l.holes, rating: l.rating, slope: l.slope }))));
       return c.id;

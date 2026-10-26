@@ -158,6 +158,11 @@ textarea { resize: vertical; }
 .segmented label.on { border-color: var(--brand-2); background: var(--surface-2); }
 .segmented input { width: auto; }
 
+.notice { background: var(--accent-bg); color: var(--accent-text); border-radius: 8px; padding: 8px 12px; }
+.list.picker li + li { border-top: 1px solid var(--border); }
+.list.picker button { all: unset; display: block; width: 100%; box-sizing: border-box; padding: 10px 8px; cursor: pointer; border-radius: 6px; }
+.list.picker button:hover, .list.picker button:focus-visible { background: var(--surface); outline: 2px solid var(--brand-2); outline-offset: -2px; }
+
 .scroll-x { overflow-x: auto; }
 table.holes { border-collapse: collapse; margin-top: 6px; font-size: 0.85rem; }
 table.holes th { text-align: left; padding: 4px 8px 4px 0; color: var(--text-2); font-weight: 600; }

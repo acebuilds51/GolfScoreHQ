@@ -88,6 +88,8 @@ export interface NewCourse {
   city?: string;
   state?: string;
   layouts: Omit<Layout, 'id'>[];
+  /** Set when the course was filled in from the course lookup. */
+  source?: { provider: 'golfcourseapi'; id: string };
 }
 
 export const COMMISSIONER_ROLES: Role[] = ['owner', 'commissioner'];
