@@ -295,11 +295,14 @@ export function supabaseApi(url: string, anonKey: string): Api {
       const rows = check(await sb.from('ledger_entries').select('player_id, round_id, kind, amount_cents, hole_number').eq('event_id', eventId)) as Row[];
       return rows.map((r) => ({ playerId: r.player_id, roundId: r.round_id, kind: r.kind, amountCents: r.amount_cents, holeNumber: r.hole_number }));
     },
-    async recapPreview(eventId) {
-      return (await invokeRecap(sb, { eventId })) as RecapPreview;
+    async recapPreview(eventId, story) {
+      return (await invokeRecap(sb, { eventId, story: story ?? null })) as RecapPreview;
     },
-    async sendRecap(eventId, force = false) {
-      return (await invokeRecap(sb, { eventId, send: true, force })) as { sent: number; missing: string[] };
+    async draftRecapStory(eventId) {
+      return ((await invokeRecap(sb, { eventId, draftStory: true })) as { story: string }).story;
+    },
+    async sendRecap(eventId, opts = {}) {
+      return (await invokeRecap(sb, { eventId, send: true, force: !!opts.force, story: opts.story ?? null })) as { sent: number; missing: string[] };
     },
     async recapPref(playerId) {
       const row = check(await sb.from('notification_prefs').select('weekly_recap').eq('player_id', playerId).maybeSingle()) as Row | null;

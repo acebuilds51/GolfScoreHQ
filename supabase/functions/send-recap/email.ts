@@ -19,6 +19,8 @@ export interface RecapEmailInput {
   weekCents: number | null;
   seasonCents: number | null;
   payment: PaymentHandles;
+  /** The commissioner-approved write-up of the week (AI-drafted), shown above the results. */
+  story?: string | null;
 }
 
 export interface RecapEmail {
@@ -54,12 +56,14 @@ export function buildRecapEmail(i: RecapEmailInput): RecapEmail {
     if (i.seasonCents !== null) personal.push(`Season to date: ${signed(i.seasonCents)}.`);
   }
   const pay = i.weekCents !== null && i.weekCents < 0 ? paymentOptions(i.payment, -i.weekCents) : [];
+  const story = (i.story ?? '').trim().split(/\n\s*\n/).map((p) => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
 
   const text = [
     `Hi ${first},`,
     '',
     ...(personal.length ? [personal.join(' '), ''] : []),
     ...(pay.length ? ['Pay the commissioner:', ...pay.map((p) => `  ${p.label}${p.url ? ` — ${p.url}` : ''}`), ''] : []),
+    ...story.flatMap((p) => [p, '']),
     i.recapBody,
     '',
     `See everything in the app: ${i.leagueUrl}`,
@@ -95,6 +99,7 @@ export function buildRecapEmail(i: RecapEmailInput): RecapEmail {
     ${pay.length ? `<div style="background:#e1f5ee;border-radius:8px;padding:12px;margin:0 0 16px"><div style="font-weight:700;margin-bottom:6px">Pay the commissioner</div>${pay
       .map((p) => (p.url ? `<div><a href="${esc(p.url)}" style="color:#0b6247">${esc(p.label)}</a></div>` : `<div>${esc(p.label)}</div>`))
       .join('')}</div>` : ''}
+    ${story.length ? `<div style="border-left:3px solid #14365c;padding:2px 0 2px 12px;margin:0 0 16px">${story.map((p) => `<p style="margin:0 0 8px">${esc(p)}</p>`).join('')}</div>` : ''}
     ${bodyHtml}
     <p style="margin:20px 0 0"><a href="${esc(i.leagueUrl)}" style="display:inline-block;background:#14365c;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600">Open GolfScoreHQ</a></p>
   </div>

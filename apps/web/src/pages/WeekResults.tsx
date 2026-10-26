@@ -3,6 +3,7 @@ import { ErrorText } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
 import { buildWeekRecap } from '../lib/recap';
+import { STORY_MAX_CHARS } from '../../../../supabase/functions/send-recap/story';
 import { asBestBall, fmtMoney } from '../lib/scoring';
 import { settleWeek, totalsFromLedger, type PlayerTotals } from '../lib/settlement';
 import { isCommissioner, type Layout, type LeagueEvent, type RoundData, type Season } from '../lib/types';
@@ -183,7 +184,18 @@ function WeekRecap({ event, season, layout, rounds, names }: {
       seasonLedger: seasonLedger.filter((e) => upTo.has(e.eventId)),
     }).text;
   }, [event.id, event.status, rounds]);
-  const preview = useAsync(async () => (commish ? api.recapPreview(event.id) : null), [event.id, commish, sentMsg]);
+  // The AI write-up: drafted on request, edited freely, and sent as the commissioner leaves it.
+  const [story, setStory] = useState('');
+  // What the preview shows; updated when a draft arrives or the commissioner finishes editing.
+  const [previewStory, setPreviewStory] = useState('');
+  const drafting = useAction();
+  const preview = useAsync(async () => (commish ? api.recapPreview(event.id, previewStory || null) : null), [event.id, commish, sentMsg, previewStory]);
+
+  async function draft() {
+    if (story.trim() && !window.confirm('Replace your write-up with a new draft?')) return;
+    const s = await drafting.run(() => api.draftRecapStory(event.id));
+    if (s) { setStory(s); setPreviewStory(s); }
+  }
 
   async function copy() {
     if (!text.data) return;
@@ -203,7 +215,7 @@ function WeekRecap({ event, season, layout, rounds, names }: {
       ? `This week was already emailed. Send it again to ${p.recipients} golfer${p.recipients === 1 ? '' : 's'}?`
       : `Email the week ${event.weekNumber} recap to ${p.recipients} golfer${p.recipients === 1 ? '' : 's'}?`;
     if (!window.confirm(ask)) return;
-    const res = await run(() => api.sendRecap(event.id, force));
+    const res = await run(() => api.sendRecap(event.id, { force, story: story.trim() || null }));
     if (res) setSentMsg(`Sent to ${res.sent} golfer${res.sent === 1 ? '' : 's'}${api.mode === 'demo' ? ' (demo: no real emails go out)' : ''}.`);
   }
 
@@ -229,6 +241,27 @@ function WeekRecap({ event, season, layout, rounds, names }: {
               {p.missing.length > 0 && (
                 <p className="small warn">No email on file for {p.missing.join(', ')}. Add them on the Roster page.</p>
               )}
+              <div className="subcard stack">
+                <div className="row between wrap">
+                  <strong>Write-up</strong>
+                  <button className="btn btn-sm" disabled={drafting.busy || busy} onClick={draft}>
+                    {drafting.busy ? 'Writing…' : story.trim() ? 'Write a new one' : 'Write it up with AI'}
+                  </button>
+                </div>
+                <p className="small muted">
+                  A short, fun opening for the top of the email, written from this week's results. Read it over and change anything you like; it's sent exactly as it appears here. Leave it empty to send just the results.
+                  {api.mode === 'demo' && ' (Demo: a fill-in-the-blanks sample. The live site writes it with AI.)'}
+                </p>
+                <textarea
+                  rows={6}
+                  maxLength={STORY_MAX_CHARS}
+                  value={story}
+                  placeholder="Tap “Write it up with AI”, or type your own."
+                  onChange={(e) => setStory(e.target.value)}
+                  onBlur={() => setPreviewStory(story.trim())}
+                />
+                <ErrorText>{drafting.error}</ErrorText>
+              </div>
               {sentMsg && <p className="small good">{sentMsg}</p>}
               <div className="row wrap">
                 <button className="btn btn-primary btn-sm" disabled={busy || p.recipients === 0} onClick={() => send(!!p.alreadySent)}>
