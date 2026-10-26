@@ -10,7 +10,7 @@ export function Header() {
       {api.mode === 'demo' && <div className="demo-bar">Demo mode — everything stays in this browser. No emails are sent.</div>}
       <header className="topbar">
         <Link to={user ? '/leagues' : '/'} className="brand">
-          <img src="/favicon.svg" alt="" width={28} height={28} />
+          <img className="brand-icon" src="/icon-192.png" alt="" width={36} height={36} />
           <span>GolfScoreHQ</span>
         </Link>
         {user && (
