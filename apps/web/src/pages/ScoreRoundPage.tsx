@@ -1,11 +1,11 @@
 import { scoreMatch, totalsByPlayer } from '@golfscorehq/engine';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ErrorText } from '../components/ui';
+import { ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
 import { enqueue, flush, readQueue, type PendingOp } from '../lib/pendingQueue';
-import { asBestBall, basicRules, currentMarker, fmtMoney, holesCompleted, matchSoFar, toEngineRound } from '../lib/scoring';
+import { asBestBall, basicRules, currentMarker, fmtMoney, holesCompleted, matchSoFar, scoreMark, toEngineRound } from '../lib/scoring';
 import type { CtpEntry, Layout, Player, RoundData, Season } from '../lib/types';
 import { loadWeek, teamName } from './WeekPage';
 
@@ -23,7 +23,7 @@ export function ScoreRoundPage() {
   }, [league.id, roundId]);
 
   if (data.error) return <div className="page"><ErrorText>{data.error}</ErrorText></div>;
-  if (!data.data) return <div className="page muted">{data.loading ? 'Loading…' : 'Round not found.'}</div>;
+  if (!data.data) return (data.loading ? <PageSkeleton cards={1} /> : <div className="page muted">Round not found.</div>);
   const { round, layout, season, players, rounds, event } = data.data;
   if (!layout || !season) return <div className="page"><p className="muted">This week has no course or season set up yet.</p></div>;
   const locked = event.status === 'settled' || event.status === 'rainout';
@@ -40,6 +40,10 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
   const [reviewing, setReviewing] = useState(initial.status === 'submitted' || holesCompleted(initial, layout) === layout.holes.length);
   const [queue, setQueue] = useState<PendingOp[]>(() => readQueue(initial.id));
   const [saving, setSaving] = useState(false);
+  const [cheer, setCheer] = useState<string | null>(null);
+  const clearCheer = useCallback(() => setCheer(null), []);
+  // Swipe left for the next hole, right for the previous one.
+  const touch = useRef<{ x: number; y: number } | null>(null);
   const queueRef = useRef(queue);
   queueRef.current = queue;
   const { busy, error, setError, run } = useAction();
@@ -134,44 +138,77 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
     );
   }
 
-  const toParLabel = (d: number) => (d <= -3 ? 'Albatross' : d === -2 ? 'Eagle' : d === -1 ? 'Birdie' : d === 0 ? 'Par' : d === 1 ? 'Bogey' : d === 2 ? 'Double' : `+${d}`);
+  const toParLabel = (d: number) => (d <= -3 ? 'Albatross' : d === -2 ? 'Eagle' : d === -1 ? 'Birdie' : d === 0 ? '' : d === 1 ? 'Bogey' : d === 2 ? 'Double' : `+${d}`);
+  const lead = status.result.holesWon.A - status.result.holesWon.B;
+  const matchLine = !hasMatch ? null
+    : lead === 0 ? (status.thru ? `All square thru ${status.thru}` : null)
+    : `${teamName(sideIds(lead > 0 ? 'A' : 'B'), names)} ${Math.abs(lead)} up thru ${status.thru}`;
+  const step = (playerId: string, by: number) => {
+    // Count from the latest value, not the rendered one, so quick double-taps both count.
+    setDraft((d) => ({ ...d, [playerId]: Math.min(20, Math.max(1, (d[playerId] ?? hole.par) + by)) }));
+    navigator.vibrate?.(8);
+  };
+  const next = () => {
+    const done = commitHole();
+    if (!done) return;
+    celebrate(done);
+    if (holeIdx < layout.holes.length - 1) go(holeIdx + 1);
+    else { setTimeout(sendQueue, 0); setReviewing(true); window.scrollTo(0, 0); }
+  };
+  const back = () => { if (holeIdx > 0 && commitHole()) go(holeIdx - 1); };
+  function celebrate(r: RoundData) {
+    const best = r.players
+      .map((p) => ({ id: p.playerId, s: r.scores[p.playerId]?.[hole.number] ?? hole.par }))
+      .sort((a, b) => a.s - b.s)[0];
+    if (!best) return;
+    const d = best.s - hole.par;
+    const first = (names.get(best.id) ?? '').split(' ')[0];
+    if (best.s === 1) setCheer(`Hole in one! ${first}`);
+    else if (d <= -2) setCheer(`${d <= -3 ? 'Albatross' : 'Eagle'}! ${first}`);
+  }
 
   return (
-    <div className="page stack scorer">
+    <div
+      className="page stack scorer"
+      onTouchStart={(e) => { const t = e.touches[0]!; touch.current = { x: t.clientX, y: t.clientY }; }}
+      onTouchEnd={(e) => {
+        const s = touch.current; touch.current = null;
+        if (!s || (e.target as HTMLElement).closest('select, input, button, .card')) return;
+        const t = e.changedTouches[0]!;
+        const dx = t.clientX - s.x, dy = t.clientY - s.y;
+        if (Math.abs(dx) > 70 && Math.abs(dy) < 50) (dx < 0 ? next : back)();
+      }}
+    >
+      {cheer && <Cheer text={cheer} onDone={clearCheer} />}
       <div className="row between">
         <Link to={`../week/${eventId}`} className="small">← Week</Link>
-        <span className={`small ${queue.length ? 'warn' : 'muted'}`}>{saving ? 'Saving…' : queue.length ? `${queue.length} change${queue.length === 1 ? '' : 's'} waiting to save` : 'All changes saved'}</span>
+        <span className={`small ${queue.length ? 'warn' : 'muted'}`}>{saving ? 'Saving…' : queue.length ? `${queue.length} waiting to save` : 'Saved'}</span>
       </div>
 
-      <div className="hole-head">
-        <div className="hole-num">{hole.number}</div>
-        <div className="grow">
-          <h2>Hole {hole.number} · Par {hole.par}</h2>
-          <div className="small muted">Hole {holeIdx + 1} of {layout.holes.length}{hole.strokeIndex ? ` · Hcp ${hole.strokeIndex}` : ''} · Tee {round.teeSlot}</div>
+      <div className="hole-hero">
+        <div className="hole-hero-top">
+          <div>
+            <div className="hole-hero-label">Hole</div>
+            <div className="num hole-hero-num">{hole.number}</div>
+          </div>
+          <div className="num hole-hero-par">Par {hole.par}</div>
         </div>
+        {matchLine && <div className="hole-hero-match">{matchLine}</div>}
       </div>
 
-      {hasMatch && (
-        <div className="match-bar">
-          <div className={status.result.holesWon.A > status.result.holesWon.B ? 'lead' : ''}><span>{teamName(sideIds('A'), names)}</span><strong>{status.result.holesWon.A}</strong></div>
-          <div className="muted small">{status.thru ? `thru ${status.thru}` : 'holes won'}</div>
-          <div className={status.result.holesWon.B > status.result.holesWon.A ? 'lead' : ''}><span>{teamName(sideIds('B'), names)}</span><strong>{status.result.holesWon.B}</strong></div>
-        </div>
-      )}
-
-      <div className="score-grid">
+      <div className="score-list">
         {round.players.map((p) => {
           const v = draft[p.playerId] ?? hole.par;
+          const label = toParLabel(v - hole.par);
           return (
-            <div key={p.playerId} className={`score-card side-${p.side ?? 'x'}`}>
-              <div className="small strong-name">{names.get(p.playerId) ?? '?'}{p.side === null && <span className="muted"> · skins</span>}</div>
-              <div className="stepper">
-                {/* Count from the latest value, not the rendered one, so quick double-taps both count */}
-                <button type="button" aria-label="One fewer stroke" onClick={() => setDraft((d) => ({ ...d, [p.playerId]: Math.max(1, (d[p.playerId] ?? hole.par) - 1) }))}>−</button>
-                <span className="big">{v}</span>
-                <button type="button" aria-label="One more stroke" onClick={() => setDraft((d) => ({ ...d, [p.playerId]: Math.min(20, (d[p.playerId] ?? hole.par) + 1) }))}>+</button>
+            <div key={p.playerId} className="score-row">
+              <div className="grow">
+                <div className="score-name">{names.get(p.playerId) ?? '?'}</div>
+                {(label || p.side === null) && <div className={`small ${v < hole.par ? 'under' : 'muted'}`}>{[label, p.side === null ? 'skins only' : ''].filter(Boolean).join(' · ')}</div>}
               </div>
-              <div className={`small ${v < hole.par ? 'good' : 'muted'}`}>{toParLabel(v - hole.par)}</div>
+              <button type="button" className="step minus" aria-label={`One fewer stroke for ${names.get(p.playerId)}`} onClick={() => step(p.playerId, -1)}>−</button>
+              <span className={`num score-big${v < hole.par ? ' under' : ''}`}>{v}</span>
+              <button type="button" className="step plus" aria-label={`One more stroke for ${names.get(p.playerId)}`} onClick={() => step(p.playerId, 1)}>+</button>
             </div>
           );
         })}
@@ -209,13 +246,25 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
 
       <ErrorText>{error}</ErrorText>
       <div className="hole-nav">
-        {holeIdx > 0 ? <button type="button" className="btn" onClick={() => { if (commitHole()) go(holeIdx - 1); }}>← Back</button> : <span />}
-        {holeIdx < layout.holes.length - 1 ? (
-          <button type="button" className="btn btn-primary" onClick={() => { if (commitHole()) go(holeIdx + 1); }}>Next hole →</button>
-        ) : (
-          <button type="button" className="btn btn-primary" onClick={() => { if (commitHole()) { setTimeout(sendQueue, 0); setReviewing(true); window.scrollTo(0, 0); } }}>Review scores</button>
-        )}
+        {holeIdx > 0 ? <button type="button" className="btn" onClick={back}>← Back</button> : <span />}
+        <button type="button" className="btn btn-primary" onClick={next}>{holeIdx < layout.holes.length - 1 ? 'Next hole →' : 'Review scores'}</button>
       </div>
+      <p className="small muted center hint-swipe">Swipe to change holes</p>
+    </div>
+  );
+}
+
+/** A quick celebration for an eagle, albatross or ace. */
+function Cheer({ text, onDone }: { text: string; onDone: () => void }) {
+  useEffect(() => {
+    navigator.vibrate?.([30, 40, 30]);
+    const t = setTimeout(onDone, 2200);
+    return () => clearTimeout(t);
+  }, [onDone]);
+  return (
+    <div className="cheer" role="status" onClick={onDone}>
+      <div className="cheer-burst" aria-hidden="true">{Array.from({ length: 14 }, (_, i) => <i key={i} style={{ ['--i' as string]: i }} />)}</div>
+      <div className="num cheer-text">{text}</div>
     </div>
   );
 }
@@ -300,7 +349,7 @@ function Review({ round, layout, season, names, queueLength, busy, error, locked
                   {s.map((v, i) => {
                     const d = v == null ? null : v - layout.holes[i]!.par;
                     const won = hasMatch && p.side && m.holeWinners[i] === p.side;
-                    return <td key={i} className={`${won ? 'won' : ''} ${d !== null && d <= -2 ? 'eagle' : d === -1 ? 'birdie' : ''}`}><span>{v ?? '–'}</span></td>;
+                    return <td key={i} className={`${won ? 'won' : ''} ${scoreMark(d)}`}><span>{v ?? '–'}</span></td>;
                   })}
                   <td><strong>{tot || '–'}</strong></td>
                 </tr>

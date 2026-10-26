@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { EmptyState, ErrorText } from '../components/ui';
+import { EmptyState, ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague, useLiveRefresh } from '../lib/hooks';
 import { allLayouts, fmtDate, matchSoFar } from '../lib/scoring';
@@ -32,7 +32,7 @@ export function WeekPage() {
   useLiveRefresh(league.id, data.reload, data.data?.event.status !== 'settled');
 
   if (data.error) return <div className="page"><ErrorText>{data.error}</ErrorText></div>;
-  if (!data.data) return <div className="page muted">{data.loading ? 'Loading…' : 'Week not found.'}</div>;
+  if (!data.data) return (data.loading ? <PageSkeleton /> : <div className="page muted">Week not found.</div>);
   const { event, season, layout, layouts, players, rounds } = data.data;
   const names = new Map(players.map((p) => [p.id, p.displayName]));
 

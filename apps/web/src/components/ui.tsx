@@ -47,6 +47,23 @@ export function CopyField({ value, label }: { value: string; label?: string }) {
   );
 }
 
+/** Gray shapes shown while a page loads, so it feels instant instead of saying "Loading…". */
+export function PageSkeleton({ cards = 2 }: { cards?: number }) {
+  return (
+    <div className="page stack" aria-busy="true" aria-label="Loading">
+      <div className="skel" style={{ height: 28, width: '45%' }} />
+      {Array.from({ length: cards }, (_, i) => (
+        <div key={i} className="card stack">
+          <div className="skel" style={{ height: 18, width: '35%' }} />
+          <div className="skel" style={{ height: 14 }} />
+          <div className="skel" style={{ height: 14, width: '80%' }} />
+          <div className="skel" style={{ height: 14, width: '60%' }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="empty">

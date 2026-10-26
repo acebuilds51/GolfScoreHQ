@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { EmptyState, ErrorText, ProLock } from '../components/ui';
+import { EmptyState, ErrorText, ProLock, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
 import { allLayouts, basicRules, describeRules, fmtDate, formFromRules, layoutForWeek, nextDate, OCBC_STYLE_FORM, rulesFromForm, type SideGameForm } from '../lib/scoring';
@@ -20,7 +20,7 @@ export function PlayPage() {
   const [editingRules, setEditingRules] = useState(false);
 
   if (data.error) return <div className="page"><ErrorText>{data.error}</ErrorText></div>;
-  if (!data.data) return <div className="page muted">Loading…</div>;
+  if (!data.data) return <PageSkeleton />;
   const { season, courses, events } = data.data;
 
   if (!season) {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ErrorText } from '../components/ui';
+import { ErrorText, PageSkeleton } from '../components/ui';
 import { friendlyError } from '../lib/api';
 import { api } from '../lib/backend';
 import { useAuth } from '../lib/hooks';
@@ -29,7 +29,7 @@ export function JoinInvitePage() {
     })();
   }, [user, token, nav]);
 
-  if (loading) return <div className="page muted">Loading…</div>;
+  if (loading) return <PageSkeleton />;
   return (
     <div className="page narrow">
       <h1>You're invited to a league</h1>

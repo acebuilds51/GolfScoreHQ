@@ -47,13 +47,22 @@ export function brandStyle(l: Pick<League, 'brandColor' | 'accentColor' | 'featu
 /** The league's logo, if it has branding. */
 export const brandLogo = (l: Pick<League, 'logoUrl' | 'features'>) => (l.features.includes('branding') ? l.logoUrl : null);
 
+/** The league's course photo banner, if it has branding. */
+export const brandBanner = (l: Pick<League, 'bannerUrl' | 'features'>) => (l.features.includes('branding') ? l.bannerUrl : null);
+
 export const MAX_LOGO_PX = 512;
+export const MAX_BANNER_PX = 1600;
+
+/** A logo: PNG (keeps a clear background), at most 512px on its longest side. */
+export const resizeLogo = (file: File) => resizeImage(file, MAX_LOGO_PX, 'image/png');
+/** A course photo: JPEG, at most 1600px wide, small enough for phones on the course. */
+export const resizeBanner = (file: File) => resizeImage(file, MAX_BANNER_PX, 'image/jpeg', 0.82);
 
 /**
- * Shrink a picked image to a PNG no bigger than 512px on its longest side.
- * Keeps transparency, drops camera metadata, and keeps uploads small.
+ * Shrink a picked image so its longest side is at most `maxPx`.
+ * Drops camera metadata (including location) and keeps uploads small.
  */
-export async function resizeLogo(file: File, maxPx = MAX_LOGO_PX): Promise<Blob> {
+async function resizeImage(file: File, maxPx: number, type: 'image/png' | 'image/jpeg', quality?: number): Promise<Blob> {
   if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) throw new Error('Pick a PNG, JPG or WebP picture.');
   if (file.size > 15 * 1024 * 1024) throw new Error('That picture is too large. Pick one under 15 MB.');
   const bitmap = await createImageBitmap(file).catch(() => {
@@ -65,7 +74,11 @@ export async function resizeLogo(file: File, maxPx = MAX_LOGO_PX): Promise<Blob>
   canvas.height = Math.max(1, Math.round(bitmap.height * scale));
   const ctx = canvas.getContext('2d')!;
   ctx.imageSmoothingQuality = 'high';
+  if (type === 'image/jpeg') {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close();
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("That picture couldn't be read."))), 'image/png'));
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("That picture couldn't be read."))), type, quality));
 }

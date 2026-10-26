@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { EmptyState, ErrorText, ProLock } from '../components/ui';
+import { EmptyState, ErrorText, ProLock, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAsync, useLeague } from '../lib/hooks';
 import { allLayouts, asBestBall, fmtMoney } from '../lib/scoring';
@@ -38,7 +38,7 @@ export function StandingsPage() {
   const [open, setOpen] = useState<string | null>(null);
 
   if (data.error) return <div className="page"><ErrorText>{data.error}</ErrorText></div>;
-  if (data.loading && !data.data) return <div className="page muted">Loading…</div>;
+  if (data.loading && !data.data) return <PageSkeleton />;
   if (!data.data) {
     return <div className="page"><EmptyState title="No season yet"><p className="muted">Standings appear once the season is set up and the first week is settled.</p></EmptyState></div>;
   }

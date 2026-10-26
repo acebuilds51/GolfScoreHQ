@@ -27,6 +27,9 @@ export interface Api {
   /** Branding (Pro): upload an already-resized PNG as the league logo. Returns its URL. */
   uploadLogo(leagueId: string, png: Blob): Promise<string>;
   removeLogo(leagueId: string): Promise<void>;
+  /** Branding (Pro): course photo banner, already resized to a JPEG. */
+  uploadBanner(leagueId: string, jpeg: Blob): Promise<string>;
+  removeBanner(leagueId: string): Promise<void>;
 
   players(leagueId: string): Promise<Player[]>;
   contacts(leagueId: string): Promise<Record<string, Contact>>;
