@@ -16,6 +16,7 @@ export function MorePage() {
     ...(isCommissioner(league.role) ? [
       { to: '../settings', label: 'Settings', icon: 'settings' as const },
       { to: '../setup', label: 'We set up your league', icon: 'users' as const },
+      { to: '../import', label: 'Import past rounds', icon: 'download' as const },
     ] : []),
   ];
   return (
