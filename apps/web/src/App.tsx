@@ -19,6 +19,8 @@ import { SettingsPage } from './pages/SettingsPage';
 import { StandingsPage } from './pages/StandingsPage';
 import { AwardsPage } from './pages/AwardsPage';
 import { PlayerPage } from './pages/PlayerPage';
+import { SetupServicePage } from './pages/SetupServicePage';
+import { StaffPage } from './pages/StaffPage';
 import { SignInPage } from './pages/SignInPage';
 import { TvPage } from './pages/TvPage';
 
@@ -43,6 +45,7 @@ export function App() {
           <Route path="/" element={auth.loading ? <PageSkeleton /> : auth.user ? <Navigate to="/leagues" replace /> : <SignInPage />} />
           <Route path="/join/:token" element={<JoinInvitePage />} />
           <Route path="/leagues" element={<RequireUser><LeaguesPage /></RequireUser>} />
+          <Route path="/staff" element={<RequireUser><StaffPage /></RequireUser>} />
           <Route path="/l/:slug" element={<RequireUser><LeagueLayout /></RequireUser>}>
             <Route index element={<OverviewPage />} />
             <Route path="play" element={<PlayPage />} />
@@ -51,6 +54,7 @@ export function App() {
             <Route path="standings" element={<StandingsPage />} />
             <Route path="awards" element={<AwardsPage />} />
             <Route path="player/:playerId" element={<PlayerPage />} />
+            <Route path="setup" element={<SetupServicePage />} />
             <Route path="live" element={<LivePage />} />
             <Route path="live/:eventId" element={<LivePage />} />
             <Route path="roster" element={<RosterPage />} />

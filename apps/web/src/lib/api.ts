@@ -3,6 +3,7 @@ import type {
   Club, LeagueBilling,
   Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, LedgerRow, Member, NewCourse, NewPlayer, Player, Role,
   PaymentHandles, RecapPreview, RoundData, RoundPlayer, RsvpStatus, ScoreEntry, Season, SubOffer, SubRequest, TvDisplay, TvFeed, TvSettings, User,
+  NewSetupRequest, SetupFile, SetupRequest, SetupStatus, StaffSetupRequest,
 } from './types';
 
 export type { CourseSummary, LookupCourse, LookupTee } from '../../../../supabase/functions/course-lookup/normalize';
@@ -127,6 +128,26 @@ export interface Api {
   revokeTvDisplay(id: string): Promise<void>;
   /** What a TV link shows. Works without signing in. null = unknown or turned-off link. */
   tvFeed(token: string): Promise<TvFeed | null>;
+
+  /** "We set up your league" (Pro): the league's requests, newest first. */
+  setupRequests(leagueId: string): Promise<SetupRequest[]>;
+  /** Upload one file for a request (before sending it). */
+  uploadSetupFile(leagueId: string, file: File): Promise<SetupFile>;
+  removeSetupFile(path: string): Promise<void>;
+  /** Sends the request and emails GolfScoreHQ support. */
+  createSetupRequest(leagueId: string, r: NewSetupRequest): Promise<string>;
+  /** Add notes or files to an open request (e.g. answering staff's question); puts it back in the queue. */
+  updateSetupRequest(id: string, patch: { notes: string; files: SetupFile[] }): Promise<void>;
+  /** A short-lived download link for an uploaded file. */
+  setupFileUrl(path: string): Promise<string>;
+
+  /** GolfScoreHQ staff only. */
+  isStaff(): Promise<boolean>;
+  staffSetupQueue(): Promise<StaffSetupRequest[]>;
+  /** Join the request's league as a commissioner (with the commissioner's consent); returns its slug. */
+  staffJoinLeague(requestId: string): Promise<string>;
+  /** Change status and reply; emails the commissioner. 'done' removes staff's access to the league. */
+  staffUpdateSetupRequest(requestId: string, status: SetupStatus, reply: string): Promise<void>;
 
   ledger(eventId: string): Promise<LedgerRow[]>;
   /** Every round and money entry in a season, for standings. */

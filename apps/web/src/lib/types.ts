@@ -232,6 +232,44 @@ export interface TvDisplay {
   createdAt: string;
 }
 
+// ── "We set up your league" ─────────────────────────────────────────────────
+
+export type SetupStatus = 'requested' | 'in_progress' | 'needs_info' | 'done';
+export type SetupWant = 'roster' | 'handicaps' | 'course' | 'history' | 'side_games';
+
+export interface SetupFile {
+  path: string;
+  name: string;
+  size: number;
+}
+
+export interface NewSetupRequest {
+  notes: string;
+  wants: SetupWant[];
+  files: SetupFile[];
+  contactPhone: string | null;
+  /** The commissioner lets GolfScoreHQ support join the league as a commissioner until it's done. */
+  staffAccess: boolean;
+}
+
+export interface SetupRequest extends NewSetupRequest {
+  id: string;
+  leagueId: string;
+  status: SetupStatus;
+  staffReply: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StaffSetupRequest extends SetupRequest {
+  leagueName: string;
+  leagueSlug: string;
+  leaguePlan: string;
+  requestedByEmail: string | null;
+  /** Staff member who joined the league for this request. */
+  staffUserId: string | null;
+}
+
 /** Everything a Clubhouse TV shows, from tv_feed(). */
 export interface TvFeed {
   error?: 'plan';

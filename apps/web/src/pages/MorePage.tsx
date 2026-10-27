@@ -13,7 +13,10 @@ export function MorePage() {
     { to: '../awards', label: 'Season awards and stats', icon: 'trophy' },
     { to: '../roster', label: 'Roster', icon: 'users' },
     { to: '../courses', label: 'Courses', icon: 'map' },
-    ...(isCommissioner(league.role) ? [{ to: '../settings', label: 'Settings', icon: 'settings' as const }] : []),
+    ...(isCommissioner(league.role) ? [
+      { to: '../settings', label: 'Settings', icon: 'settings' as const },
+      { to: '../setup', label: 'We set up your league', icon: 'users' as const },
+    ] : []),
   ];
   return (
     <div className="page stack">

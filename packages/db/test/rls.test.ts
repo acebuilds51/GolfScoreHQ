@@ -367,6 +367,43 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
     expect(await as(db, joe, () => rows(db, 'select weekly_recap from notification_prefs'))).toEqual([{ weekly_recap: false }]);
   });
 
+  it('runs the setup service: upload, staff queue, staff joins with consent, done removes access', async () => {
+    const staff = await createUser(db, 'staff@example.com');
+    await db.query('insert into staff_users (user_id) values ($1)', [staff]);
+    await setPlan(oak, 'pro');
+    const upload = (user: string, leagueId: string) =>
+      as(db, user, () => db.query(`insert into storage.objects (bucket_id, name) values ('setup-uploads', $1)`, [`${leagueId}/abc-roster.xlsx`]));
+    await upload(tony, oak);
+    await expect(upload(joe, oak)).rejects.toThrow(/row-level security/); // players can't
+    await expect(upload(sam, oak)).rejects.toThrow(/row-level security/); // other commissioners can't
+    await expect(upload(sam, pine)).rejects.toThrow(/row-level security/); // Free league
+
+    // A commissioner can't sneak in a staff reply.
+    const [req] = await as(db, tony, () => rows<{ id: string; staff_reply: string | null }>(db,
+      `insert into setup_requests (league_id, requested_by, notes, wants, files, staff_reply) values ($1, $2, 'Our 2026 sheet', '{roster,history}', $3, 'fake') returning id, staff_reply`,
+      [oak, tony, JSON.stringify([{ path: `${oak}/abc-roster.xlsx`, name: 'roster.xlsx', size: 1000 }])]));
+    expect(req!.staff_reply).toBeNull();
+
+    // Only staff see the queue and the files.
+    await expect(as(db, joe, () => db.query('select * from staff_setup_queue()'))).rejects.toThrow(/staff only/);
+    const queue = await as(db, staff, () => rows<{ league_name: string; requested_by_email: string; status: string }>(db, 'select league_name, requested_by_email, status from staff_setup_queue()'));
+    expect(queue).toEqual([{ league_name: 'Oak Creek Men', requested_by_email: 'tony@example.com', status: 'requested' }]);
+    expect(await as(db, staff, () => rows(db, `select name from storage.objects where bucket_id = 'setup-uploads'`))).toHaveLength(1);
+    expect(await as(db, joe, () => rows(db, `select name from storage.objects where bucket_id = 'setup-uploads'`))).toEqual([]);
+
+    // Staff joins as a commissioner, replies, and loses access when it's done.
+    await as(db, staff, () => db.query('select staff_join_league($1)', [req!.id]));
+    expect(await as(db, staff, () => rows(db, 'select is_commissioner($1) as c', [oak]))).toEqual([{ c: true }]);
+    await as(db, staff, () => db.query(`select staff_update_setup_request($1, 'needs_info', 'Which nine do you play first?')`, [req!.id]));
+    // The commissioner answers, which puts it back in the queue; they can't touch the reply.
+    await as(db, tony, () => db.query(`update setup_requests set notes = 'Front nine first', status = 'requested' where id = $1`, [req!.id]));
+    await expect(as(db, tony, () => db.query(`update setup_requests set staff_reply = 'x' where id = $1`, [req!.id]))).rejects.toThrow(/staff/);
+    await as(db, staff, () => db.query(`select staff_update_setup_request($1, 'done', 'All set up!')`, [req!.id]));
+    expect(await as(db, staff, () => rows(db, 'select is_commissioner($1) as c', [oak]))).toEqual([{ c: false }]);
+    expect(await as(db, tony, () => rows(db, 'select status, staff_reply from setup_requests'))).toEqual([{ status: 'done', staff_reply: 'All set up!' }]);
+    await expect(as(db, staff, () => db.query('select staff_join_league($1)', [req!.id]))).rejects.toThrow(/done/);
+  });
+
   it('lists the new features on every paid plan', async () => {
     const feats = await rows<{ code: string; f: string[] }>(db, `select code, features as f from plans order by code`);
     for (const p of feats) {

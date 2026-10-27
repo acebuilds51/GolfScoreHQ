@@ -1,5 +1,5 @@
 import type { Api } from './api';
-import type { Contact, Course, JoinRequest, League, LeagueBilling, LeagueEvent, LedgerRow, PaymentHandles, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SubRequest, TvDisplay, User } from './types';
+import type { Contact, Course, JoinRequest, League, LeagueBilling, LeagueEvent, LedgerRow, PaymentHandles, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SetupRequest, SubRequest, TvDisplay, User } from './types';
 import { isCommissioner } from './types';
 import type { WeeklyRecap } from '@golfscorehq/engine';
 import { buildRecapEmail } from '../../../../supabase/functions/send-recap/email';
@@ -50,13 +50,17 @@ interface Db {
   recapSends: Record<string, NonNullable<RecapPreview['alreadySent']>>;
   recapPrefs: Record<string, boolean>;
   paymentHandles: Record<string, PaymentHandles>;
+  setupRequests: (SetupRequest & { requestedBy: string; staffUserId: string | null })[];
 }
 
 const empty = (): Db => ({
   session: null, users: {}, leagues: [], members: [], players: [], contacts: {}, invites: [], joinRequests: [], courses: [],
   seasons: [], events: [], rounds: [], ledger: [], ctpDecisions: {}, tvDisplays: [], rsvps: {}, subRequests: [],
-  recapSends: {}, recapPrefs: {}, paymentHandles: {}, clubs: [],
+  recapSends: {}, recapPrefs: {}, paymentHandles: {}, clubs: [], setupRequests: [],
 });
+
+/** Demo uploads live only for this page view (too big for the browser's saved demo data). */
+const demoFiles = new Map<string, string>();
 
 /** Mirrors the database's plan check on season rules. */
 function usesSideGames(r: Season['rules']): boolean {
@@ -771,6 +775,87 @@ export function demoApi(): DemoApi {
       d.revokedAt = new Date().toISOString();
       save(db);
     },
+    async setupRequests(leagueId) {
+      const db = load();
+      requireCommissioner(db, leagueId);
+      return db.setupRequests.filter((r) => r.leagueId === leagueId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map(({ requestedBy: _r, staffUserId: _s, ...r }) => r);
+    },
+    async uploadSetupFile(leagueId, file) {
+      const db = load();
+      requireCommissioner(db, leagueId);
+      if (!has(db, leagueId, 'setup_service')) throw new Error('plan_feature: We set up your league needs GolfScoreHQ Pro');
+      if (file.size > 20 * 1024 * 1024) throw new Error(`${file.name} is over 20 MB.`);
+      const path = `${leagueId}/${id().slice(0, 10)}-${file.name}`;
+      demoFiles.set(path, URL.createObjectURL(file));
+      return { path, name: file.name, size: file.size };
+    },
+    async removeSetupFile(path) {
+      const url = demoFiles.get(path);
+      if (url) URL.revokeObjectURL(url);
+      demoFiles.delete(path);
+    },
+    async createSetupRequest(leagueId, r) {
+      const db = load();
+      requireCommissioner(db, leagueId);
+      if (!has(db, leagueId, 'setup_service')) throw new Error('plan_feature: We set up your league needs GolfScoreHQ Pro');
+      const now = new Date().toISOString();
+      const req = { ...r, id: id(), leagueId, status: 'requested' as const, staffReply: null, createdAt: now, updatedAt: now, requestedBy: me(db).id, staffUserId: null };
+      db.setupRequests.push(req);
+      save(db);
+      return req.id;
+    },
+    async updateSetupRequest(reqId, patch) {
+      const db = load();
+      const r = db.setupRequests.find((x) => x.id === reqId)!;
+      requireCommissioner(db, r.leagueId);
+      if (r.status === 'in_progress' || r.status === 'done') throw new Error("This request can't be changed now.");
+      Object.assign(r, { notes: patch.notes, files: patch.files, status: 'requested', updatedAt: new Date().toISOString() });
+      save(db);
+    },
+    async setupFileUrl(path) {
+      const url = demoFiles.get(path);
+      if (!url) throw new Error('Demo uploads only last until the page is reloaded.');
+      return url;
+    },
+    // Demo: you're GolfScoreHQ staff too, so the staff page can be tried.
+    async isStaff() {
+      return !!load().session;
+    },
+    async staffSetupQueue() {
+      const db = load();
+      me(db);
+      return db.setupRequests
+        .map((r) => {
+          const lg = db.leagues.find((l) => l.id === r.leagueId)!;
+          const { requestedBy, ...rest } = r;
+          return { ...rest, leagueName: lg.name, leagueSlug: lg.slug, leaguePlan: lg.plan, requestedByEmail: db.users[requestedBy]?.email ?? null };
+        })
+        .sort((a, b) => Number(a.status === 'done') - Number(b.status === 'done') || b.createdAt.localeCompare(a.createdAt));
+    },
+    async staffJoinLeague(reqId) {
+      const db = load();
+      const r = db.setupRequests.find((x) => x.id === reqId)!;
+      if (!r.staffAccess) throw new Error("This commissioner didn't give support access to the league.");
+      if (r.status === 'done') throw new Error('This request is done.');
+      const uid = me(db).id;
+      if (!db.members.some((m) => m.leagueId === r.leagueId && m.userId === uid)) db.members.push({ leagueId: r.leagueId, userId: uid, role: 'commissioner' });
+      r.staffUserId = uid;
+      if (r.status === 'requested') r.status = 'in_progress';
+      save(db);
+      return db.leagues.find((l) => l.id === r.leagueId)!.slug;
+    },
+    async staffUpdateSetupRequest(reqId, status, reply) {
+      const db = load();
+      const r = db.setupRequests.find((x) => x.id === reqId)!;
+      Object.assign(r, { status, staffReply: reply.trim() || null, updatedAt: new Date().toISOString() });
+      // Same as the database: done takes away the access staff got for this request.
+      if (status === 'done' && r.staffUserId) {
+        db.members = db.members.filter((m) => !(m.leagueId === r.leagueId && m.userId === r.staffUserId && m.role === 'commissioner'));
+      }
+      save(db);
+    },
+
     async tvFeed(token) {
       // Same shape as the database's tv_feed(); no sign-in needed.
       const db = load();

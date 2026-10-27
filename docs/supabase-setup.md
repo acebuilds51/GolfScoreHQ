@@ -35,6 +35,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 15. `20261109000000_handicaps.sql` (GHIN/handicap index on golfers, course handicap fixed per round)
 16. `20261110000000_individual_formats.sql` (stroke play and Stableford: prize money by place)
 17. `20261111000000_scramble.sql` (Clubhouse TV knows when a week is a scramble)
+18. `20261112000000_setup_service.sql` ("We set up your league": uploads, staff queue; creates the private `setup-uploads` bucket)
 
 **B. Command line**
 
@@ -126,3 +127,22 @@ In demo mode the recap screens work but no email is sent.
 4. Redeploy: `npx supabase functions deploy send-recap --use-api`
 
 Only golfers' names and the week's results are sent to the AI, never emails or phone numbers.
+
+## 7. "We set up your league" (Pro)
+
+Commissioners upload their spreadsheets and notes from **We set up your league** (Overview checklist or the More menu). Each request emails support with 7-day download links; staff work it from `/staff`.
+
+1. Make yourself staff. In the SQL Editor (use the email you sign in to GolfScoreHQ with):
+
+```sql
+insert into staff_users (user_id) select id from auth.users where email = 'you@example.com';
+```
+
+2. Optional secret `SUPPORT_EMAIL` (default `support@golfscorehq.app`): where new requests are emailed. It uses the same `RESEND_API_KEY`, `RECAP_FROM_EMAIL` and `APP_URL` as the recap.
+3. Deploy the function:
+
+```bash
+npx supabase functions deploy setup-notify --use-api
+```
+
+On `/staff`: download the files, **Join the league to set it up** (only when the commissioner ticked the consent box), do the setup with the normal screens, then set the status and write a message. Saving emails the commissioner; **All set up** takes you back out of the league.
