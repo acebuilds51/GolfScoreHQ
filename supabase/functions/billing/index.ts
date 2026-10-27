@@ -7,8 +7,9 @@
 //   POST { action: 'portal', returnPath? } → { url }   update card, invoices, cancel
 //
 // Secrets: STRIPE_SECRET_KEY, STRIPE_PRICE_PRO, STRIPE_PRICE_CLUB, APP_URL.
+// Optional: STRIPE_AUTOMATIC_TAX=on once Stripe Tax is set up in the dashboard.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { stripeApi } from '../_shared/stripe.ts';
+import { checkoutFields, stripeApi } from '../_shared/stripe.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -40,8 +41,10 @@ Deno.serve(async (req) => {
     const { data } = await admin.from('billing_customers').select('stripe_customer_id').eq('user_id', user!.id).maybeSingle();
     if (data) return data.stripe_customer_id;
     if (!create) return null;
-    const c = await stripeApi(stripeKey, 'POST', 'customers', { email: user!.email, metadata: { user_id: user!.id } });
-    await admin.from('billing_customers').insert({ user_id: user!.id, stripe_customer_id: c.id });
+    // Keyed on the person, so a double click makes one Stripe customer, not two.
+    const c = await stripeApi(stripeKey, 'POST', 'customers', { email: user!.email, metadata: { user_id: user!.id } }, `customer-${user!.id}`);
+    const { error } = await admin.from('billing_customers').upsert({ user_id: user!.id, stripe_customer_id: c.id }, { onConflict: 'user_id', ignoreDuplicates: true });
+    if (error) throw error;
     return c.id;
   }
 
@@ -81,18 +84,15 @@ Deno.serve(async (req) => {
     }
     if (!price) return json({ error: "Payments aren't set up yet." }, 503);
 
-    const session = await stripeApi(stripeKey, 'POST', 'checkout/sessions', {
-      mode: 'subscription',
-      customer: await customerId(true),
-      line_items: [{ price, quantity: 1 }],
-      subscription_data: { metadata },
+    const session = await stripeApi(stripeKey, 'POST', 'checkout/sessions', checkoutFields({
+      customer: (await customerId(true))!,
+      price,
       metadata,
-      client_reference_id: user.id,
-      allow_promotion_codes: true,
-      billing_address_collection: 'auto',
-      success_url: `${app}${back}?billing=done`,
-      cancel_url: `${app}${back}?billing=cancelled`,
-    });
+      userId: user.id,
+      successUrl: `${app}${back}?billing=done`,
+      cancelUrl: `${app}${back}?billing=cancelled`,
+      automaticTax: env('STRIPE_AUTOMATIC_TAX') === 'on',
+    }));
     return json({ url: session.url });
   } catch (e) {
     console.error('billing', e);
