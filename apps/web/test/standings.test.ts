@@ -7,7 +7,7 @@ import type { Layout, LeagueEvent, Player, RoundData, Season } from '../src/lib/
 const front: Layout = { id: 'f', name: 'Front 9', tees: null, rating: null, slope: null, holes: [4, 3, 5, 4, 3, 4, 4, 4, 4].map((par, i) => ({ number: i + 1, par })) };
 const PAR = front.holes.map((h) => h.par);
 const season: Season = { id: 's', leagueId: 'l', year: 2027, name: '', rules: rulesFromForm(OCBC_STYLE_FORM), startDate: null, leagueDay: 4 };
-const players: Player[] = ['al', 'ann', 'bob', 'bea'].map((id) => ({ id, displayName: id[0]!.toUpperCase() + id.slice(1), isSub: id === 'bea', active: true, userId: null }));
+const players: Player[] = ['al', 'ann', 'bob', 'bea'].map((id) => ({ id, displayName: id[0]!.toUpperCase() + id.slice(1), isSub: id === 'bea', active: true, userId: null, handicapIndex: null, ghinNumber: null, handicapIndexUpdatedAt: null }));
 
 function round(id: string, eventId: string, overrides: Record<string, Record<number, number>>): RoundData {
   const ids = ['al', 'ann', 'bob', 'bea'];

@@ -30,7 +30,10 @@ interface Db {
   }[];
   clubs: { id: string; ownerId: string; name: string; expiresAt: string | null }[];
   members: { leagueId: string; userId: string; role: Role }[];
-  players: { id: string; leagueId: string; displayName: string; isSub: boolean; active: boolean; userId: string | null }[];
+  players: {
+    id: string; leagueId: string; displayName: string; isSub: boolean; active: boolean; userId: string | null;
+    handicapIndex?: number | null; ghinNumber?: string | null; handicapIndexUpdatedAt?: string | null;
+  }[];
   contacts: Record<string, Contact & { leagueId: string }>;
   invites: { leagueId: string; tokenHash: string; playerId: string | null; role: Role; expiresAt: number; acceptedAt: number | null }[];
   joinRequests: (JoinRequest & { leagueId: string; status: 'pending' | 'approved' | 'declined' })[];
@@ -270,7 +273,7 @@ export function demoApi(): DemoApi {
       requireMember(db, leagueId);
       return db.players
         .filter((p) => p.leagueId === leagueId)
-        .map(({ leagueId: _l, ...p }) => p)
+        .map(({ leagueId: _l, ...p }) => ({ ...p, handicapIndex: p.handicapIndex ?? null, ghinNumber: p.ghinNumber ?? null, handicapIndexUpdatedAt: p.handicapIndexUpdatedAt ?? null }))
         .sort((a, b) => a.displayName.localeCompare(b.displayName));
     },
     async contacts(leagueId) {
@@ -299,7 +302,11 @@ export function demoApi(): DemoApi {
       const db = load();
       const p = db.players.find((x) => x.id === pid)!;
       requireCommissioner(db, p.leagueId);
+      // Same limits as the database.
+      if (patch.handicapIndex != null && !(patch.handicapIndex >= -10 && patch.handicapIndex <= 54)) throw new Error('A Handicap Index is between +10 and 54.');
+      if (patch.ghinNumber && !/^[0-9]{5,10}$/.test(patch.ghinNumber)) throw new Error('A GHIN number is 5 to 10 digits.');
       Object.assign(p, Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)));
+      if (patch.handicapIndex !== undefined) p.handicapIndexUpdatedAt = new Date().toISOString();
       save(db);
     },
     async saveContact(leagueId, playerId, c) {
@@ -475,7 +482,7 @@ export function demoApi(): DemoApi {
     async startRound(leagueId, eventId, teeSlot, players) {
       const db = load();
       requireMember(db, leagueId);
-      const r = { id: id(), leagueId, eventId, teeSlot, status: 'live' as const, currentHole: 0, players, scores: {}, presses: [], ctp: {}, submittedAt: null };
+      const r = { id: id(), leagueId, eventId, teeSlot, status: 'live' as const, currentHole: 0, players: players.map((p) => ({ ...p, courseHandicap: p.courseHandicap ?? null })), scores: {}, presses: [], ctp: {}, submittedAt: null };
       db.rounds.push(r);
       save(db);
       return r.id;

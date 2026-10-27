@@ -1,4 +1,4 @@
-import { scoreMatch, totalsByPlayer } from '@golfscorehq/engine';
+import { matchStrokes, ownStrokes, scoreMatch, strokesByHole, totalsByPlayer, type BestBallMatchRules } from '@golfscorehq/engine';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ErrorText, PageSkeleton } from '../components/ui';
@@ -92,6 +92,14 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
   }, [holeIdx]);
 
   const status = matchSoFar(round, layout, season.rules);
+  // Strokes each golfer gets on this hole: the match's strokes, or their own when only skins are net.
+  const hcpRules = rules.handicaps?.enabled ? rules.handicaps : undefined;
+  const strokesHere = useMemo(() => {
+    if (!hcpRules) return new Map<string, number>();
+    const er = toEngineRound(round, layout);
+    const per = hcpRules.match !== 'gross' ? matchStrokes(er, hcpRules) : ownStrokes(er, hcpRules);
+    return new Map(round.players.map((p) => [p.playerId, strokesByHole(per[p.playerId] ?? 0, layout.holes)[holeIdx] ?? 0]));
+  }, [hcpRules, round, layout, holeIdx]);
   const sideIds = (s: 'A' | 'B' | null) => round.players.filter((p) => p.side === s).map((p) => p.playerId);
   const hasMatch = sideIds('A').length > 0 && sideIds('B').length > 0;
 
@@ -214,8 +222,19 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
           return (
             <div key={p.playerId} className="score-row">
               <div className="grow">
-                <div className="score-name">{names.get(p.playerId) ?? '?'}</div>
-                {(label || p.side === null) && <div className={`small ${v < hole.par ? 'under' : 'muted'}`}>{[label, p.side === null ? 'skins only' : ''].filter(Boolean).join(' · ')}</div>}
+                <div className="score-name">
+                  {names.get(p.playerId) ?? '?'}
+                  {(strokesHere.get(p.playerId) ?? 0) !== 0 && (
+                    <span className="stroke-dots" title={`${Math.abs(strokesHere.get(p.playerId)!)} stroke${Math.abs(strokesHere.get(p.playerId)!) === 1 ? '' : 's'} ${strokesHere.get(p.playerId)! > 0 ? 'given' : 'back'} on this hole`}>
+                      {strokesHere.get(p.playerId)! > 0 ? '●'.repeat(strokesHere.get(p.playerId)!) : '○'.repeat(-strokesHere.get(p.playerId)!)}
+                    </span>
+                  )}
+                </div>
+                {(label || p.side === null || (strokesHere.get(p.playerId) ?? 0) !== 0) && (
+                  <div className={`small ${v < hole.par ? 'under' : 'muted'}`}>
+                    {[label, (strokesHere.get(p.playerId) ?? 0) !== 0 ? `net ${v - strokesHere.get(p.playerId)!}` : '', p.side === null ? 'skins only' : ''].filter(Boolean).join(' · ')}
+                  </div>
+                )}
               </div>
               <button type="button" className="step minus" aria-label={`One fewer stroke for ${names.get(p.playerId)}`} onClick={() => step(p.playerId, -1)}>−</button>
               <span className={`num score-big${v < hole.par ? ' under' : ''}`}>{v}</span>
@@ -252,7 +271,7 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
       )}
 
       {rules.presses.enabled && hasMatch && (
-        <Presses round={round} layout={layout} holeNumber={hole.number} names={names} onChange={setRound} />
+        <Presses round={round} layout={layout} holeNumber={hole.number} names={names} rules={rules} onChange={setRound} />
       )}
 
       <ErrorText>{error}</ErrorText>
@@ -280,7 +299,7 @@ function Cheer({ text, onDone }: { text: string; onDone: () => void }) {
   );
 }
 
-function Presses({ round, layout, holeNumber, names, onChange }: { round: RoundData; layout: Layout; holeNumber: number; names: Map<string, string>; onChange: (r: RoundData) => void }) {
+function Presses({ round, layout, holeNumber, names, rules, onChange }: { round: RoundData; layout: Layout; holeNumber: number; names: Map<string, string>; rules: BestBallMatchRules; onChange: (r: RoundData) => void }) {
   const { league } = useLeague();
   const { busy, error, run } = useAction();
   const sideNames = (s: 'A' | 'B') => teamName(round.players.filter((p) => p.side === s).map((p) => p.playerId), names);
@@ -288,7 +307,8 @@ function Presses({ round, layout, holeNumber, names, onChange }: { round: RoundD
   const tally = (start: number) => {
     const from = layout.holes.findIndex((h) => h.number === start);
     const won = { A: 0, B: 0 };
-    const m = scoreMatch(toEngineRound(round, layout, true), layout.holes.length, basicRules());
+    // Same hole winners as the match (net when the league plays net); the press bet itself isn't counted here.
+    const m = scoreMatch(toEngineRound(round, layout, true), layout.holes.length, rules, layout.holes);
     m.holeWinners.slice(from, thru).forEach((w) => { if (w) won[w]++; });
     return won;
   };
@@ -328,7 +348,7 @@ function Review({ round, layout, season, names, queueLength, busy, error, locked
   locked: boolean; eventId: string; onEditHole: (i: number) => void; onSubmit: () => void;
 }) {
   const rules = asBestBall(season.rules);
-  const m = scoreMatch(toEngineRound(round, layout), layout.holes.length, rules);
+  const m = scoreMatch(toEngineRound(round, layout), layout.holes.length, rules, layout.holes);
   const money = totalsByPlayer(m.ledger);
   const par = layout.holes.reduce((s, h) => s + h.par, 0);
   const sideIds = (s: 'A' | 'B') => round.players.filter((p) => p.side === s).map((p) => p.playerId);

@@ -35,6 +35,10 @@ export interface Player {
   active: boolean;
   /** Set once a golfer has claimed this roster spot with an account. */
   userId: string | null;
+  /** Handicap Index entered by the commissioner (usually from GHIN). */
+  handicapIndex: number | null;
+  ghinNumber: string | null;
+  handicapIndexUpdatedAt: string | null;
 }
 
 export interface Contact {
@@ -128,6 +132,8 @@ export interface RoundPlayer {
   /** 'A' / 'B' match side; null = skins and CTP only. */
   side: 'A' | 'B' | null;
   position: number;
+  /** Course Handicap fixed when the group started (null = no handicap / plays gross). */
+  courseHandicap?: number | null;
 }
 
 export interface CtpEntry {

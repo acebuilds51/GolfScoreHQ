@@ -5,9 +5,11 @@ import {
   type BestBallMatchRules,
   type CtpReport,
   type FormatRules,
+  type HandicapRules,
   type MatchRoundInput,
   type MatchResult,
 } from '@golfscorehq/engine';
+import { DEFAULT_HANDICAPS } from './handicaps';
 import type { Course, Layout, RoundData } from './types';
 
 /**
@@ -40,13 +42,29 @@ export interface SideGameForm {
   skinsTieRule: 'noSkin' | 'carryover';
   ctpEnabled: boolean;
   ctpAmount: string;
+  hcpEnabled: boolean;
+  hcpAllowance: string;
+  hcpMatch: HandicapRules['match'];
+  hcpSkins: HandicapRules['skins'];
+  hcpSource: NonNullable<HandicapRules['source']>;
 }
 
 export const OCBC_STYLE_FORM: SideGameForm = {
   matchStake: '5', pressesEnabled: true, pressStake: '10',
   skinsEnabled: true, skinsPot: '180', skinsTieRule: 'noSkin',
   ctpEnabled: true, ctpAmount: '36',
+  hcpEnabled: false, hcpAllowance: String(DEFAULT_HANDICAPS.allowance), hcpMatch: DEFAULT_HANDICAPS.match, hcpSkins: DEFAULT_HANDICAPS.skins, hcpSource: DEFAULT_HANDICAPS.source!,
 };
+
+/** Handicap settings work on every plan, so they're kept apart from the (Pro) side games. */
+export function handicapsFromForm(f: SideGameForm): HandicapRules {
+  const pct = Math.round(Number(f.hcpAllowance));
+  return {
+    enabled: f.hcpEnabled,
+    allowance: pct >= 50 && pct <= 100 ? pct : DEFAULT_HANDICAPS.allowance,
+    match: f.hcpMatch, skins: f.hcpSkins, source: f.hcpSource,
+  };
+}
 
 const money = (s: string) => Math.max(0, dollars(Number(s) || 0));
 
@@ -63,16 +81,19 @@ export function rulesFromForm(f: SideGameForm): BestBallMatchRules {
       pot: f.skinsEnabled ? money(f.skinsPot) : 0,
     },
     ctp: { enabled: f.ctpEnabled, amountPerHole: f.ctpEnabled ? money(f.ctpAmount) : 0, resolution: 'markerChain' },
+    handicaps: handicapsFromForm(f),
   };
 }
 
 export function formFromRules(r: FormatRules): SideGameForm {
   if (r.format !== 'bestBallMatch') return { ...OCBC_STYLE_FORM };
   const d = (c: number) => String(c / 100);
+  const h = { ...DEFAULT_HANDICAPS, ...r.handicaps };
   return {
     matchStake: d(r.match.stake), pressesEnabled: r.presses.enabled, pressStake: d(r.presses.stake),
     skinsEnabled: r.skins.enabled, skinsPot: d(r.skins.pot), skinsTieRule: r.skins.tieRule,
     ctpEnabled: r.ctp.enabled, ctpAmount: d(r.ctp.amountPerHole),
+    hcpEnabled: h.enabled, hcpAllowance: String(h.allowance), hcpMatch: h.match, hcpSkins: h.skins, hcpSource: h.source ?? 'ghinFirst',
   };
 }
 
@@ -89,6 +110,13 @@ export function describeRules(r: FormatRules): string[] {
   if (r.presses.enabled) out.push(`presses ${fmtMoney(r.presses.stake)} a man`);
   if (r.skins.enabled) out.push(`skins ${fmtMoney(r.skins.pot)} pot${r.skins.tieRule === 'carryover' ? ' (ties carry over)' : ' (ties: no skin)'}`);
   if (r.ctp.enabled) out.push(`CTP ${fmtMoney(r.ctp.amountPerHole)} per par 3`);
+  const h = r.handicaps;
+  if (h?.enabled) {
+    const match = h.match === 'gross' ? 'gross match' : `net match (${h.allowance}%${h.match === 'offLow' ? ', off the low man' : ''})`;
+    out.push(`${match}, ${h.skins} skins`);
+  } else {
+    out.push('gross scoring');
+  }
   return out;
 }
 
@@ -135,6 +163,7 @@ export function toEngineRound(round: RoundData, layout: Layout, onlyCompleted = 
     id: round.id,
     teeSlot: round.teeSlot,
     players: round.players.map((p) => (p.side ? { id: p.playerId, side: p.side } : { id: p.playerId })),
+    courseHandicaps: Object.fromEntries(round.players.map((p) => [p.playerId, p.courseHandicap ?? null])),
     scores,
     presses: round.presses
       .map((p) => ({ startHoleIndex: layout.holes.findIndex((h) => h.number === p.startHole), calledBy: p.calledBy }))
@@ -155,7 +184,7 @@ export function holesCompleted(round: RoundData, layout: Layout): number {
 
 export function matchSoFar(round: RoundData, layout: Layout, rules: FormatRules): { result: MatchResult; thru: number; label: string } {
   const thru = holesCompleted(round, layout);
-  const result = scoreMatch(toEngineRound(round, layout, true), layout.holes.length, asBestBall(rules));
+  const result = scoreMatch(toEngineRound(round, layout, true), layout.holes.length, asBestBall(rules), layout.holes);
   const hasMatch = round.players.some((p) => p.side === 'A') && round.players.some((p) => p.side === 'B');
   const { A, B } = result.holesWon;
   let label: string;

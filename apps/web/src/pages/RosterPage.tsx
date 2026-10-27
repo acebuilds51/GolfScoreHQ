@@ -4,13 +4,22 @@ import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
 import { isCommissioner, type Contact, type Player } from '../lib/types';
 import { checkGolferRows, parseRoster, type GolferRow } from '../lib/util';
+import { fmtIndex, leagueIndexes, loadPlayedRounds, parseIndex, type IndexInfo } from '../lib/handicaps';
 
 export function RosterPage() {
   const { league } = useLeague();
   const commish = isCommissioner(league.role);
   const data = useAsync(async () => {
-    const [players, contacts] = await Promise.all([api.players(league.id), commish ? api.contacts(league.id) : Promise.resolve({} as Record<string, Contact>)]);
-    return { players, contacts };
+    const [players, contacts, seasons, played] = await Promise.all([
+      api.players(league.id),
+      commish ? api.contacts(league.id) : Promise.resolve({} as Record<string, Contact>),
+      api.seasons(league.id),
+      loadPlayedRounds(api, league.id),
+    ]);
+    const rules = seasons[0]?.rules;
+    const hcp = rules?.format === 'bestBallMatch' ? rules.handicaps : undefined;
+    const indexes = leagueIndexes(players, played, hcp?.source ?? 'ghinFirst');
+    return { players, contacts, indexes, handicapsOn: !!hcp?.enabled };
   }, [league.id, commish]);
   const [showInactive, setShowInactive] = useState(false);
   const [inviteFor, setInviteFor] = useState<{ player: Player; link: string } | null>(null);
@@ -44,7 +53,7 @@ export function RosterPage() {
         ) : (
           <ul className="list">
             {active.map((p) => (
-              <PlayerRow key={p.id} player={p} contact={data.data?.contacts[p.id]} commish={commish} onChanged={data.reload} onInvite={(link) => setInviteFor({ player: p, link })} />
+              <PlayerRow key={p.id} player={p} contact={data.data?.contacts[p.id]} index={data.data?.indexes.get(p.id)} handicapsOn={!!data.data?.handicapsOn} commish={commish} onChanged={data.reload} onInvite={(link) => setInviteFor({ player: p, link })} />
             ))}
           </ul>
         )}
@@ -58,7 +67,7 @@ export function RosterPage() {
         {showInactive && (
           <ul className="list">
             {inactive.map((p) => (
-              <PlayerRow key={p.id} player={p} contact={data.data?.contacts[p.id]} commish={commish} onChanged={data.reload} onInvite={(link) => setInviteFor({ player: p, link })} />
+              <PlayerRow key={p.id} player={p} contact={data.data?.contacts[p.id]} index={data.data?.indexes.get(p.id)} handicapsOn={!!data.data?.handicapsOn} commish={commish} onChanged={data.reload} onInvite={(link) => setInviteFor({ player: p, link })} />
             ))}
           </ul>
         )}
@@ -67,12 +76,16 @@ export function RosterPage() {
   );
 }
 
-function PlayerRow({ player, contact, commish, onChanged, onInvite }: { player: Player; contact?: Contact; commish: boolean; onChanged: () => void; onInvite: (link: string) => void }) {
+function PlayerRow({ player, contact, index, handicapsOn, commish, onChanged, onInvite }: {
+  player: Player; contact?: Contact; index?: IndexInfo; handicapsOn: boolean; commish: boolean; onChanged: () => void; onInvite: (link: string) => void;
+}) {
   const { league } = useLeague();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(player.displayName);
   const [email, setEmail] = useState(contact?.email ?? '');
   const [phone, setPhone] = useState(contact?.phone ?? '');
+  const [hcp, setHcp] = useState(player.handicapIndex == null ? '' : fmtIndex(player.handicapIndex));
+  const [ghin, setGhin] = useState(player.ghinNumber ?? '');
   const { busy, error, setError, run } = useAction();
 
   if (editing) {
@@ -82,6 +95,15 @@ function PlayerRow({ player, contact, commish, onChanged, onInvite }: { player: 
           <label>Name<input value={name} onChange={(e) => setName(e.target.value)} /></label>
           <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
           <label>Phone<input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
+          <label>
+            Handicap Index
+            <input inputMode="decimal" placeholder="e.g. 12.4" value={hcp} onChange={(e) => setHcp(e.target.value)} />
+            <span className="small muted">From GHIN. Use + for a plus handicap. Leave blank to use the league's calculation.</span>
+          </label>
+          <label>
+            GHIN number
+            <input inputMode="numeric" placeholder="optional" value={ghin} onChange={(e) => setGhin(e.target.value.replace(/\D/g, ''))} />
+          </label>
         </div>
         <ErrorText>{error}</ErrorText>
         <div className="row">
@@ -91,8 +113,14 @@ function PlayerRow({ player, contact, commish, onChanged, onInvite }: { player: 
             onClick={async () => {
               const problem = checkGolferRows([{ name, email, phone, isSub: false }]).problems[0];
               if (problem) return setError(problem);
+              const idx = parseIndex(hcp);
+              if (idx === 'bad') return setError('Enter the Handicap Index like 12.4, or +1.2 for a plus handicap (up to 54).');
+              if (ghin && !/^[0-9]{5,10}$/.test(ghin)) return setError('A GHIN number is 5 to 10 digits.');
               const ok = await run(async () => {
                 if (name.trim() !== player.displayName) await api.updatePlayer(player.id, { displayName: name.trim() });
+                if (idx !== player.handicapIndex || (ghin || null) !== player.ghinNumber) {
+                  await api.updatePlayer(player.id, { handicapIndex: idx, ghinNumber: ghin || null });
+                }
                 if ((email || null) !== (contact?.email ?? null) || (phone || null) !== (contact?.phone ?? null)) {
                   await api.saveContact(league.id, player.id, { email: email.trim() || null, phone: phone.trim() || null });
                 }
@@ -120,6 +148,7 @@ function PlayerRow({ player, contact, commish, onChanged, onInvite }: { player: 
         {commish && (contact?.email || contact?.phone) && (
           <div className="small muted">{[contact.email, contact.phone].filter(Boolean).join(' · ')}</div>
         )}
+        {(handicapsOn || player.handicapIndex != null) && index && <HandicapLine info={index} />}
         <ErrorText>{error}</ErrorText>
       </div>
       {commish && (
@@ -146,6 +175,24 @@ function PlayerRow({ player, contact, commish, onChanged, onInvite }: { player: 
         </div>
       )}
     </li>
+  );
+}
+
+/** "Handicap 12.4 · GHIN", "Handicap 9.1 · from 8 league rounds", or how many more rounds are needed. */
+function HandicapLine({ info }: { info: IndexInfo }) {
+  if (info.index != null) {
+    return (
+      <div className="small">
+        Handicap <strong className="num">{fmtIndex(info.index)}</strong>
+        <span className="muted"> · {info.from === 'ghin' ? 'GHIN' : `from ${info.leagueRounds} league rounds`}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="small muted">
+      No handicap yet · {info.leagueRounds} complete league round{info.leagueRounds === 1 ? '' : 's'} so far
+      (one is calculated after 6 nines or 3 full 18s), or enter their GHIN index
+    </div>
   );
 }
 

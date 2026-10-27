@@ -6,6 +6,7 @@ export * from './skins';
 export * from './ctp';
 export * from './week';
 export * from './handicap';
+export * from './net';
 export * from './templates';
 export * from './stats';
 export * from './recap';

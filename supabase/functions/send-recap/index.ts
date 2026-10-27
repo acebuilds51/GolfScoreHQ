@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
       admin.from('seasons').select('rules').eq('id', event.season_id).single(),
       admin.from('layouts').select('id, name, holes').eq('id', event.layout_id).maybeSingle(),
       admin.from('players').select('id, display_name, user_id, active').eq('league_id', event.league_id),
-      admin.from('rounds').select('id, tee_slot, round_players(player_id, side, position), hole_scores(player_id, hole_number, strokes), presses(start_hole_number, called_by, created_at), ctp_reports(hole_number, player_id, beat_player_id)').eq('event_id', event.id),
+      admin.from('rounds').select('id, tee_slot, round_players(player_id, side, position, course_handicap), hole_scores(player_id, hole_number, strokes), presses(start_hole_number, called_by, created_at), ctp_reports(hole_number, player_id, beat_player_id)').eq('event_id', event.id),
       admin.from('ledger_entries').select('event_id, player_id, kind, amount_cents, hole_number, events!inner(season_id, status, week_number)').eq('events.season_id', event.season_id).eq('events.status', 'settled').lte('events.week_number', event.week_number),
       admin.from('player_contacts').select('player_id, email').eq('league_id', event.league_id),
       admin.from('notification_prefs').select('player_id, weekly_recap').eq('league_id', event.league_id),
@@ -76,6 +76,8 @@ Deno.serve(async (req) => {
     return {
       id: r.id, teeSlot: r.tee_slot,
       players: (r.round_players as Row[]).sort((a, b) => a.position - b.position).map((p) => (p.side ? { id: p.player_id, side: p.side } : { id: p.player_id })),
+      // Handicaps fixed when the group started, so the recap's results match the app's (net or gross).
+      courseHandicaps: Object.fromEntries((r.round_players as Row[]).map((p) => [p.player_id, p.course_handicap ?? null])),
       scores,
       presses: (r.presses as Row[]).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
         .map((p) => ({ startHoleIndex: (layout.holes as Row[]).findIndex((h) => h.number === p.start_hole_number), calledBy: p.called_by }))
