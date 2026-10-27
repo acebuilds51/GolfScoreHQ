@@ -10,9 +10,13 @@ const ROLE_LABEL = { owner: 'Commissioner (owner)', commissioner: 'Commissioner'
 
 export function LeaguesPage() {
   const leagues = useAsync(() => api.myLeagues(), []);
+  const staff = useAsync(() => api.isStaff(), []);
   return (
     <div className="page">
-      <h1>Your leagues</h1>
+      <div className="row between wrap">
+        <h1>Your leagues</h1>
+        {staff.data && <Link className="btn btn-sm" to="/staff">Staff: setup requests</Link>}
+      </div>
       {leagues.error && <ErrorText>{leagues.error}</ErrorText>}
       {leagues.data && leagues.data.length === 0 && (
         <EmptyState title="Start or join a league">

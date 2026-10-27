@@ -1,12 +1,20 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Api, CourseSummary, LookupCourse } from './api';
-import type { LeagueBilling, RecapPreview, SubOffer } from './types';
+import type { LeagueBilling, RecapPreview, SetupRequest, SubOffer } from './types';
 import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, TvFeed, User } from './types';
 import { randomToken, sha256Hex } from './util';
 
 type Row = Record<string, any>;
 
 const LOGO_BUCKET = 'league-logos';
+const SETUP_BUCKET = 'setup-uploads';
+
+function toSetupRequest(r: Row): SetupRequest {
+  return {
+    id: r.id, leagueId: r.league_id, notes: r.notes ?? '', wants: r.wants ?? [], files: r.files ?? [], contactPhone: r.contact_phone ?? null,
+    staffAccess: r.staff_access ?? true, status: r.status, staffReply: r.staff_reply ?? null, createdAt: r.created_at, updatedAt: r.updated_at,
+  };
+}
 
 function check<T>(res: { data: T; error: { message: string } | null }): T {
   if (res.error) throw new Error(res.error.message);
@@ -463,6 +471,63 @@ export function supabaseApi(url: string, anonKey: string): Api {
     },
     async tvFeed(token) {
       return (check(await sb.rpc('tv_feed', { p_token: token })) as TvFeed | null) ?? null;
+    },
+
+    async setupRequests(leagueId) {
+      const rows = check(await sb.from('setup_requests').select('*').eq('league_id', leagueId).order('created_at', { ascending: false })) as Row[];
+      return rows.map(toSetupRequest);
+    },
+    async uploadSetupFile(leagueId, file) {
+      // Keep the name readable but safe for a storage path.
+      const clean = file.name.replace(/[^\w.\- ]+/g, '').replace(/\s+/g, '-').slice(-80) || 'file';
+      const path = `${leagueId}/${randomToken().slice(0, 10)}-${clean}`;
+      const up = await sb.storage.from(SETUP_BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: false });
+      if (up.error) {
+        const m = up.error.message;
+        throw new Error(/row-level security|Unauthorized|403/i.test(m) ? 'plan_feature: We set up your league needs GolfScoreHQ Pro'
+          : /mime|type/i.test(m) ? `${file.name}: that kind of file can't be uploaded. Try a spreadsheet, CSV, PDF or photo.`
+          : /size|large/i.test(m) ? `${file.name} is over 20 MB.` : m);
+      }
+      return { path, name: file.name, size: file.size };
+    },
+    async removeSetupFile(path) {
+      await sb.storage.from(SETUP_BUCKET).remove([path]);
+    },
+    async createSetupRequest(leagueId, r) {
+      const { data: u } = await sb.auth.getUser();
+      const row = check(await sb.from('setup_requests').insert({
+        league_id: leagueId, requested_by: u.user?.id, notes: r.notes.trim() || null, wants: r.wants, files: r.files,
+        contact_phone: r.contactPhone?.trim() || null, staff_access: r.staffAccess,
+      }).select('id').single()) as Row;
+      await invokeFn(sb, 'setup-notify', { requestId: row.id, event: 'created' }, 'Your request was saved, but the email to GolfScoreHQ didn\'t go out. We\'ll still see it.').catch(() => {});
+      return row.id;
+    },
+    async updateSetupRequest(id, patch) {
+      check(await sb.from('setup_requests').update({ notes: patch.notes.trim() || null, files: patch.files, status: 'requested' }).eq('id', id));
+      await invokeFn(sb, 'setup-notify', { requestId: id, event: 'created' }, '').catch(() => {});
+    },
+    async setupFileUrl(path) {
+      const { data, error } = await sb.storage.from(SETUP_BUCKET).createSignedUrl(path, 3600);
+      if (error || !data) throw new Error("That file couldn't be opened.");
+      return data.signedUrl;
+    },
+    async isStaff() {
+      const { data } = await sb.rpc('is_staff');
+      return data === true;
+    },
+    async staffSetupQueue() {
+      const rows = check(await sb.rpc('staff_setup_queue')) as Row[];
+      return rows.map((r) => ({
+        ...toSetupRequest(r),
+        leagueName: r.league_name, leagueSlug: r.league_slug, leaguePlan: r.league_plan, requestedByEmail: r.requested_by_email ?? null, staffUserId: r.staff_user_id ?? null,
+      }));
+    },
+    async staffJoinLeague(requestId) {
+      return check(await sb.rpc('staff_join_league', { p_request: requestId })) as string;
+    },
+    async staffUpdateSetupRequest(requestId, status, reply) {
+      check(await sb.rpc('staff_update_setup_request', { p_request: requestId, p_status: status, p_reply: reply }));
+      await invokeFn(sb, 'setup-notify', { requestId, event: 'updated' }, "Saved, but the email to the commissioner didn't go out.");
     },
     watchLeague(leagueId, onChange) {
       const channel = sb.channel(`league-${leagueId}-${Math.random().toString(36).slice(2)}`);

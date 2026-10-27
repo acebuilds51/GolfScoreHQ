@@ -51,6 +51,7 @@ export function OverviewPage() {
               </li>
             ))}
           </ol>
+          <p className="small muted">Rather not type it all in? <Link to="setup">Send us your spreadsheet</Link> and we'll set the league up for you.{!league.features.includes('setup_service') && ' (Pro)'}</p>
         </section>
       )}
 
