@@ -34,6 +34,12 @@ Turn on: update payment method, view invoices, cancel subscriptions (cancel **at
 
 Keep these out of chat, email and the code. `APP_URL` (already set for recap emails) is where checkout sends people back.
 
+Optional, for US sales tax: turn on **Stripe Tax** (Stripe → Tax: add your business address, add a registration for each state where you must collect, set the product tax code to SaaS / "Software as a service — business use"). Then add the secret `STRIPE_AUTOMATIC_TAX` = `on`. Checkout will then ask for the buyer's address and add tax where it applies. Leave it unset until Stripe Tax is set up, or checkout will fail.
+
+**Receipts:** Stripe → Settings → Customer emails → turn on "Successful payments" and "Failed payments" (and, under Billing → Subscriptions and emails, "Send emails about upcoming renewals" and failed-payment emails). Stripe sends these; GolfScoreHQ doesn't.
+
+**Failed renewals:** Stripe → Settings → Billing → Subscriptions and emails → Manage failed payments: use Smart Retries, and after all retries fail **cancel the subscription**.
+
 ## 6. Deploy the two functions (from the GolfScoreHQ folder)
 
 ```bash
@@ -49,7 +55,8 @@ npx supabase functions deploy stripe-webhook --use-api --no-verify-jwt
 ## How it behaves
 
 - **Upgrade:** Settings → Plan → Upgrade to Pro opens Stripe Checkout. After paying, Pro turns on within a few seconds.
-- **Renewals:** yearly, automatic. A failed card keeps Pro on for 3 days of grace while Stripe retries.
+- **Renewals:** yearly, automatic. A failed renewal keeps Pro on for 3 days of grace from the renewal date while Stripe retries; if a retry later succeeds, Pro comes back for the full year.
+- **API version:** every call pins Stripe API version `2025-03-31.basil` (in `supabase/functions/_shared/stripe.ts`). Upgrade it on purpose and re-run the tests.
 - **Cancel:** Manage billing → cancel. Pro stays on until the paid year ends, then the league is Free. Nothing is deleted.
 - **Discount codes:** create coupons and promotion codes in Stripe; checkout has a box for them (e.g. the 2028 pilot thank-you).
 - **Club:** Your leagues → Club plan → name it and pay, then add up to 5 leagues you own. A league that already pays for its own Pro must cancel it first.

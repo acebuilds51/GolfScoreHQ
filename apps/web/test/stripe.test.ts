@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { accessUntil, formEncode, GRACE_DAYS, readSubscription, verifyStripeSignature } from '../../../supabase/functions/_shared/stripe';
+import { accessUntil, checkoutFields, formEncode, GRACE_DAYS, readSubscription, STRIPE_API_VERSION, stripeHeaders, verifyStripeSignature } from '../../../supabase/functions/_shared/stripe';
 
 describe('Stripe helpers', () => {
   it('encodes nested checkout fields the way Stripe expects', () => {
@@ -36,10 +36,41 @@ describe('Stripe helpers', () => {
   it('keeps features on through the paid year plus grace, and off once canceled', () => {
     const now = Date.UTC(2027, 0, 1);
     const end = Date.UTC(2027, 10, 1) / 1000;
-    const base = { id: 's', periodEnd: end, cancelAtPeriodEnd: false, metadata: {}, customer: null };
+    const base = { id: 's', periodStart: null, periodEnd: end, cancelAtPeriodEnd: false, metadata: {}, customer: null };
     expect(accessUntil({ ...base, status: 'active' }, now).getTime()).toBe(end * 1000 + GRACE_DAYS * 86_400_000);
-    expect(accessUntil({ ...base, status: 'past_due' }, now).getTime()).toBe(end * 1000 + GRACE_DAYS * 86_400_000);
     expect(accessUntil({ ...base, status: 'canceled' }, now).getTime()).toBe(now);
     expect(accessUntil({ ...base, status: 'incomplete' }, now).getTime()).toBe(now);
+    expect(accessUntil({ ...base, status: 'unpaid' }, now).getTime()).toBe(now);
+  });
+
+  it('gives a failed renewal only the grace days, not the new unpaid year', () => {
+    const renewedAt = Date.UTC(2027, 10, 1) / 1000; // Stripe has already moved the period on
+    const s = { id: 's', status: 'past_due', periodStart: renewedAt, periodEnd: renewedAt + 365 * 86_400, cancelAtPeriodEnd: false, metadata: {}, customer: null };
+    const graceEnd = renewedAt * 1000 + GRACE_DAYS * 86_400_000;
+    expect(accessUntil(s, renewedAt * 1000 + 3_600_000).getTime()).toBe(graceEnd);
+    const later = graceEnd + 86_400_000;
+    expect(accessUntil(s, later).getTime()).toBe(later); // still failing after grace: off
+  });
+
+  it('reads the period start from old and new API shapes', () => {
+    expect(readSubscription({ id: 's', status: 'past_due', current_period_start: 50, current_period_end: 100 }).periodStart).toBe(50);
+    expect(readSubscription({ id: 's', status: 'past_due', items: { data: [{ current_period_start: 150, current_period_end: 200 }] } }).periodStart).toBe(150);
+  });
+
+  it('pins the API version and sends idempotency keys', () => {
+    const h = stripeHeaders('sk_test_x', { form: true, idempotencyKey: 'customer-u1' });
+    expect(h['Stripe-Version']).toBe(STRIPE_API_VERSION);
+    expect(h['Idempotency-Key']).toBe('customer-u1');
+    expect(h['Content-Type']).toBe('application/x-www-form-urlencoded');
+    expect(stripeHeaders('sk_test_x')).not.toHaveProperty('Idempotency-Key');
+  });
+
+  it('builds checkout with sales tax only when switched on', () => {
+    const o = { customer: 'cus_1', price: 'price_pro', metadata: { plan: 'pro', league_id: 'L1', owner_id: 'u1' }, userId: 'u1', successUrl: 'https://x/done', cancelUrl: 'https://x/no' };
+    const off = checkoutFields({ ...o, automaticTax: false });
+    expect(off).toMatchObject({ mode: 'subscription', customer: 'cus_1', allow_promotion_codes: true, billing_address_collection: 'auto', subscription_data: { metadata: o.metadata } });
+    expect(off).not.toHaveProperty('automatic_tax');
+    const on = checkoutFields({ ...o, automaticTax: true });
+    expect(on).toMatchObject({ automatic_tax: { enabled: true }, customer_update: { address: 'auto', name: 'auto' }, billing_address_collection: 'required' });
   });
 });

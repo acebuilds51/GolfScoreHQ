@@ -6,7 +6,7 @@
 //
 // Secrets: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { accessUntil, readSubscription, stripeApi, verifyStripeSignature } from '../_shared/stripe.ts';
+import { accessUntil, LIVE_STATUSES, readSubscription, stripeApi, verifyStripeSignature } from '../_shared/stripe.ts';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const reply = (status: number, msg: string) => new Response(msg, { status });
@@ -47,6 +47,15 @@ Deno.serve(async (req) => {
     });
     if (upErr) throw upErr;
     if (s.customer) await admin.from('billing_customers').upsert({ user_id: ownerId, stripe_customer_id: s.customer }, { onConflict: 'user_id', ignoreDuplicates: true });
+
+    // An old subscription ending must not switch off a newer one for the same league or club.
+    if (!LIVE_STATUSES.includes(s.status)) {
+      const { data: others, error } = await admin.from('billing_subscriptions').select('stripe_subscription_id')
+        .eq(plan === 'pro' ? 'league_id' : 'club_id', plan === 'pro' ? leagueId : clubId)
+        .neq('stripe_subscription_id', s.id).in('status', LIVE_STATUSES).limit(1);
+      if (error) throw error;
+      if (others?.length) return reply(200, 'Covered by another subscription.');
+    }
 
     if (plan === 'pro') {
       // Never touch free Pilot/Complimentary leagues or Club-covered ones.
