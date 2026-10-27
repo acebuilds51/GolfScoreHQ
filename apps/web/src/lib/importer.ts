@@ -210,15 +210,24 @@ interface LegacyRound {
   ctpWinners?: Record<string, string>;
 }
 
-/** True when the text is the OCBC app's export (a list of its round records). */
-export function isOcbcExport(text: string): boolean {
+/**
+ * The OCBC app's round records, from any of the shapes it comes in: a plain
+ * list, a saved copy of its data ({ weeks }), or what its Google Sheet script
+ * returns for ?action=getAllRounds ({ ok, rounds }).
+ */
+function ocbcRounds(text: string): LegacyRound[] | null {
   try {
     const v = JSON.parse(text);
-    const list = Array.isArray(v) ? v : Array.isArray(v?.weeks) ? v.weeks : null;
-    return !!list?.length && list.every((r: unknown) => typeof r === 'object' && r !== null && 'players' in r && 'scores' in r && 'week' in r);
+    const list = Array.isArray(v) ? v : Array.isArray(v?.rounds) ? v.rounds : Array.isArray(v?.weeks) ? v.weeks : null;
+    return list?.length && list.every((r: unknown) => typeof r === 'object' && r !== null && 'players' in r && 'scores' in r && 'week' in r) ? list : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+/** True when the text is the OCBC app's export. */
+export function isOcbcExport(text: string): boolean {
+  return ocbcRounds(text) !== null;
 }
 
 /**
@@ -228,8 +237,8 @@ export function isOcbcExport(text: string): boolean {
  * rounds are left out (team scores aren't anyone's own round).
  */
 export function planFromOcbc(text: string, layouts: Layout[]): ImportPlan {
-  const v = JSON.parse(text);
-  const all: LegacyRound[] = Array.isArray(v) ? v : v.weeks;
+  const all = ocbcRounds(text);
+  if (!all) throw new Error("this isn't the OCBC app's export");
   const problems: string[] = [];
   const scramble = all.filter((r) => r.isScramble).length;
   if (scramble) problems.push(`${scramble} scramble round${scramble === 1 ? '' : 's'} left out (team scores don't count as anyone's own round).`);
