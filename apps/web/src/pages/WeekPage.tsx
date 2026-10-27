@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague, useLiveRefresh } from '../lib/hooks';
+import { courseHandicapFor, leagueIndexes, loadPlayedRounds } from '../lib/handicaps';
 import { allLayouts, fmtDate, matchSoFar } from '../lib/scoring';
 import { isCommissioner, type Layout, type Player, type RoundData, type RoundPlayer, type Season } from '../lib/types';
 import { WeekResults } from './WeekResults';
@@ -49,7 +50,7 @@ export function WeekPage() {
 
       {layout && season && event.status !== 'settled' && event.status !== 'rainout' && (
         starting
-          ? <StartGroup eventId={event.id} rounds={rounds} players={players} onCancel={() => setStarting(false)} />
+          ? <StartGroup eventId={event.id} rounds={rounds} players={players} season={season} layout={layout} onCancel={() => setStarting(false)} />
           : <div><button className="btn btn-primary" onClick={() => setStarting(true)}>Start scoring a group</button></div>
       )}
 
@@ -115,9 +116,21 @@ function LayoutPicker({ eventId, layoutId, layouts, onChanged }: { eventId: stri
 }
 
 /** Pick the tee time and who's playing, then go to the scoring screen. */
-function StartGroup({ eventId, rounds, players, onCancel }: { eventId: string; rounds: RoundData[]; players: Player[]; onCancel: () => void }) {
+function StartGroup({ eventId, rounds, players, season, layout, onCancel }: {
+  eventId: string; rounds: RoundData[]; players: Player[]; season: Season; layout: Layout; onCancel: () => void;
+}) {
   const { league } = useLeague();
   const nav = useNavigate();
+  const hcp = season.rules.format === 'bestBallMatch' && season.rules.handicaps?.enabled ? season.rules.handicaps : null;
+  // Handicaps are fixed when the group starts: work out everyone's index now.
+  const indexes = useAsync(
+    async () => (hcp ? leagueIndexes(players, await loadPlayedRounds(api, league.id), hcp.source ?? 'ghinFirst') : null),
+    [league.id, !!hcp],
+  );
+  const courseHcp = (playerId: string): number | null => {
+    const idx = indexes.data?.get(playerId)?.index;
+    return idx == null ? null : courseHandicapFor(idx, layout);
+  };
   const usedSlots = new Set(rounds.map((r) => r.teeSlot));
   const busyPlayers = useMemo(() => new Set(rounds.flatMap((r) => r.players.map((p) => p.playerId))), [rounds]);
   const firstFree = [...Array(30).keys()].map((i) => i + 1).find((n) => !usedSlots.has(n)) ?? 1;
@@ -141,8 +154,9 @@ function StartGroup({ eventId, rounds, players, onCancel }: { eventId: string; r
         const chosen = picks.filter(Boolean);
         if (!picks[0]) return setError('Pick at least the first Team A player.');
         if (new Set(chosen).size !== chosen.length) return setError('Each golfer can only be picked once.');
+        if (hcp && !indexes.data) return setError('Still working out handicaps. Try again in a moment.');
         const roundPlayers: RoundPlayer[] = picks
-          .map((id, i) => (id ? { playerId: id, side: i < 2 ? 'A' : i < 4 ? 'B' : null, position: i } as RoundPlayer : null))
+          .map((id, i) => (id ? { playerId: id, side: i < 2 ? 'A' : i < 4 ? 'B' : null, position: i, courseHandicap: hcp ? courseHcp(id) : null } as RoundPlayer : null))
           .filter((p): p is RoundPlayer => p !== null);
         const id = await run(() => api.startRound(league.id, eventId, n, roundPlayers));
         if (id) nav(`../round/${id}`);
@@ -169,9 +183,19 @@ function StartGroup({ eventId, rounds, players, onCancel }: { eventId: string; r
                 </option>
               ))}
             </select>
+            {hcp && picks[i] && (
+              <span className="small muted">
+                {indexes.data
+                  ? courseHcp(picks[i]!) == null
+                    ? 'No handicap: plays without strokes'
+                    : `Course handicap ${courseHcp(picks[i]!)} on ${layout.name}`
+                  : 'Working out handicap…'}
+              </span>
+            )}
           </label>
         ))}
       </div>
+      {hcp && <p className="small muted">Handicaps are locked in when you start, for this week only.</p>}
       <div className="row wrap">
         <input placeholder="Sub's name" value={subName} onChange={(e) => setSubName(e.target.value)} style={{ maxWidth: 260 }} />
         <button

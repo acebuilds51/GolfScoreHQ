@@ -65,6 +65,11 @@ export interface MatchRoundInput {
   presses?: PressInput[];
   /** Keyed by hole number. */
   ctp?: Record<number, CtpReport>;
+  /**
+   * Each golfer's Course Handicap for this round's layout, fixed when the group
+   * started. Missing or null = no handicap (plays gross).
+   */
+  courseHandicaps?: Record<PlayerId, number | null>;
 }
 
 /** One team's round in a scramble: one score per hole for the whole team. */

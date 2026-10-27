@@ -26,6 +26,54 @@ function totalsByPlayer(entries) {
   return totals;
 }
 
+// packages/engine/src/net.ts
+function playingHandicap(courseHandicap2, allowancePct) {
+  return Math.round(courseHandicap2 * allowancePct / 100);
+}
+function strokesByHole(strokes, holes) {
+  const n = holes.length;
+  if (!n || !strokes) return holes.map(() => 0);
+  const order = holes.map((h, i) => ({ i, si: h.strokeIndex ?? Number.MAX_SAFE_INTEGER, num: h.number })).sort((a, b) => a.si - b.si || a.num - b.num).map((x) => x.i);
+  const rank = new Array(n);
+  order.forEach((holeIdx, r) => rank[holeIdx] = r);
+  const m = Math.abs(strokes);
+  const base = Math.floor(m / n);
+  const extra = m % n;
+  return holes.map((_, i) => {
+    const r = strokes > 0 ? rank[i] : n - 1 - rank[i];
+    const s = base + (r < extra ? 1 : 0);
+    return strokes > 0 || s === 0 ? s : -s;
+  });
+}
+var courseHcp = (round, id) => round.courseHandicaps?.[id] ?? 0;
+function matchStrokes(round, rules) {
+  const out = {};
+  if (!rules?.enabled || rules.match === "gross") {
+    for (const p of round.players) out[p.id] = 0;
+    return out;
+  }
+  for (const p of round.players) out[p.id] = playingHandicap(courseHcp(round, p.id), rules.allowance);
+  if (rules.match === "offLow") {
+    const inMatch = round.players.filter((p) => p.side).map((p) => out[p.id]);
+    const low = inMatch.length ? Math.min(...inMatch) : 0;
+    for (const p of round.players) if (p.side) out[p.id] = out[p.id] - low;
+  }
+  return out;
+}
+function ownStrokes(round, rules) {
+  const out = {};
+  for (const p of round.players) out[p.id] = rules?.enabled ? playingHandicap(courseHcp(round, p.id), rules.allowance) : 0;
+  return out;
+}
+function netRound(round, holes, strokes) {
+  const scores = {};
+  for (const [id, row] of Object.entries(round.scores)) {
+    const per = strokesByHole(strokes[id] ?? 0, holes);
+    scores[id] = row.map((s, i) => s == null ? null : s - (per[i] ?? 0));
+  }
+  return { ...round, scores };
+}
+
 // packages/engine/src/match.ts
 function sidePlayers(round, side) {
   return round.players.filter((p) => p.side === side).map((p) => p.id);
@@ -56,7 +104,9 @@ function countWins(winners, from = 0) {
 function leader(won2) {
   return won2.A > won2.B ? "A" : won2.B > won2.A ? "B" : null;
 }
-function scoreMatch(round, holeCount, rules) {
+function scoreMatch(gross, holeCount, rules, holes) {
+  const h = rules.handicaps;
+  const round = h?.enabled && h.match !== "gross" && holes ? netRound(gross, holes, matchStrokes(gross, h)) : gross;
   const a = sidePlayers(round, "A");
   const b = sidePlayers(round, "B");
   const hasMatch = a.length > 0 && b.length > 0;
@@ -188,15 +238,17 @@ function par3s(layout) {
 }
 function settleBestBallWeek(rounds, layout, rules) {
   const holeCount = layout.holes.length;
-  const matches = rounds.map((r) => scoreMatch(r, holeCount, rules));
-  const competitors = rounds.flatMap(
-    (r) => r.players.map((p) => ({
+  const matches = rounds.map((r) => scoreMatch(r, holeCount, rules, layout.holes));
+  const netSkins = rules.handicaps?.enabled && rules.handicaps.skins === "net";
+  const competitors = rounds.flatMap((r) => {
+    const scored = netSkins ? netRound(r, layout.holes, ownStrokes(r, rules.handicaps)) : r;
+    return r.players.map((p) => ({
       id: `${r.id}:${p.id}`,
       playerIds: [p.id],
-      scores: r.scores[p.id] ?? [],
+      scores: scored.scores[p.id] ?? [],
       roundId: r.id
-    }))
-  );
+    }));
+  });
   const skins = settleSkins(competitors, layout.holes.map((h) => h.number), rules.skins);
   const ctp = settleCtp(rounds.map((r) => ({ roundId: r.id, teeSlot: r.teeSlot, ctp: r.ctp })), par3s(layout), rules.ctp);
   return {
@@ -547,7 +599,11 @@ export {
   handicapIndex,
   headToHead,
   holeWinner,
+  matchStrokes,
+  netRound,
   nineHoleCourseHandicap,
+  ownStrokes,
+  playingHandicap,
   recapText,
   scoreDifferential,
   scoreMatch,
@@ -560,6 +616,7 @@ export {
   settleWager,
   sidePlayers,
   splitEvenly,
+  strokesByHole,
   totalsByPlayer,
   weeklyRecap,
   withPostedResults

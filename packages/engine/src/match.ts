@@ -1,6 +1,7 @@
 import { settleWager } from './money';
+import { matchStrokes, netRound } from './net';
 import type { BestBallMatchRules } from './rules';
-import type { LedgerEntry, MatchRoundInput, PlayerId, Side } from './types';
+import type { Hole, LedgerEntry, MatchRoundInput, PlayerId, Side } from './types';
 
 export interface PressResult {
   startHoleIndex: number;
@@ -56,7 +57,13 @@ function leader(won: Record<Side, number>): Side | null {
   return won.A > won.B ? 'A' : won.B > won.A ? 'B' : null;
 }
 
-export function scoreMatch(round: MatchRoundInput, holeCount: number, rules: BestBallMatchRules): MatchResult {
+/**
+ * Score a group's match. Pass the layout's `holes` so handicap strokes can be
+ * placed by stroke index; without them (or with handicaps off) it plays gross.
+ */
+export function scoreMatch(gross: MatchRoundInput, holeCount: number, rules: BestBallMatchRules, holes?: Hole[]): MatchResult {
+  const h = rules.handicaps;
+  const round = h?.enabled && h.match !== 'gross' && holes ? netRound(gross, holes, matchStrokes(gross, h)) : gross;
   const a = sidePlayers(round, 'A');
   const b = sidePlayers(round, 'B');
   const hasMatch = a.length > 0 && b.length > 0;

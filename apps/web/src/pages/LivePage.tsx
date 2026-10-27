@@ -97,9 +97,12 @@ export function LeaderPanel({ board, names, holes }: PanelProps & { holes: numbe
   return (
     <section className="leader-card">
       <div className="leader-hero">
-        <div className="leader-hero-label">{leaders.length > 1 ? `Tied for the lead · ${thruLabel(top)}` : `Leader · ${thruLabel(top).toLowerCase()}`}</div>
+        <div className="leader-hero-label">
+          {leaders.length > 1 ? `Tied for the lead · ${thruLabel(top)}` : `Leader · ${thruLabel(top).toLowerCase()}`}{board.net ? ' · net' : ''}
+        </div>
         <div className="num leader-hero-name">{leaders.map((l) => first(names, l.playerId)).join(' · ')}</div>
         <div className="num leader-hero-score">{fmtLiveToPar(top.toPar)}</div>
+        {board.net && leaders.length === 1 && <div className="leader-hero-label">{fmtLiveToPar(top.grossToPar)} gross</div>}
       </div>
       {rest.length > 0 && (
         <ol className="leader-list">
@@ -108,7 +111,7 @@ export function LeaderPanel({ board, names, holes }: PanelProps & { holes: numbe
               <span className="num leader-pos">{pos(i + leaders.length)}</span>
               <span className="grow">
                 <span className="leader-name">{first(names, l.playerId)}</span>
-                <span className="small muted"> {l.finished ? 'F' : `${l.thru}/${holes}`}{l.side === null ? ' · skins' : ''}</span>
+                <span className="small muted"> {l.finished ? 'F' : `${l.thru}/${holes}`}{board.net ? ` · ${fmtLiveToPar(l.grossToPar)} gross` : ''}{l.side === null ? ' · skins' : ''}</span>
               </span>
               <span className={`num leader-score${l.toPar < 0 ? ' under' : ''}`}>{fmtLiveToPar(l.toPar)}</span>
             </li>

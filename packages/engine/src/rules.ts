@@ -31,6 +31,31 @@ export interface CtpRules {
   resolution: 'markerChain' | 'latestTeeSlot';
 }
 
+/**
+ * Handicaps. Each golfer's Course Handicap is fixed when their group starts
+ * (from GHIN or the league's own calculation); these rules decide how many of
+ * those strokes count and where.
+ */
+export interface HandicapRules {
+  enabled: boolean;
+  /** Share of each Course Handicap a golfer gets, in percent (100 = full, 90 and 85 are common for matches). */
+  allowance: number;
+  /**
+   * offLow: everyone in the match plays off the lowest handicap in the group (usual for match play).
+   * full: each golfer gets all their own strokes.
+   * gross: no strokes in the match.
+   */
+  match: 'offLow' | 'full' | 'gross';
+  /** Skins on gross or net scores (net uses each golfer's own strokes). */
+  skins: 'gross' | 'net';
+  /**
+   * Where each golfer's Handicap Index comes from when a group starts:
+   * ghinFirst: the index the commissioner entered (GHIN), else one calculated from league rounds.
+   * ghin: only entered indexes. league: only the league's own calculation.
+   */
+  source?: 'ghinFirst' | 'ghin' | 'league';
+}
+
 export interface BestBallMatchRules {
   format: 'bestBallMatch';
   /** How a group's hole is decided: lowest single ball on each side. */
@@ -39,6 +64,8 @@ export interface BestBallMatchRules {
   presses: { enabled: boolean; stake: Cents };
   skins: SkinsRules;
   ctp: CtpRules;
+  /** Missing on seasons set up before handicaps existed: those play gross. */
+  handicaps?: HandicapRules;
 }
 
 export interface ScrambleRules {

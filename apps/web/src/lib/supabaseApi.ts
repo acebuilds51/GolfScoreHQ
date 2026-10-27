@@ -154,8 +154,13 @@ export function supabaseApi(url: string, anonKey: string): Api {
     },
 
     async players(leagueId) {
-      const rows = check(await sb.from('players').select('id, display_name, is_sub, active, user_id').eq('league_id', leagueId).order('display_name')) as Row[];
-      return rows.map((r) => ({ id: r.id, displayName: r.display_name, isSub: r.is_sub, active: r.active, userId: r.user_id }));
+      const rows = check(
+        await sb.from('players').select('id, display_name, is_sub, active, user_id, handicap_index, ghin_number, handicap_index_updated_at').eq('league_id', leagueId).order('display_name'),
+      ) as Row[];
+      return rows.map((r) => ({
+        id: r.id, displayName: r.display_name, isSub: r.is_sub, active: r.active, userId: r.user_id,
+        handicapIndex: r.handicap_index == null ? null : Number(r.handicap_index), ghinNumber: r.ghin_number, handicapIndexUpdatedAt: r.handicap_index_updated_at,
+      }));
     },
     async contacts(leagueId) {
       const rows = check(await sb.from('player_contacts').select('player_id, email, phone').eq('league_id', leagueId)) as Row[];
@@ -178,6 +183,11 @@ export function supabaseApi(url: string, anonKey: string): Api {
       if (patch.displayName !== undefined) row.display_name = patch.displayName;
       if (patch.isSub !== undefined) row.is_sub = patch.isSub;
       if (patch.active !== undefined) row.active = patch.active;
+      if (patch.ghinNumber !== undefined) row.ghin_number = patch.ghinNumber;
+      if (patch.handicapIndex !== undefined) {
+        row.handicap_index = patch.handicapIndex;
+        row.handicap_index_updated_at = new Date().toISOString();
+      }
       check(await sb.from('players').update(row).eq('id', id));
     },
     async saveContact(leagueId, playerId, c) {
@@ -302,7 +312,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
     },
     async startRound(leagueId, eventId, teeSlot, players) {
       const r = check(await sb.from('rounds').insert({ league_id: leagueId, event_id: eventId, tee_slot: teeSlot }).select('id').single()) as Row;
-      check(await sb.from('round_players').insert(players.map((p) => ({ round_id: r.id, league_id: leagueId, player_id: p.playerId, side: p.side, position: p.position }))));
+      check(await sb.from('round_players').insert(players.map((p) => ({ round_id: r.id, league_id: leagueId, player_id: p.playerId, side: p.side, position: p.position, course_handicap: p.courseHandicap ?? null }))));
       return r.id;
     },
     async saveScores(leagueId, roundId, entries) {
@@ -497,7 +507,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
 }
 
 const ROUND_SELECT =
-  'id, event_id, tee_slot, status, current_hole, submitted_at, round_players(player_id, side, position), hole_scores(player_id, hole_number, strokes), presses(id, start_hole_number, called_by, created_at), ctp_reports(hole_number, player_id, beat_player_id)';
+  'id, event_id, tee_slot, status, current_hole, submitted_at, round_players(player_id, side, position, course_handicap), hole_scores(player_id, hole_number, strokes), presses(id, start_hole_number, called_by, created_at), ctp_reports(hole_number, player_id, beat_player_id)';
 
 function toSeason(r: Row): Season {
   return { id: r.id, leagueId: r.league_id, year: r.year, name: r.name, rules: r.rules, startDate: r.start_date, leagueDay: r.league_day };
@@ -514,7 +524,7 @@ function toRound(r: Row): RoundData {
   for (const c of (r.ctp_reports ?? []) as Row[]) ctp[c.hole_number] = { playerId: c.player_id, beat: c.beat_player_id };
   return {
     id: r.id, eventId: r.event_id, teeSlot: r.tee_slot, status: r.status, currentHole: r.current_hole, submittedAt: r.submitted_at,
-    players: ((r.round_players ?? []) as Row[]).map((p) => ({ playerId: p.player_id, side: p.side, position: p.position })).sort((a, b) => a.position - b.position),
+    players: ((r.round_players ?? []) as Row[]).map((p) => ({ playerId: p.player_id, side: p.side, position: p.position, courseHandicap: p.course_handicap ?? null })).sort((a, b) => a.position - b.position),
     scores,
     presses: ((r.presses ?? []) as Row[])
       .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))

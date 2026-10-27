@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { EmptyState, ErrorText, ProLock, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
-import { allLayouts, basicRules, describeRules, fmtDate, formFromRules, layoutForWeek, nextDate, OCBC_STYLE_FORM, rulesFromForm, type SideGameForm } from '../lib/scoring';
+import { allLayouts, basicRules, describeRules, fmtDate, formFromRules, handicapsFromForm, layoutForWeek, nextDate, OCBC_STYLE_FORM, rulesFromForm, type SideGameForm } from '../lib/scoring';
 import { isCommissioner, type Season } from '../lib/types';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -140,7 +140,8 @@ function SeasonForm({ season, onSaved, onCancel }: { season?: Season; onSaved: (
         e.preventDefault();
         const y = Number(year);
         if (!(y >= 2020 && y <= 2100)) return setError('Enter the season year, e.g. 2027.');
-        const rules = pro ? rulesFromForm(form) : basicRules();
+        // Handicaps are on every plan; side games and money need Pro.
+        const rules = pro ? rulesFromForm(form) : { ...basicRules(), handicaps: handicapsFromForm(form) };
         const ok = await run(async () => {
           if (season) await api.updateSeasonRules(season.id, rules);
           else await api.createSeason(league.id, { year: y, name: name.trim(), rules, startDate: startDate || null, leagueDay: Number(leagueDay) });
@@ -203,6 +204,46 @@ function SeasonForm({ season, onSaved, onCancel }: { season?: Season; onSaved: (
             <label className="inline">CTP per par 3 ($)<input inputMode="decimal" value={form.ctpAmount} onChange={(e) => set({ ctpAmount: e.target.value })} /></label>
           )}
         </fieldset>
+      </div>
+
+      <div className="subcard stack">
+        <strong>Handicaps</strong>
+        <label className="check-row"><input type="checkbox" checked={form.hcpEnabled} onChange={(e) => set({ hcpEnabled: e.target.checked })} /> Play with handicaps (net scoring)</label>
+        {form.hcpEnabled ? (
+          <>
+            <label className="inline">
+              Handicaps come from
+              <select value={form.hcpSource} onChange={(e) => set({ hcpSource: e.target.value as SideGameForm['hcpSource'] })}>
+                <option value="ghinFirst">GHIN index if entered, otherwise calculated from league rounds</option>
+                <option value="ghin">Only the GHIN index I enter</option>
+                <option value="league">Only calculated from league rounds</option>
+              </select>
+            </label>
+            <label className="inline">
+              Percent of handicap used
+              <input inputMode="numeric" value={form.hcpAllowance} onChange={(e) => set({ hcpAllowance: e.target.value.replace(/\D/g, '') })} />
+              <span className="small muted">100 = full handicap. 90% is common for 2-man best ball, 85% for USGA four-ball.</span>
+            </label>
+            <label className="inline">
+              Strokes in the match
+              <select value={form.hcpMatch} onChange={(e) => set({ hcpMatch: e.target.value as SideGameForm['hcpMatch'] })}>
+                <option value="offLow">Off the low man (the best player in the group plays scratch)</option>
+                <option value="full">Everyone gets their full strokes</option>
+                <option value="gross">No strokes in the match (gross)</option>
+              </select>
+            </label>
+            <label className="inline">
+              Skins
+              <select value={form.hcpSkins} onChange={(e) => set({ hcpSkins: e.target.value as SideGameForm['hcpSkins'] })}>
+                <option value="gross">Gross (no strokes)</option>
+                <option value="net">Net (each golfer's own strokes)</option>
+              </select>
+            </label>
+            <p className="small muted">Each golfer's strokes are set when their group starts, so changing a handicap later never changes a finished week. Enter GHIN numbers and indexes on the Roster page.</p>
+          </>
+        ) : (
+          <p className="small muted">Off: everyone plays gross, no strokes given.</p>
+        )}
       </div>
       <ErrorText>{error}</ErrorText>
       <div className="row">

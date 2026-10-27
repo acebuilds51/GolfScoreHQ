@@ -40,7 +40,7 @@ export interface Api {
   players(leagueId: string): Promise<Player[]>;
   contacts(leagueId: string): Promise<Record<string, Contact>>;
   addPlayers(leagueId: string, players: NewPlayer[]): Promise<void>;
-  updatePlayer(id: string, patch: { displayName?: string; isSub?: boolean; active?: boolean }): Promise<void>;
+  updatePlayer(id: string, patch: { displayName?: string; isSub?: boolean; active?: boolean; handicapIndex?: number | null; ghinNumber?: string | null }): Promise<void>;
   saveContact(leagueId: string, playerId: string, contact: Contact): Promise<void>;
 
   /** Returns the raw token for the invite link; only its hash is stored. */

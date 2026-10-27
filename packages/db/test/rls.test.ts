@@ -393,6 +393,25 @@ describe('Clubhouse TV feed', () => {
   });
 });
 
+describe('handicaps', () => {
+  it('lets commissioners set GHIN details, and fixes each golfer’s course handicap on the round', async () => {
+    const al = await addPlayer(tony, oak, 'Al');
+    await as(db, tony, () => db.query(`update players set ghin_number = '1234567', handicap_index = 12.4, handicap_index_updated_at = now() where id = $1`, [al]));
+    await as(db, joe, () => db.query(`update players set handicap_index = 2.0 where id = $1`, [al])); // golfers can't change it (no rows updated)
+    expect(await rows(db, 'select ghin_number, handicap_index::text as idx from players where id = $1', [al])).toEqual([{ ghin_number: '1234567', idx: '12.4' }]);
+    await expect(as(db, tony, () => db.query(`update players set handicap_index = 60 where id = $1`, [al]))).rejects.toThrow(/check constraint/);
+    await expect(as(db, tony, () => db.query(`update players set ghin_number = 'abc' where id = $1`, [al]))).rejects.toThrow(/check constraint/);
+
+    await setPlan(oak, 'pro');
+    const { roundId } = await weekWithRound(tony, oak, PRO_RULES);
+    await as(db, joe, () => db.query(`insert into round_players (round_id, player_id, league_id, side, course_handicap) values ($1, $2, $3, 'A', 7)`, [roundId, al, oak]));
+    const token = 'tv-token-hcp-0123456789';
+    await as(db, tony, () => db.query('insert into tv_displays (league_id, token_hash, created_by) values ($1, $2, $3)', [oak, createHash('sha256').update(token).digest('hex'), tony]));
+    const f = (await as(db, null, () => rows<{ f: any }>(db, 'select tv_feed($1) as f', [token])))[0]!.f;
+    expect(f.rounds[0].players[0]).toMatchObject({ playerId: al, courseHandicap: 7 });
+  });
+});
+
 describe('billing', () => {
   /** What the Stripe webhook (service role) records after a payment. */
   async function paid(sub: string, owner: string, target: { league?: string; club?: string }, status = 'active') {

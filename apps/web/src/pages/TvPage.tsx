@@ -147,7 +147,7 @@ function TvLeaderboard({ board, names, holes }: P & { holes: number }) {
   let prev: number | null = null;
   return (
     <table className="tv-table">
-      <thead><tr><th>#</th><th className="left">Golfer</th><th>Thru</th><th>Score</th><th>To par</th></tr></thead>
+      <thead><tr><th>#</th><th className="left">Golfer</th><th>Thru</th><th>Score</th>{board.net && <th>Gross</th>}<th>{board.net ? 'Net' : 'To par'}</th></tr></thead>
       <tbody>
         {rows.map((l, i) => {
           if (l.toPar !== prev) rank = i + 1;
@@ -158,6 +158,7 @@ function TvLeaderboard({ board, names, holes }: P & { holes: number }) {
               <td className="left">{names.get(l.playerId) ?? '?'}{l.side === null && <span className="dim small"> · skins</span>}</td>
               <td>{l.finished ? 'F' : `${l.thru}/${holes}`}</td>
               <td>{l.strokes}</td>
+              {board.net && <td className="dim">{fmtLiveToPar(l.grossToPar)}</td>}
               <td className={l.toPar < 0 ? 'under' : ''}>{fmtLiveToPar(l.toPar)}</td>
             </tr>
           );

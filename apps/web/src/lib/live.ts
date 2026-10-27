@@ -1,4 +1,4 @@
-import type { FormatRules } from '@golfscorehq/engine';
+import { playingHandicap, strokesByHole, type FormatRules } from '@golfscorehq/engine';
 import { asBestBall, currentMarker, matchSoFar } from './scoring';
 import type { Layout, RoundData } from './types';
 
@@ -13,7 +13,9 @@ export interface LiveLine {
   /** Holes played, counting from the first hole without a gap. */
   thru: number;
   strokes: number;
+  /** What the leaderboard ranks on: net to par when the league plays with handicaps, otherwise gross. */
   toPar: number;
+  grossToPar: number;
   finished: boolean;
 }
 
@@ -39,6 +41,8 @@ export interface LiveBoard {
   highlights: LiveHighlight[];
   groupsOnCourse: number;
   groupsDone: number;
+  /** True when lines rank on net scores. */
+  net: boolean;
 }
 
 export function liveBoard(rounds: RoundData[], layout: Layout, rulesIn: FormatRules): LiveBoard {
@@ -46,22 +50,28 @@ export function liveBoard(rounds: RoundData[], layout: Layout, rulesIn: FormatRu
   const lines: LiveLine[] = [];
   const highlights: LiveHighlight[] = [];
 
+  const hcp = rules.handicaps?.enabled ? rules.handicaps : null;
   for (const r of rounds) {
     for (const p of r.players) {
+      // Net uses each golfer's own strokes (after the allowance), not off the low man.
+      const given = hcp ? strokesByHole(playingHandicap(p.courseHandicap ?? 0, hcp.allowance), layout.holes) : null;
       let thru = 0;
       let strokes = 0;
       let par = 0;
-      for (const h of layout.holes) {
+      let received = 0;
+      for (const [i, h] of layout.holes.entries()) {
         const s = r.scores[p.playerId]?.[h.number];
         if (s == null) break;
         thru++;
         strokes += s;
         par += h.par;
+        received += given?.[i] ?? 0;
         const kind = s === 1 ? 'ace' : s - h.par <= -2 ? 'eagle' : s - h.par === -1 ? 'birdie' : null;
         if (kind) highlights.push({ playerId: p.playerId, holeNumber: h.number, kind });
       }
       if (thru === 0) continue;
-      lines.push({ playerId: p.playerId, roundId: r.id, teeSlot: r.teeSlot, side: p.side, thru, strokes, toPar: strokes - par, finished: thru === layout.holes.length });
+      const gross = strokes - par;
+      lines.push({ playerId: p.playerId, roundId: r.id, teeSlot: r.teeSlot, side: p.side, thru, strokes, toPar: gross - received, grossToPar: gross, finished: thru === layout.holes.length });
     }
   }
   lines.sort((a, b) => a.toPar - b.toPar || b.thru - a.thru || a.teeSlot - b.teeSlot);
@@ -93,6 +103,7 @@ export function liveBoard(rounds: RoundData[], layout: Layout, rulesIn: FormatRu
     lines, matches, skins, ctp, highlights,
     groupsOnCourse: rounds.filter((r) => r.status !== 'submitted').length,
     groupsDone: rounds.filter((r) => r.status === 'submitted').length,
+    net: !!hcp,
   };
 }
 
