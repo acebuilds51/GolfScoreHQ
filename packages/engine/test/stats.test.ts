@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  courseHoleStats,
   headToHead,
   OCBC_BEST_BALL,
+  playerProfile,
   recapText,
   seasonAwards,
   seasonStats,
@@ -44,6 +46,26 @@ describe('season stats', () => {
 
   it('keeps head-to-head records between opponents', () => {
     expect(headToHead(played, OCBC_BEST_BALL)['al|bob']).toEqual({ playerA: 'al', playerB: 'bob', aWins: 1, bWins: 1, halves: 0 });
+  });
+});
+
+describe('player profile and course stats', () => {
+  const al = playerProfile(played, 'al');
+
+  it('counts the mix of scores and par-3/4/5 averages', () => {
+    expect(al.mix).toEqual({ eagles: 1, birdies: 1, pars: 16, bogeys: 0, doubles: 0, holes: 18 });
+    expect(al.byPar).toEqual([{ par: 3, holes: 4, averageToPar: 0 }, { par: 4, holes: 12, averageToPar: -0.1 }, { par: 5, holes: 2, averageToPar: -1 }]);
+  });
+
+  it('finds their best hole (played at least twice)', () => {
+    expect(al.bestHole).toMatchObject({ holeNumber: 3, par: 5, played: 2, averageToPar: -1, averageScore: 4, birdiesOrBetter: 1 });
+    expect(al.holes).toHaveLength(9);
+  });
+
+  it('ranks the course holes hardest first', () => {
+    const holes = courseHoleStats(played);
+    expect(holes.at(-1)).toMatchObject({ holeNumber: 3, played: 8, averageToPar: -0.2 }); // −2 over 8 scores, one decimal
+    expect(holes[0]!.averageToPar).toBe(0);
   });
 });
 

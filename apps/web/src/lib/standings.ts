@@ -41,6 +41,8 @@ export interface Standings {
   rows: StandingRow[];
   weeksCounted: number;
   awards: Award[];
+  /** Settled own-ball rounds (scramble weeks left out), for player and course stats. */
+  played: PlayedRound[];
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -105,7 +107,32 @@ export function buildStandings(input: {
       };
     });
 
-  return { rows, weeksCounted: settled.size, awards: seasonAwards(stats, { minRounds: Math.min(4, Math.max(1, Math.ceil(settled.size / 2))) }) };
+  const handicaps = handicapChanges(played);
+  return {
+    rows,
+    weeksCounted: settled.size,
+    awards: seasonAwards(stats, { minRounds: Math.min(4, Math.max(1, Math.ceil(settled.size / 2))), ...(Object.keys(handicaps).length ? { handicaps } : {}) }),
+    played,
+  };
+}
+
+/**
+ * For Most Improved: each golfer's Course Handicap in their first and latest
+ * settled rounds this season (fixed when their group started). Golfers with
+ * fewer than two handicapped rounds are left out.
+ */
+export function handicapChanges(played: PlayedRound[]): Record<string, { start: number | null; end: number | null }> {
+  const seen = new Map<string, number[]>();
+  for (const { round } of [...played].sort((a, b) => a.week - b.week)) {
+    for (const p of round.players) {
+      const ch = round.courseHandicaps?.[p.id];
+      if (ch == null) continue;
+      seen.set(p.id, [...(seen.get(p.id) ?? []), ch]);
+    }
+  }
+  const out: Record<string, { start: number | null; end: number | null }> = {};
+  for (const [id, chs] of seen) if (chs.length >= 2) out[id] = { start: chs[0]!, end: chs[chs.length - 1]! };
+  return out;
 }
 
 export function sortStandings(rows: StandingRow[], key: SortKey): StandingRow[] {

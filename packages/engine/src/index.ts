@@ -11,4 +11,5 @@ export * from './handicap';
 export * from './net';
 export * from './templates';
 export * from './stats';
+export * from './profile';
 export * from './recap';

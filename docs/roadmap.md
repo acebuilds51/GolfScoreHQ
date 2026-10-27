@@ -29,7 +29,8 @@ Status key: **Built** = data model and logic done and tested. **Next** = needs t
 
 ### 4. Season awards and stats
 - **Built:** `seasonStats()`, `headToHead()` and `seasonAwards()` in the engine: lowest average, best round, skins leader, CTP king, birdie machine, eagle and hole-in-one clubs, match play champ, money leader, hottest finish, most improved (handicap). Ties share an award.
-- **Next:** player stats page, head-to-head page, end-of-season awards page, shareable award images.
+- **Built (app):** player stats page (tiles for everyone; Pro adds a week-by-week chart, score mix, par-3/4/5 scoring, best and worst holes, head-to-head), awards page with a shareable awards picture, the course's hardest and easiest holes, most improved from course handicaps, weekly wins and Stableford points awards.
+- **Next:** past seasons (history), an end-of-season "final" moment (commissioner closes the season).
 
 ### 5. Clubhouse TV mode
 - **Built:** `tv_displays` (commissioner-created links, stored as a hash, revocable, settings for panels, seconds per panel and hiding dollar amounts). Mockup approved.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { OCBC_STYLE_FORM, rulesFromForm } from '../src/lib/scoring';
 import { settleWeek } from '../src/lib/settlement';
-import { buildStandings, sortStandings } from '../src/lib/standings';
+import { buildStandings, handicapChanges, sortStandings } from '../src/lib/standings';
 import type { Layout, LeagueEvent, Player, RoundData, Season } from '../src/lib/types';
 
 const front: Layout = { id: 'f', name: 'Front 9', tees: null, rating: null, slope: null, holes: [4, 3, 5, 4, 3, 4, 4, 4, 4].map((par, i) => ({ number: i + 1, par })) };
@@ -52,5 +52,23 @@ describe('season standings', () => {
 
   it('hands out awards', () => {
     expect(s.awards.find((a) => a.key === 'mostSkins')!.winners.sort()).toEqual(['al', 'bob']);
+    expect(s.awards.find((a) => a.key === 'mostImproved')).toBeUndefined(); // nobody played with handicaps
+  });
+
+  it('keeps the settled rounds for player and course stats', () => {
+    expect(s.played.map((p) => p.week)).toEqual([1, 2]);
+  });
+});
+
+describe('most improved', () => {
+  it("compares each golfer's course handicap in their first and latest rounds", () => {
+    const withHcp = (id: string, eventId: string, chs: Record<string, number>) => {
+      const r = round(id, eventId, {});
+      return { ...r, players: r.players.map((p) => ({ ...p, courseHandicap: chs[p.playerId] ?? null })) };
+    };
+    const rounds = [withHcp('r1', 'e1', { al: 12, bob: 8 }), withHcp('r2', 'e2', { al: 9, bob: 9 })];
+    const s = buildStandings({ season, events: [ev('e1', 1, 'settled'), ev('e2', 2, 'settled')], rounds, ledger: [], layouts: [front], players });
+    expect(handicapChanges(s.played)).toEqual({ al: { start: 12, end: 9 }, bob: { start: 8, end: 9 } });
+    expect(s.awards.find((a) => a.key === 'mostImproved')).toMatchObject({ winners: ['al'], value: 3 });
   });
 });

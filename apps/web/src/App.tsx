@@ -17,6 +17,8 @@ import { WeekPage } from './pages/WeekPage';
 import { RosterPage } from './pages/RosterPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { StandingsPage } from './pages/StandingsPage';
+import { AwardsPage } from './pages/AwardsPage';
+import { PlayerPage } from './pages/PlayerPage';
 import { SignInPage } from './pages/SignInPage';
 import { TvPage } from './pages/TvPage';
 
@@ -47,6 +49,8 @@ export function App() {
             <Route path="week/:eventId" element={<WeekPage />} />
             <Route path="round/:roundId" element={<ScoreRoundPage />} />
             <Route path="standings" element={<StandingsPage />} />
+            <Route path="awards" element={<AwardsPage />} />
+            <Route path="player/:playerId" element={<PlayerPage />} />
             <Route path="live" element={<LivePage />} />
             <Route path="live/:eventId" element={<LivePage />} />
             <Route path="roster" element={<RosterPage />} />
