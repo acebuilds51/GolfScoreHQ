@@ -13,6 +13,7 @@ const FORMAT_HELP: Record<FormatKey, string> = {
   bestBallMatch: 'Two teams of two in each group. Each hole goes to the team with the lowest single score.',
   strokePlay: 'Everyone plays their own ball against the whole league. Lowest total wins the week.',
   stableford: 'Points on every hole: 2 for par, 3 for birdie, 1 for bogey, 0 for double or worse. Most points wins, and one bad hole never ruins the night.',
+  scramble: 'Each group is a team playing the best shot every time, with one score per hole. Lowest team total wins. (For a single scramble week in another format, use the week page.)',
 };
 import { isCommissioner, type Season } from '../lib/types';
 
@@ -91,7 +92,7 @@ export function PlayPage() {
                 <li key={e.id}>
                   <Link className="list-row link-row" to={`../week/${e.id}`}>
                     <div className="grow">
-                      <strong>Week {e.weekNumber}</strong>
+                      <strong>Week {e.weekNumber}</strong>{e.rulesOverride && <span className="badge badge-pro"> {e.rulesOverride.format === 'scramble' ? 'Scramble' : 'Special'}</span>}
                       <div className="small muted">{[fmtDate(e.eventDate), l ? `${l.courseName} · ${l.name}` : 'No course picked'].filter(Boolean).join(' · ')}</div>
                     </div>
                     <span className={`badge ${e.status === 'settled' ? 'badge-ok' : 'badge-neutral'}`}>
@@ -217,9 +218,13 @@ function SeasonForm({ season, onSaved, onCancel }: { season?: Season; onSaved: (
             </>
           ) : (
             <label className="inline">
-              Prize money each week by place ($)
+              {form.format === 'scramble' ? 'Team prize money each week by place ($)' : 'Prize money each week by place ($)'}
               <input value={form.payouts} placeholder="30, 20, 10" onChange={(e) => set({ payouts: e.target.value })} />
-              <span className="small muted">1st, 2nd, 3rd… separated by commas. Leave it empty for no prize money. Golfers tied for a place split the money for the places they cover.</span>
+              <span className="small muted">
+                1st, 2nd, 3rd… separated by commas. Leave it empty for no prize money. {form.format === 'scramble'
+                  ? "Teams tied for a place split the money for the places they cover, and each team's prize is split among its players."
+                  : 'Golfers tied for a place split the money for the places they cover.'}
+              </span>
             </label>
           )}
           <label className="check-row"><input type="checkbox" checked={form.skinsEnabled} onChange={(e) => set({ skinsEnabled: e.target.checked })} /> Skins across the whole league</label>
@@ -255,16 +260,20 @@ function SeasonForm({ season, onSaved, onCancel }: { season?: Season; onSaved: (
                 <option value="league">Only calculated from league rounds</option>
               </select>
             </label>
-            <label className="inline">
-              Percent of handicap used
-              <input inputMode="numeric" value={form.hcpAllowance} onChange={(e) => set({ hcpAllowance: e.target.value.replace(/\D/g, '') })} />
-              <span className="small muted">
-                {form.format === 'bestBallMatch'
-                  ? '100 = full handicap. 90% is common for 2-man best ball, 85% for USGA four-ball.'
-                  : '100 = full handicap. 95% is the USGA recommendation for individual stroke play and Stableford.'}
-              </span>
-            </label>
-            {form.format === 'bestBallMatch' ? (
+            {form.format !== 'scramble' && (
+              <label className="inline">
+                Percent of handicap used
+                <input inputMode="numeric" value={form.hcpAllowance} onChange={(e) => set({ hcpAllowance: e.target.value.replace(/\D/g, '') })} />
+                <span className="small muted">
+                  {form.format === 'bestBallMatch'
+                    ? '100 = full handicap. 90% is common for 2-man best ball, 85% for USGA four-ball.'
+                    : '100 = full handicap. 95% is the USGA recommendation for individual stroke play and Stableford.'}
+                </span>
+              </label>
+            )}
+            {form.format === 'scramble' ? (
+              <p className="small muted">Each team gets a team handicap: 25%, 20%, 15% and 10% of its players' course handicaps, lowest first (35% and 15% for a twosome).</p>
+            ) : form.format === 'bestBallMatch' ? (
               <label className="inline">
                 Strokes in the match
                 <select value={form.hcpMatch} onChange={(e) => set({ hcpMatch: e.target.value as SideGameForm['hcpMatch'] })}>
@@ -280,7 +289,7 @@ function SeasonForm({ season, onSaved, onCancel }: { season?: Season; onSaved: (
               Skins
               <select value={form.hcpSkins} onChange={(e) => set({ hcpSkins: e.target.value as SideGameForm['hcpSkins'] })}>
                 <option value="gross">Gross (no strokes)</option>
-                <option value="net">Net (each golfer's own strokes)</option>
+                <option value="net">{form.format === 'scramble' ? "Net (the team's strokes)" : "Net (each golfer's own strokes)"}</option>
               </select>
             </label>
             <p className="small muted">Each golfer's strokes are set when their group starts, so changing a handicap later never changes a finished week. Enter GHIN numbers and indexes on the Roster page.</p>

@@ -88,8 +88,8 @@ describe('winner card', () => {
 
 describe('stroke play and Stableford pictures', () => {
   const leaderboard: WeeklyRecap['leaderboard'] = [
-    { playerId: 'bill', place: 1, tied: false, score: 38, grossToPar: 2, toPar: -3, points: 21 },
-    { playerId: 'jim', place: 2, tied: false, score: 34, grossToPar: -2, toPar: -2, points: 20 },
+    { playerIds: ['bill'], place: 1, tied: false, score: 38, grossToPar: 2, toPar: -3, points: 21 },
+    { playerIds: ['jim'], place: 2, tied: false, score: 34, grossToPar: -2, toPar: -2, points: 20 },
   ];
 
   it('Stableford: the winner on points heads the picture, then the leaderboard', () => {
@@ -105,5 +105,16 @@ describe('stroke play and Stableford pictures', () => {
     const r: WeeklyRecap = { ...recap, format: 'strokePlay', net: true, matches: [], leaderboard };
     expect(resultsModel(r, name, { includeMoney: false }).lowRound).toEqual({ label: 'Winner', names: 'Billy Bob', score: 33, toPar: 'Net · 3 under' });
     expect(resultsModel(r, name, { includeMoney: false }).matches[0]!.score).toBe('−3');
+  });
+
+  it('scramble: the winning team by first names', () => {
+    const teams: WeeklyRecap['leaderboard'] = [
+      { playerIds: ['jim', 'bill', 'rick', 'tig'], place: 1, tied: false, score: 29, grossToPar: -7, toPar: -7, points: null },
+      { playerIds: ['al', 'bob'], place: 2, tied: false, score: 31, grossToPar: -5, toPar: -5, points: null },
+    ];
+    const r: WeeklyRecap = { ...recap, format: 'scramble', matches: [], leaderboard: teams, lowRound: null, highlights: [] };
+    const m = resultsModel(r, name, { includeMoney: false });
+    expect(m.lowRound).toEqual({ label: 'Winning team', names: 'Jim & Billy & Rick & Tiger', score: 29, toPar: '7 under' });
+    expect(m.matches).toEqual([{ text: '1. Jim & Billy & Rick & Tiger', score: '29' }, { text: '2. Al & Bob', score: '31' }]);
   });
 });

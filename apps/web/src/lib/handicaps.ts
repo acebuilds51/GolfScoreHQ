@@ -86,7 +86,8 @@ export async function loadPlayedRounds(api: import('./api').Api, leagueId: strin
     [...seasons].sort((a, b) => a.year - b.year).map(async (s) => {
       const [events, rounds] = await Promise.all([api.events(s.id), api.seasonRounds(s.id)]);
       return [...events]
-        .filter((e) => e.status !== 'rainout' && e.layoutId && layouts.has(e.layoutId))
+        // Scramble scores are team scores, so they never count toward anyone's handicap.
+        .filter((e) => e.status !== 'rainout' && e.layoutId && layouts.has(e.layoutId) && (e.rulesOverride ?? s.rules).format !== 'scramble')
         .sort((a, b) => a.weekNumber - b.weekNumber)
         .flatMap((e) => rounds.filter((r) => r.eventId === e.id).sort((a, b) => a.teeSlot - b.teeSlot).map((round) => ({ round, layout: layouts.get(e.layoutId!)! })));
     }),

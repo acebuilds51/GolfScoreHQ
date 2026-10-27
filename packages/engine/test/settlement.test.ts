@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   OCBC_BEST_BALL,
   OCBC_SCRAMBLE,
+  scrambleRoundFrom,
   settleBestBallWeek,
   settleCtp,
   settleScrambleWeek,
   settleSkins,
   splitEvenly,
+  teamHandicap,
   totalsByPlayer,
   type ScrambleRoundInput,
+  type ScrambleRules,
 } from '../src';
 import { FRONT, parRound, round } from './fixtures';
 
@@ -171,6 +174,40 @@ describe('scramble week', () => {
     );
     expect(res.winners.map((w) => w.roundId)).toEqual(['t1']);
     expect(totalsByPlayer(res.ledger)).toEqual({ a: 3000, b: 3000, c: 3000, d: 3000 });
+  });
+
+  it('pays prize money by place and leaves out unfinished teams', () => {
+    const unfinished = parRound({ 0: 2 });
+    unfinished[8] = null as unknown as number;
+    const res = settleScrambleWeek(
+      [
+        team('t1', 1, { 0: 3 }, ['a', 'b']),
+        team('t2', 2, {}, ['c', 'd']),
+        { id: 't3', teeSlot: 3, players: ['e', 'f'], teamScores: unfinished },
+      ],
+      FRONT,
+      { ...OCBC_SCRAMBLE, payouts: [4000, 2000], skins: { ...OCBC_SCRAMBLE.skins, enabled: false } },
+    );
+    expect(res.standings.map((s) => [s.roundId, s.place, s.total])).toEqual([['t1', 1, 34], ['t2', 2, 35], ['t3', null, 29]]);
+    expect(totalsByPlayer(res.ledger)).toEqual({ a: 2000, b: 2000, c: 1000, d: 1000 });
+  });
+
+  it('net scramble: team handicap from weighted course handicaps', () => {
+    expect(teamHandicap([20, 4, 12, 8])).toBe(6); // 4×25% + 8×20% + 12×15% + 20×10% = 6.4
+    expect(teamHandicap([10, null])).toBe(2); //      0×35% + 10×15% = 1.5 → 2
+    const net: ScrambleRules = { ...OCBC_SCRAMBLE, payouts: [1000], skins: { ...OCBC_SCRAMBLE.skins, enabled: false },
+      handicaps: { enabled: true, allowance: 100, match: 'full', skins: 'gross' } };
+    const res = settleScrambleWeek(
+      [team('t1', 1, { 0: 3 }, ['a', 'b']), { ...team('t2', 2, {}, ['c', 'd']), courseHandicaps: { c: 2, d: 10 } }],
+      FRONT, net,
+    );
+    // t1 34 gross (−1); t2 35 gross with 2 strokes = net 33 (−2) wins.
+    expect(res.standings.map((s) => [s.roundId, s.toPar, s.grossToPar, s.place])).toEqual([['t2', -2, 0, 1], ['t1', -1, -1, 2]]);
+  });
+
+  it('reads the team score from the per-player rows the app stores', () => {
+    const r = scrambleRoundFrom({ id: 'r', teeSlot: 1, players: [{ id: 'a' }, { id: 'b' }], scores: { a: [4, null], b: [4, 3] } });
+    expect(r).toMatchObject({ players: ['a', 'b'], teamScores: [4, 3] });
   });
 
   it('splits the team pot between tied teams', () => {

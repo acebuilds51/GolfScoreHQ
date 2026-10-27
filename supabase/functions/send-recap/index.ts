@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
   if (!body.eventId) return json({ error: 'Which week?' }, 400);
 
   const admin = createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'));
-  const { data: event } = await admin.from('events').select('id, league_id, season_id, week_number, status, layout_id').eq('id', body.eventId).maybeSingle();
+  const { data: event } = await admin.from('events').select('id, league_id, season_id, week_number, status, layout_id, rules_override').eq('id', body.eventId).maybeSingle();
   if (!event) return json({ error: "That week wasn't found." }, 404);
 
   const { data: isCommish } = await userClient.rpc('is_commissioner', { lid: event.league_id });
@@ -62,8 +62,9 @@ Deno.serve(async (req) => {
     ]);
 
   if (!layout) return json({ error: 'This week has no course.' }, 400);
-  const rules = season?.rules;
-  if (!['bestBallMatch', 'strokePlay', 'stableford'].includes(rules?.format)) return json({ error: "Recap emails for this format aren't available yet." }, 400);
+  // The week's own rules (e.g. a scramble week), else the season's.
+  const rules = event.rules_override ?? season?.rules;
+  if (!['bestBallMatch', 'strokePlay', 'stableford', 'scramble'].includes(rules?.format)) return json({ error: "Recap emails for this format aren't available yet." }, 400);
 
   // Same shape the app gives the engine.
   const engineRounds = (rounds ?? []).map((r: Row) => {
@@ -91,7 +92,8 @@ Deno.serve(async (req) => {
   const names = new Map((players ?? []).map((p: Row) => [p.id, p.display_name]));
   const recapBody: string = recapText(recap, (id: string) => names.get(id) ?? '?', { leagueName: league!.name });
   const playsForMoney = rules.skins.enabled || rules.ctp.enabled
-    || (rules.format === 'bestBallMatch' ? rules.match.stake > 0 || rules.presses.enabled : (rules.payouts ?? []).some((c: number) => c > 0));
+    || (rules.format === 'bestBallMatch' ? rules.match.stake > 0 || rules.presses.enabled : (rules.payouts ?? []).some((c: number) => c > 0))
+    || (rules.format === 'scramble' && rules.teamPot > 0);
 
   if (body.draftStory) {
     const aiKey = env('ANTHROPIC_API_KEY');

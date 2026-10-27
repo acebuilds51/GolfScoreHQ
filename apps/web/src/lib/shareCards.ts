@@ -22,6 +22,8 @@ const toParWords = (n: number) => (n === 0 ? 'Even par' : n < 0 ? `${-n} under` 
 const toParShort = (n: number) => (n === 0 ? 'E' : n > 0 ? `+${n}` : `−${-n}`);
 const first = (name: string) => name.split(' ')[0] || name;
 const teamFirst = (ids: string[], name: (id: string) => string) => ids.map((id) => first(name(id))).join(' & ');
+/** Full names for one or two golfers; first names for a team. */
+const headlineNames = (ids: string[], name: (id: string) => string) => (ids.length > 2 ? teamFirst(ids, name) : ids.map(name).join(' & '));
 
 /**
  * The headline result: the low round in match formats; the week's winner in
@@ -32,10 +34,11 @@ function headline(recap: WeeklyRecap): { label: string; ids: string[]; score: nu
   if (winners.length) {
     const w = winners[0]!;
     const tied = winners.length > 1;
-    const ids = winners.map((l) => l.playerId);
-    if (recap.format === 'stableford') return { label: tied ? 'Winners (tied)' : 'Winner', ids, score: w.points ?? 0, toPar: 'points' };
-    if (recap.net) return { label: tied ? 'Winners (tied)' : 'Winner', ids, score: w.score - w.grossToPar + w.toPar, toPar: `Net · ${toParWords(w.toPar).toLowerCase()}` };
-    return { label: tied ? 'Winners (tied)' : 'Winner', ids, score: w.score, toPar: toParWords(w.toPar) };
+    const ids = winners.flatMap((l) => l.playerIds);
+    const label = recap.format === 'scramble' ? (tied ? 'Winning teams (tied)' : 'Winning team') : tied ? 'Winners (tied)' : 'Winner';
+    if (recap.format === 'stableford') return { label, ids, score: w.points ?? 0, toPar: 'points' };
+    if (recap.net) return { label, ids, score: w.score - w.grossToPar + w.toPar, toPar: `Net · ${toParWords(w.toPar).toLowerCase()}` };
+    return { label, ids, score: w.score, toPar: toParWords(w.toPar) };
   }
   const low = recap.lowRound;
   return low ? { label: low.playerIds.length > 1 ? 'Low round (tied)' : 'Low round', ids: low.playerIds, score: low.score, toPar: toParWords(low.toPar) } : null;
@@ -62,7 +65,7 @@ export function resultsModel(recap: WeeklyRecap, name: (id: string) => string, o
   const placeScore = (l: WeeklyRecap['leaderboard'][number]) =>
     recap.format === 'stableford' ? `${l.points} pts` : recap.net ? toParShort(l.toPar) : String(l.score);
   const matches = recap.leaderboard.length
-    ? recap.leaderboard.map((l) => ({ text: `${l.tied ? 'T' : ''}${l.place}. ${name(l.playerId)}`, score: placeScore(l) }))
+    ? recap.leaderboard.map((l) => ({ text: `${l.tied ? 'T' : ''}${l.place}. ${l.playerIds.length > 1 ? teamFirst(l.playerIds, name) : name(l.playerIds[0]!)}`, score: placeScore(l) }))
     : recap.matches.map((m) => {
     const [w, l] = m.winner === 'B' ? [m.teamB, m.teamA] : [m.teamA, m.teamB];
     const [hw, hl] = m.winner === 'B' ? [m.holesWon.B, m.holesWon.A] : [m.holesWon.A, m.holesWon.B];
@@ -72,18 +75,21 @@ export function resultsModel(recap: WeeklyRecap, name: (id: string) => string, o
       : { text: `${teamFirst(w, name)} def. ${teamFirst(l, name)}`, score: `${hw}–${hl}` };
   });
 
-  const skinCount = new Map<string, { count: number; cents: number }>();
+  // Skins by winner: one golfer, or a whole scramble team (its skin isn't split into per-player rows).
+  const skinCount = new Map<string, { label: string; count: number; cents: number }>();
+  const add = (key: string, label: string, cents: number) => {
+    const t = skinCount.get(key) ?? { label, count: 0, cents: 0 };
+    t.count++;
+    t.cents += cents;
+    skinCount.set(key, t);
+  };
   for (const s of recap.skins) {
-    for (const p of s.playerIds) {
-      const t = skinCount.get(p) ?? { count: 0, cents: 0 };
-      t.count++;
-      t.cents += Math.round(s.value / s.playerIds.length);
-      skinCount.set(p, t);
-    }
+    if (recap.format === 'scramble') add(s.playerIds.join('|'), teamFirst(s.playerIds, name), s.value);
+    else for (const p of s.playerIds) add(p, name(p), Math.round(s.value / s.playerIds.length));
   }
-  const skins = [...skinCount]
-    .sort((a, b) => b[1].count - a[1].count || name(a[0]).localeCompare(name(b[0])))
-    .map(([id, t]) => ({ name: name(id), count: t.count, cents: opts.includeMoney ? t.cents : null }));
+  const skins = [...skinCount.values()]
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+    .map((t) => ({ name: t.label, count: t.count, cents: opts.includeMoney ? t.cents : null }));
 
   const ctp = recap.ctp
     .filter((c) => c.winner)
@@ -91,7 +97,7 @@ export function resultsModel(recap: WeeklyRecap, name: (id: string) => string, o
 
   const top = headline(recap);
   return {
-    lowRound: top ? { label: top.label, names: top.ids.map(name).join(' & '), score: top.score, toPar: top.toPar } : null,
+    lowRound: top ? { label: top.label, names: headlineNames(top.ids, name), score: top.score, toPar: top.toPar } : null,
     listLabel: recap.leaderboard.length ? 'Leaderboard' : 'Matches',
     matches: matches.slice(0, MAX_MATCHES),
     moreMatches: Math.max(0, matches.length - MAX_MATCHES),
@@ -128,7 +134,7 @@ export function winnerModel(recap: WeeklyRecap, name: (id: string) => string): W
   if (ctps.length) stats.push({ value: ctps.join(' '), label: 'CTP' });
   return {
     label: top.label === 'Winner' ? 'Week winner' : top.label,
-    name: top.ids.map(name).join(' & '),
+    name: headlineNames(top.ids, name),
     score: top.score,
     toPar: top.toPar,
     stats: stats.slice(0, 3),

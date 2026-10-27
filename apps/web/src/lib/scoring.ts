@@ -2,6 +2,7 @@ import {
   dollars,
   isIndividual,
   scoreMatch,
+  scramblePayouts,
   settleCtp,
   STANDARD_STABLEFORD,
   type BestBallMatchRules,
@@ -11,6 +12,7 @@ import {
   type IndividualRules,
   type MatchRoundInput,
   type MatchResult,
+  type ScrambleRules,
 } from '@golfscorehq/engine';
 import { DEFAULT_HANDICAPS } from './handicaps';
 import type { Course, Layout, RoundData } from './types';
@@ -36,13 +38,21 @@ export function basicRules(): BestBallMatchRules {
   };
 }
 
-export type FormatKey = 'bestBallMatch' | 'strokePlay' | 'stableford';
+export type FormatKey = 'bestBallMatch' | 'strokePlay' | 'stableford' | 'scramble';
 
 export const FORMAT_NAMES: Record<FormatKey, string> = {
   bestBallMatch: '2 vs 2 best ball match',
   strokePlay: 'Stroke play',
   stableford: 'Stableford',
+  scramble: 'Scramble',
 };
+
+/** The rules a week is played under: its special-week rules (e.g. the scramble), else the season's. */
+export const weekRules = (season: { rules: FormatRules }, event: { rulesOverride?: FormatRules | null } | null | undefined): FormatRules =>
+  event?.rulesOverride ?? season.rules;
+
+/** Each group is one team playing one ball. */
+export const isScramble = (r: FormatRules): r is ScrambleRules => r.format === 'scramble';
 
 /** Free leagues play these; the rest need Pro ("all formats"). Matches rules_are_basic_format() in the database. */
 export const BASIC_FORMATS: FormatKey[] = ['bestBallMatch', 'strokePlay'];
@@ -52,19 +62,20 @@ export function plainRules(format: FormatKey): FormatRules {
   const b = basicRules();
   if (format === 'bestBallMatch') return b;
   if (format === 'strokePlay') return { format, payouts: [], skins: b.skins, ctp: b.ctp };
+  if (format === 'scramble') return { format, teamPot: 0, payouts: [], skins: b.skins, ctp: b.ctp };
   return { format, points: STANDARD_STABLEFORD, payouts: [], skins: b.skins, ctp: b.ctp };
 }
 
 /** Each golfer plays their own ball against the field: groups have no sides. */
 export const individualRules = (r: FormatRules): IndividualRules | null => (isIndividual(r) ? r : null);
 
-export const handicapRules = (r: FormatRules): HandicapRules | undefined => (r.format === 'scramble' ? undefined : r.handicaps);
+export const handicapRules = (r: FormatRules): HandicapRules | undefined => r.handicaps;
 
 /** Anything in these rules pays out money. */
 export function playsForMoney(r: FormatRules): boolean {
   if (r.skins.enabled || r.ctp.enabled) return true;
   if (r.format === 'bestBallMatch') return r.match.stake > 0 || r.presses.enabled;
-  if (r.format === 'scramble') return r.teamPot > 0;
+  if (r.format === 'scramble') return r.teamPot > 0 || (r.payouts ?? []).some((c) => c > 0);
   return r.payouts.some((c) => c > 0);
 }
 
@@ -124,6 +135,7 @@ export function rulesFromForm(f: SideGameForm): FormatRules {
   const ctp = { enabled: f.ctpEnabled, amountPerHole: f.ctpEnabled ? money(f.ctpAmount) : 0, resolution: 'markerChain' } as const;
   if (f.format === 'strokePlay') return { format: 'strokePlay', payouts: parsePayouts(f.payouts), skins, ctp, handicaps: handicapsFromForm(f) };
   if (f.format === 'stableford') return { format: 'stableford', points: STANDARD_STABLEFORD, payouts: parsePayouts(f.payouts), skins, ctp, handicaps: handicapsFromForm(f) };
+  if (f.format === 'scramble') return { format: 'scramble', teamPot: 0, payouts: parsePayouts(f.payouts), skins, ctp, handicaps: handicapsFromForm(f) };
   return {
     format: 'bestBallMatch',
     holeScoring: 'bestBall',
@@ -136,7 +148,6 @@ export function rulesFromForm(f: SideGameForm): FormatRules {
 }
 
 export function formFromRules(r: FormatRules): SideGameForm {
-  if (r.format === 'scramble') return { ...OCBC_STYLE_FORM };
   const d = (c: number) => String(c / 100);
   const h = { ...DEFAULT_HANDICAPS, ...r.handicaps };
   const base = {
@@ -146,6 +157,10 @@ export function formFromRules(r: FormatRules): SideGameForm {
     ctpEnabled: r.ctp.enabled, ctpAmount: d(r.ctp.amountPerHole),
     hcpEnabled: h.enabled, hcpAllowance: String(h.allowance), hcpMatch: h.match, hcpSkins: h.skins, hcpSource: h.source ?? 'ghinFirst',
   };
+  if (r.format === 'scramble') {
+    // Older scramble rules have a single team pot for 1st instead of payouts by place.
+    return { ...base, payouts: scramblePayouts(r).map(d).join(', '), matchStake: '0', pressesEnabled: false };
+  }
   if (r.format !== 'bestBallMatch') return { ...base, payouts: r.payouts.map(d).join(', '), matchStake: '0', pressesEnabled: false };
   return { ...base, matchStake: d(r.match.stake), pressesEnabled: r.presses.enabled, pressStake: d(r.presses.stake) };
 }
@@ -159,14 +174,15 @@ export const fmtMoney = (cents: number) => `$${(cents / 100).toFixed(2).replace(
 const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'}`;
 
 export function describeRules(r: FormatRules): string[] {
-  if (r.format === 'scramble') return ['Scramble'];
   const out = [FORMAT_NAMES[r.format]];
   if (r.format === 'stableford') out.push('points: double bogey 0, bogey 1, par 2, birdie 3, eagle 4, albatross 5');
+  if (r.format === 'scramble') out.push('one team score per hole');
+  const places = r.format === 'scramble' ? scramblePayouts(r) : r.format === 'bestBallMatch' ? [] : r.payouts;
   if (r.format === 'bestBallMatch') {
     if (r.match.stake) out.push(`${fmtMoney(r.match.stake)} a man on the match`);
     if (r.presses.enabled) out.push(`presses ${fmtMoney(r.presses.stake)} a man`);
-  } else if (r.payouts.some((c) => c > 0)) {
-    out.push(`pays ${r.payouts.map((c, i) => `${ordinal(i + 1)} ${fmtMoney(c)}`).join(', ')}`);
+  } else if (places.some((c) => c > 0)) {
+    out.push(`pays ${places.map((c, i) => `${ordinal(i + 1)} ${fmtMoney(c)}`).join(', ')}${r.format === 'scramble' ? ' a team' : ''}`);
   }
   if (r.skins.enabled) out.push(`skins ${fmtMoney(r.skins.pot)} pot${r.skins.tieRule === 'carryover' ? ' (ties carry over)' : ' (ties: no skin)'}`);
   if (r.ctp.enabled) out.push(`CTP ${fmtMoney(r.ctp.amountPerHole)} per par 3`);
@@ -175,6 +191,8 @@ export function describeRules(r: FormatRules): string[] {
     if (r.format === 'bestBallMatch') {
       const match = h.match === 'gross' ? 'gross match' : `net match (${h.allowance}%${h.match === 'offLow' ? ', off the low man' : ''})`;
       out.push(`${match}, ${h.skins} skins`);
+    } else if (r.format === 'scramble') {
+      out.push(`net with a team handicap, ${h.skins} skins`);
     } else {
       out.push(`net scoring (${h.allowance}% of handicap), ${h.skins} skins`);
     }
