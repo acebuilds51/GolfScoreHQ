@@ -70,9 +70,13 @@ describe('the old OCBC export', () => {
     { ...round(3, 'front', 1, ['Al', 'Ann', 'Bob', 'Bea']), isScramble: true },
   ]);
 
-  it('recognizes the export', () => {
+  it('recognizes the export, including what the Google Sheet script returns', () => {
     expect(isOcbcExport(exp)).toBe(true);
+    const fromSheet = JSON.stringify({ ok: true, rounds: JSON.parse(exp), config: {} });
+    expect(isOcbcExport(fromSheet)).toBe(true);
+    expect(planSummary(planFromOcbc(fromSheet, layouts)).weeks).toBe(2);
     expect(isOcbcExport('Week,Golfer\n1,Al')).toBe(false);
+    expect(isOcbcExport(JSON.stringify({ ok: false, error: 'bad' }))).toBe(false);
   });
 
   it('keeps teams, presses and the latest tee time\'s CTP, and leaves out scramble rounds', () => {
