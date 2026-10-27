@@ -31,6 +31,9 @@ export function SetupServicePage() {
   const pro = league.features.includes('setup_service');
   const data = useAsync(async () => (commish && pro ? api.setupRequests(league.id) : []), [league.id, commish, pro]);
   const [composing, setComposing] = useState(false);
+  // The request saved but the email notice to GolfScoreHQ failed: say so (and why) instead of looking fine.
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const sent = (err: string | null) => { setEmailError(err); data.reload(); };
 
   if (!commish) return <div className="page muted">Only commissioners can ask us to set up the league.</div>;
   if (!pro) {
@@ -55,10 +58,14 @@ export function SetupServicePage() {
         <p className="small muted">Would rather do it yourself? <Link to="../import">Import past rounds</Link> from a spreadsheet, and add golfers on the <Link to="../roster">Roster</Link> page.</p>
       </div>
 
-      {requests.map((r) => <RequestCard key={r.id} request={r} onChanged={data.reload} />)}
+      {emailError && (
+        <p className="small warn">Your request is saved and GolfScoreHQ will see it, but the email notice didn't go out: {emailError}. If it's urgent, write to support@golfscorehq.app.</p>
+      )}
+
+      {requests.map((r) => <RequestCard key={r.id} request={r} onChanged={sent} />)}
 
       {composing || requests.length === 0 ? (
-        <NewRequest onSent={() => { setComposing(false); data.reload(); }} onCancel={requests.length ? () => setComposing(false) : undefined} />
+        <NewRequest onSent={(err) => { setComposing(false); sent(err); }} onCancel={requests.length ? () => setComposing(false) : undefined} />
       ) : (
         <div><button className="btn" onClick={() => setComposing(true)}>{open.length ? 'Send something else' : 'Ask for more help'}</button></div>
       )}
@@ -107,7 +114,7 @@ function FilePicker({ files, setFiles, disabled }: { files: SetupFile[]; setFile
   );
 }
 
-function NewRequest({ onSent, onCancel }: { onSent: () => void; onCancel?: () => void }) {
+function NewRequest({ onSent, onCancel }: { onSent: (emailError: string | null) => void; onCancel?: () => void }) {
   const { league } = useLeague();
   const [wants, setWants] = useState<SetupWant[]>(['roster', 'handicaps', 'course']);
   const [files, setFiles] = useState<SetupFile[]>([]);
@@ -123,8 +130,8 @@ function NewRequest({ onSent, onCancel }: { onSent: () => void; onCancel?: () =>
         e.preventDefault();
         if (!files.length && !notes.trim()) return setError('Add a file or tell us what you need.');
         if (!consent) return setError('Tick the box so we can get into the league to set it up.');
-        const ok = await run(async () => { await api.createSetupRequest(league.id, { notes, wants, files, contactPhone: phone || null, staffAccess: true }); return true; });
-        if (ok) onSent();
+        const res = await run(() => api.createSetupRequest(league.id, { notes, wants, files, contactPhone: phone || null, staffAccess: true }));
+        if (res) onSent(res.emailError);
       }}
     >
       <h3>What should we set up?</h3>
@@ -159,7 +166,7 @@ function NewRequest({ onSent, onCancel }: { onSent: () => void; onCancel?: () =>
   );
 }
 
-function RequestCard({ request: r, onChanged }: { request: SetupRequest; onChanged: () => void }) {
+function RequestCard({ request: r, onChanged }: { request: SetupRequest; onChanged: (emailError: string | null) => void }) {
   const [answering, setAnswering] = useState(false);
   const [notes, setNotes] = useState(r.notes);
   const [files, setFiles] = useState<SetupFile[]>(r.files);
@@ -189,7 +196,7 @@ function RequestCard({ request: r, onChanged }: { request: SetupRequest; onChang
           </label>
           <ErrorText>{error}</ErrorText>
           <div className="row">
-            <button className="btn btn-primary btn-sm" disabled={busy} onClick={async () => { const ok = await run(async () => { await api.updateSetupRequest(r.id, { notes, files }); return true; }); if (ok) { setAnswering(false); onChanged(); } }}>
+            <button className="btn btn-primary btn-sm" disabled={busy} onClick={async () => { const res = await run(() => api.updateSetupRequest(r.id, { notes, files })); if (res) { setAnswering(false); onChanged(res.emailError); } }}>
               {busy ? 'Sending…' : 'Send'}
             </button>
             <button className="btn btn-ghost btn-sm" onClick={() => setAnswering(false)}>Cancel</button>
