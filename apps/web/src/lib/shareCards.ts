@@ -417,6 +417,64 @@ export async function drawWinnerCard(m: WinnerModel, brand: CardBrand, week: Car
   return toBlob(el);
 }
 
+export interface AwardsCardItem {
+  icon: string;
+  title: string;
+  winners: string;
+  value: string;
+}
+
+const MAX_AWARDS = 8;
+
+/** The season's awards on one picture: up to eight awards with who won and by how much. */
+export async function drawAwardsCard(items: AwardsCardItem[], brand: CardBrand, seasonLabel: string): Promise<Blob> {
+  await fontsReady();
+  const { el, ctx } = canvas();
+  const c = palette(brand);
+  ctx.fillStyle = brand.color;
+  ctx.fillRect(0, 0, CARD_W, CARD_H);
+  ctx.fillStyle = brand.accent;
+  ctx.fillRect(0, CARD_H - 14, CARD_W, 14);
+  await drawHeader(ctx, brand, seasonLabel, c);
+
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = c.on;
+  ctx.font = `700 92px ${DISPLAY}`;
+  ctx.fillText('Season awards', 70, 330);
+
+  const shown = items.slice(0, MAX_AWARDS);
+  const top = 380, bottom = CARD_H - 120;
+  const rowH = Math.min(118, (bottom - top) / Math.max(1, shown.length));
+  shown.forEach((a, i) => {
+    const y = top + i * rowH;
+    roundRect(ctx, 50, y + 6, CARD_W - 100, rowH - 12, 22);
+    ctx.fillStyle = c.panel;
+    ctx.fill();
+    const mid = y + rowH / 2;
+    // Color emoji take the fill's transparency, so draw them with a solid fill.
+    ctx.fillStyle = '#000000';
+    ctx.font = `400 ${Math.round(rowH * 0.42)}px ${BODY}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(a.icon, 120, mid + 2);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = c.accent;
+    ctx.fillText(fitText(ctx, a.title, 520, (px) => `600 ${px}px ${BODY}`, 30, 24), 180, mid - 10);
+    ctx.fillStyle = c.on;
+    ctx.fillText(fitText(ctx, a.winners, a.value ? 560 : 820, (px) => `700 ${px}px ${DISPLAY}`, 46, 30), 180, mid + 32);
+    if (a.value) {
+      ctx.textAlign = 'right';
+      ctx.fillStyle = c.soft;
+      ctx.fillText(fitText(ctx, a.value, 250, (px) => `600 ${px}px ${DISPLAY}`, 40, 26), CARD_W - 80, mid + 14);
+    }
+  });
+
+  drawFooter(ctx, items.length > shown.length ? `+ ${items.length - shown.length} more awards` : '', c);
+  return toBlob(el);
+}
+
 /**
  * Phones: open the share menu with the picture attached (Facebook, Messages, the
  * group chat…). Computers: save the picture, since Facebook won't take pictures

@@ -1,36 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EmptyState, ErrorText, ProLock, PageSkeleton } from '../components/ui';
-import { api } from '../lib/backend';
+import { AWARD_UNITS } from '../lib/awards';
 import { useAsync, useLeague } from '../lib/hooks';
-import { allLayouts, fmtMoney, individualRules, playsForMoney } from '../lib/scoring';
-import { buildStandings, fmtToPar, sortStandings, type SortKey, type StandingRow } from '../lib/standings';
-
-const AWARD_UNITS: Record<string, (v: number) => string> = {
-  lowAverage: (v) => `${fmtToPar(v)} a round`,
-  bestRound: (v) => fmtToPar(v),
-  mostSkins: (v) => `${v} skin${v === 1 ? '' : 's'}`,
-  ctpKing: (v) => `${v} CTP${v === 1 ? '' : 's'}`,
-  birdieMachine: (v) => `${v} birdie${v === 1 ? '' : 's'}`,
-  eagleClub: () => '',
-  aceClub: () => '',
-  matchPlayChamp: (v) => `${v} win${v === 1 ? '' : 's'}`,
-  weeklyWins: (v) => `${v} week${v === 1 ? '' : 's'} won`,
-  pointsLeader: (v) => `${v} points`,
-  moneyLeader: (v) => `+${fmtMoney(v)}`,
-  hotStreak: (v) => `${v} better lately`,
-  mostImproved: (v) => `index down ${v}`,
-};
+import { fmtMoney, individualRules, playsForMoney } from '../lib/scoring';
+import { loadSeasonData } from '../lib/seasonData';
+import { fmtToPar, sortStandings, type SortKey, type StandingRow } from '../lib/standings';
 
 export function StandingsPage() {
   const { league } = useLeague();
-  const data = useAsync(async () => {
-    const [seasons, courses, players] = await Promise.all([api.seasons(league.id), api.courses(league.id), api.players(league.id)]);
-    const season = seasons[0];
-    if (!season) return null;
-    const [events, rounds, ledger] = await Promise.all([api.events(season.id), api.seasonRounds(season.id), api.seasonLedger(season.id)]);
-    return { season, standings: buildStandings({ season, events, rounds, ledger, layouts: allLayouts(courses), players }) };
-  }, [league.id]);
+  const data = useAsync(() => loadSeasonData(league.id), [league.id]);
 
   const rules = data.data ? data.data.season.rules : null;
   const hasMoney = !!rules && playsForMoney(rules);
@@ -107,17 +86,17 @@ export function StandingsPage() {
           </tbody>
         </table>
       </section>
-      <p className="small muted">Avg is the average score, with strokes over par in brackets. Last 4 is strokes over par over the last four rounds; 🔥 means the last four are at least half a stroke better than the season average. Tap a golfer for their weekly scores.</p>
+      <p className="small muted">Avg is the average score, with strokes over par in brackets. Last 4 is strokes over par over the last four rounds; 🔥 means the last four are at least half a stroke better than the season average. Tap a golfer for their weekly scores and full stats.</p>
 
       <section className="card stack">
         <div className="row between">
           <h2>Season awards so far</h2>
-          {!showAwards && <ProLock />}
+          {showAwards ? <Link className="small" to="../awards">Awards and course stats →</Link> : <ProLock />}
         </div>
         {showAwards ? (
           standings.awards.length ? (
             <ul className="awards">
-              {standings.awards.map((a) => (
+              {standings.awards.slice(0, 6).map((a) => (
                 <li key={a.key}>
                   <strong>{a.title}</strong>
                   <span>{a.winners.map((id) => rows.find((r) => r.playerId === id)?.name ?? '?').join(', ')}</span>
@@ -127,7 +106,7 @@ export function StandingsPage() {
             </ul>
           ) : <p className="small muted">Awards appear as golfers play enough rounds.</p>
         ) : (
-          <p className="small muted">Pro leagues get running awards (low average, skins leader, CTP king, money leader and more) and an end-of-season awards page.</p>
+          <p className="small muted">Pro leagues get running awards (low average, skins leader, CTP king, money leader and more), player stats and an end-of-season awards page with a picture to share.</p>
         )}
       </section>
     </div>
@@ -165,6 +144,7 @@ function Row({ r, rank, open, onToggle, skins, ctp, money, individual, stablefor
                 {r.weeks.map((w) => <span key={w.week} className="chip">Wk {w.week}: <strong>{w.score}</strong> <span className="muted">{fmtToPar(w.toPar)}</span></span>)}
               </div>
             ) : <span className="small muted">No full rounds yet.</span>}
+            <div><Link className="small" to={`../player/${r.playerId}`}>All of {r.name.split(' ')[0]}'s stats →</Link></div>
           </td>
         </tr>
       )}

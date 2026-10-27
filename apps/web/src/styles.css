@@ -442,6 +442,38 @@ table.standings tr.detail td { text-align: left; background: var(--surface-2); w
 .chip { background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font-size: 0.82rem; }
 .awards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
 .awards li { background: var(--surface-2); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 2px; }
+
+/* Awards page */
+.award-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.award-card { display: flex; gap: 12px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--league-accent); border-radius: var(--radius); padding: 12px; box-shadow: var(--shadow); }
+.award-icon { font-size: 1.9rem; line-height: 1; }
+.award-winners { font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; line-height: 1.15; }
+.award-winners a { color: inherit; }
+
+/* Player page */
+.stat-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.stat-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+.small-tiles .stat-tile { background: var(--surface-2); border: 0; }
+.stat-label { font-size: 0.8rem; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; }
+.stat-value { font-size: 1.7rem; font-weight: 700; line-height: 1.1; }
+.stat-value.good { color: var(--accent-text); }
+.stat-value.warn { color: var(--warn); }
+.trend { width: 100%; max-width: 560px; height: auto; }
+.trend-par { stroke: var(--border); stroke-width: 1.5; }
+.trend-avg { stroke: var(--text-2); stroke-width: 1; stroke-dasharray: 4 4; }
+.trend-line { fill: none; stroke: var(--league); stroke-width: 2.5; stroke-linejoin: round; }
+.trend-dot { fill: var(--league); }
+.trend-dot.under { fill: var(--under); }
+.trend-label { font-size: 10px; fill: var(--text-2); }
+.mix-bar { display: flex; height: 18px; border-radius: 9px; overflow: hidden; background: var(--surface-2); }
+.mix-bar span { display: block; min-width: 4px; }
+.mix-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.mix-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; }
+.mix-eagles { background: #7a1fa2; }
+.mix-birdies { background: var(--under); }
+.mix-pars { background: var(--accent); }
+.mix-bogeys { background: #8fa3b8; }
+.mix-doubles { background: #3d4a57; }
 label.dispute { color: var(--warn); }
 .linkish { all: unset; cursor: pointer; color: var(--brand-2); font-weight: 700; padding: 2px 4px; }
 

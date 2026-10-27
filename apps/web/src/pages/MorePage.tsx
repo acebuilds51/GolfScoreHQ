@@ -10,6 +10,7 @@ export function MorePage() {
   const install = useInstallPrompt();
   const items: { to: string; label: string; icon: IconName }[] = [
     { to: '../standings', label: 'Season standings', icon: 'trophy' },
+    { to: '../awards', label: 'Season awards and stats', icon: 'trophy' },
     { to: '../roster', label: 'Roster', icon: 'users' },
     { to: '../courses', label: 'Courses', icon: 'map' },
     ...(isCommissioner(league.role) ? [{ to: '../settings', label: 'Settings', icon: 'settings' as const }] : []),

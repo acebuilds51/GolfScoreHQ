@@ -676,6 +676,77 @@ function seasonAwards(stats, opts = {}) {
   return awards.filter((a) => a !== null);
 }
 
+// packages/engine/src/profile.ts
+var one = (n) => Math.round(n * 10) / 10;
+function holeAverages(played, only) {
+  const acc = /* @__PURE__ */ new Map();
+  for (const { layout, round } of played) {
+    for (const p of round.players) {
+      if (only && p.id !== only) continue;
+      const scores = round.scores[p.id] ?? [];
+      layout.holes.forEach((h, i) => {
+        const s = scores[i];
+        if (s == null) return;
+        const key = `${layout.id}#${h.number}`;
+        const a = acc.get(key) ?? { layoutId: layout.id, layoutName: layout.name, holeNumber: h.number, par: h.par, strokeIndex: h.strokeIndex, n: 0, sum: 0, under: 0, doubles: 0 };
+        a.n++;
+        a.sum += s;
+        if (s - h.par <= -1) a.under++;
+        if (s - h.par >= 2) a.doubles++;
+        acc.set(key, a);
+      });
+    }
+  }
+  return [...acc.values()].map((a) => ({
+    layoutId: a.layoutId,
+    layoutName: a.layoutName,
+    holeNumber: a.holeNumber,
+    par: a.par,
+    ...a.strokeIndex !== void 0 ? { strokeIndex: a.strokeIndex } : {},
+    played: a.n,
+    averageScore: one(a.sum / a.n),
+    averageToPar: one(a.sum / a.n - a.par),
+    birdiesOrBetter: a.under,
+    doublesOrWorse: a.doubles
+  })).sort((x, y) => x.layoutName.localeCompare(y.layoutName) || x.holeNumber - y.holeNumber);
+}
+function playerProfile(played, playerId) {
+  const mix = { eagles: 0, birdies: 0, pars: 0, bogeys: 0, doubles: 0, holes: 0 };
+  const byPar = /* @__PURE__ */ new Map();
+  for (const { layout, round } of played) {
+    if (!round.players.some((p) => p.id === playerId)) continue;
+    const scores = round.scores[playerId] ?? [];
+    layout.holes.forEach((h, i) => {
+      const s = scores[i];
+      if (s == null) return;
+      const d = s - h.par;
+      mix.holes++;
+      if (d <= -2) mix.eagles++;
+      else if (d === -1) mix.birdies++;
+      else if (d === 0) mix.pars++;
+      else if (d === 1) mix.bogeys++;
+      else mix.doubles++;
+      const t = byPar.get(h.par) ?? { holes: 0, sum: 0 };
+      t.holes++;
+      t.sum += d;
+      byPar.set(h.par, t);
+    });
+  }
+  const holes = holeAverages(played, playerId);
+  const ranked = holes.filter((h) => h.played >= 2).sort((a, b) => a.averageToPar - b.averageToPar || b.played - a.played);
+  return {
+    playerId,
+    mix,
+    byPar: [...byPar].sort((a, b) => a[0] - b[0]).map(([par, t]) => ({ par, holes: t.holes, averageToPar: one(t.sum / t.holes) })),
+    holes,
+    bestHole: ranked[0] ?? null,
+    worstHole: ranked.length > 1 ? ranked[ranked.length - 1] : null
+  };
+}
+function courseHoleStats(played) {
+  return holeAverages(played).sort((a, b) => b.averageToPar - a.averageToPar || b.played - a.played);
+}
+
 // packages/engine/src/recap.ts
 var KIND_ORDER = { ace: 0, eagle: 1, birdie: 2 };
 function weeklyRecap(week, rounds, layout, rules, earlierLedger = []) {
@@ -807,6 +878,7 @@ export {
   bestBall,
   compareLines,
   courseHandicap,
+  courseHoleStats,
   differentialsFrom,
   dollars,
   fieldSkins,
@@ -822,6 +894,7 @@ export {
   ownStrokes,
   par3s,
   placePayouts,
+  playerProfile,
   playingHandicap,
   rankIndividual,
   recapText,
