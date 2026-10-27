@@ -1,5 +1,5 @@
-import { settleBestBallWeek, type FormatRules } from '@golfscorehq/engine';
-import { asBestBall, toEngineRound } from './scoring';
+import { settleBestBallWeek, settleIndividualWeek, type FormatRules, type PlacedLine } from '@golfscorehq/engine';
+import { asBestBall, individualRules, toEngineRound } from './scoring';
 import type { Layout, LedgerKind, LedgerRow, RoundData } from './types';
 
 export interface CtpOutcome {
@@ -16,6 +16,7 @@ export interface PlayerTotals {
   playerId: string;
   match: number;
   press: number;
+  place: number;
   skin: number;
   ctp: number;
   total: number;
@@ -27,14 +28,21 @@ export interface WeekSettlement {
   skinsUnawarded: number;
   ctp: CtpOutcome[];
   totals: PlayerTotals[];
+  /** Stroke play and Stableford: the week's finishing order (empty for match formats). */
+  leaderboard: PlacedLine[];
   /** Groups still scoring; their scores so far are included. */
   unsubmitted: number;
 }
 
-/** Settle a week of best-ball rounds with the engine, applying the commissioner's CTP decisions. */
+const TOTAL_KINDS = ['match', 'press', 'place', 'skin', 'ctp'] as const;
+
+/** Settle a week with the engine, applying the commissioner's CTP decisions. */
 export function settleWeek(rounds: RoundData[], layout: Layout, rulesIn: FormatRules, decisions: Record<number, string> = {}): WeekSettlement {
-  const rules = asBestBall(rulesIn);
-  const week = settleBestBallWeek(rounds.map((r) => toEngineRound(r, layout)), { id: layout.id, name: layout.name, holes: layout.holes }, rules);
+  const ind = individualRules(rulesIn);
+  const engineRounds = rounds.map((r) => toEngineRound(r, layout));
+  const engineLayout = { id: layout.id, name: layout.name, holes: layout.holes };
+  const week = ind ? settleIndividualWeek(engineRounds, engineLayout, ind) : settleBestBallWeek(engineRounds, engineLayout, asBestBall(rulesIn));
+  const ctpAmount = rulesIn.ctp.amountPerHole;
 
   const entries: LedgerRow[] = week.ledger.map((e) => ({
     playerId: e.playerId, roundId: e.roundId ?? null, kind: e.kind as LedgerKind, amountCents: e.amount, holeNumber: e.holeNumber ?? null,
@@ -44,26 +52,19 @@ export function settleWeek(rounds: RoundData[], layout: Layout, rulesIn: FormatR
     const pick = decisions[h.holeNumber];
     if (h.conflict && pick && h.contenders.includes(pick)) {
       const round = rounds.find((r) => r.players.some((p) => p.playerId === pick));
-      if (rules.ctp.amountPerHole > 0) entries.push({ playerId: pick, roundId: round?.id ?? null, kind: 'ctp', amountCents: rules.ctp.amountPerHole, holeNumber: h.holeNumber });
+      if (ctpAmount > 0) entries.push({ playerId: pick, roundId: round?.id ?? null, kind: 'ctp', amountCents: ctpAmount, holeNumber: h.holeNumber });
       return { holeNumber: h.holeNumber, winner: pick, disputed: false, contenders: h.contenders, decided: true };
     }
     return { holeNumber: h.holeNumber, winner: h.winner, disputed: h.conflict, contenders: h.contenders, decided: false };
   });
-
-  const byPlayer = new Map<string, PlayerTotals>();
-  for (const e of entries) {
-    const t = byPlayer.get(e.playerId) ?? { playerId: e.playerId, match: 0, press: 0, skin: 0, ctp: 0, total: 0 };
-    if (e.kind === 'match' || e.kind === 'press' || e.kind === 'skin' || e.kind === 'ctp') t[e.kind] += e.amountCents;
-    t.total += e.amountCents;
-    byPlayer.set(e.playerId, t);
-  }
 
   return {
     entries,
     skins: week.skins.wins.map((w) => ({ holeNumber: w.holeNumber, playerId: w.playerIds[0]!, value: w.value })),
     skinsUnawarded: week.skins.unawarded,
     ctp,
-    totals: [...byPlayer.values()].sort((a, b) => b.total - a.total),
+    totals: totalsFromLedger(entries),
+    leaderboard: 'leaderboard' in week ? week.leaderboard : [],
     unsubmitted: rounds.filter((r) => r.status !== 'submitted').length,
   };
 }
@@ -72,8 +73,8 @@ export function settleWeek(rounds: RoundData[], layout: Layout, rulesIn: FormatR
 export function totalsFromLedger(rows: LedgerRow[]): PlayerTotals[] {
   const byPlayer = new Map<string, PlayerTotals>();
   for (const e of rows) {
-    const t = byPlayer.get(e.playerId) ?? { playerId: e.playerId, match: 0, press: 0, skin: 0, ctp: 0, total: 0 };
-    if (e.kind === 'match' || e.kind === 'press' || e.kind === 'skin' || e.kind === 'ctp') t[e.kind] += e.amountCents;
+    const t = byPlayer.get(e.playerId) ?? { playerId: e.playerId, match: 0, press: 0, place: 0, skin: 0, ctp: 0, total: 0 };
+    if ((TOTAL_KINDS as readonly string[]).includes(e.kind)) t[e.kind as (typeof TOTAL_KINDS)[number]] += e.amountCents;
     t.total += e.amountCents;
     byPlayer.set(e.playerId, t);
   }

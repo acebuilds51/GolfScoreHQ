@@ -4,7 +4,7 @@ import { EmptyState, ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague, useLiveRefresh } from '../lib/hooks';
 import { courseHandicapFor, leagueIndexes, loadPlayedRounds } from '../lib/handicaps';
-import { allLayouts, fmtDate, matchSoFar } from '../lib/scoring';
+import { allLayouts, fmtDate, handicapRules, individualRules, matchSoFar } from '../lib/scoring';
 import { isCommissioner, type Layout, type Player, type RoundData, type RoundPlayer, type Season } from '../lib/types';
 import { WeekResults } from './WeekResults';
 import { WhosPlaying } from './WhosPlaying';
@@ -81,14 +81,17 @@ function GroupRow({ round, names, layout, season }: { round: RoundData; names: M
   const side = (s: 'A' | 'B' | null) => round.players.filter((p) => p.side === s).map((p) => p.playerId);
   const status = layout && season ? matchSoFar(round, layout, season.rules) : null;
   const extra = side(null);
+  const individual = !!season && individualRules(season.rules) !== null;
   return (
     <li>
       <Link className="list-row link-row" to={`../round/${round.id}`}>
         <span className="tee-badge">{round.teeSlot}</span>
         <div className="grow">
-          <strong>{teamName(side('A'), names)}</strong>
-          {side('B').length > 0 && <> <span className="muted">vs</span> <strong>{teamName(side('B'), names)}</strong></>}
-          {extra.length > 0 && <span className="small muted"> + {teamName(extra, names)} (skins)</span>}
+          {individual ? <strong>{teamName(round.players.map((p) => p.playerId), names)}</strong> : <>
+            <strong>{teamName(side('A'), names)}</strong>
+            {side('B').length > 0 && <> <span className="muted">vs</span> <strong>{teamName(side('B'), names)}</strong></>}
+            {extra.length > 0 && <span className="small muted"> + {teamName(extra, names)} (skins)</span>}
+          </>}
           <div className="small muted">{status?.label}</div>
         </div>
         <span className={`badge ${round.status === 'submitted' ? 'badge-ok' : 'badge-live'}`}>{round.status === 'submitted' ? 'Submitted' : status && status.thru ? `Hole ${Math.min(status.thru + 1, layout!.holes.length)}` : 'On the tee'}</span>
@@ -121,7 +124,8 @@ function StartGroup({ eventId, rounds, players, season, layout, onCancel }: {
 }) {
   const { league } = useLeague();
   const nav = useNavigate();
-  const hcp = season.rules.format === 'bestBallMatch' && season.rules.handicaps?.enabled ? season.rules.handicaps : null;
+  const hcp = handicapRules(season.rules)?.enabled ? handicapRules(season.rules)! : null;
+  const individual = individualRules(season.rules) !== null;
   // Handicaps are fixed when the group starts: work out everyone's index now.
   const indexes = useAsync(
     async () => (hcp ? leagueIndexes(players, await loadPlayedRounds(api, league.id), hcp.source ?? 'ghinFirst') : null),
@@ -142,7 +146,10 @@ function StartGroup({ eventId, rounds, players, season, layout, onCancel }: {
 
   const roster = [...players.filter((p) => p.active), ...extraNames.map((x) => ({ id: x.id, displayName: x.name, isSub: true, active: true, userId: null }))]
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
-  const slotLabels = ['Team A — player 1', 'Team A — player 2', 'Team B — player 1', 'Team B — player 2', 'Skins and CTP only (optional)'];
+  // Individual formats: everyone plays their own ball, no teams.
+  const slotLabels = individual
+    ? ['Golfer 1', 'Golfer 2', 'Golfer 3', 'Golfer 4', 'Golfer 5']
+    : ['Team A — player 1', 'Team A — player 2', 'Team B — player 1', 'Team B — player 2', 'Skins and CTP only (optional)'];
 
   return (
     <form
@@ -152,11 +159,11 @@ function StartGroup({ eventId, rounds, players, season, layout, onCancel }: {
         const n = Number(teeSlot);
         if (!(n >= 1 && n <= 99)) return setError('Pick your tee time number.');
         const chosen = picks.filter(Boolean);
-        if (!picks[0]) return setError('Pick at least the first Team A player.');
+        if (!picks[0]) return setError(individual ? 'Pick at least the first golfer.' : 'Pick at least the first Team A player.');
         if (new Set(chosen).size !== chosen.length) return setError('Each golfer can only be picked once.');
         if (hcp && !indexes.data) return setError('Still working out handicaps. Try again in a moment.');
         const roundPlayers: RoundPlayer[] = picks
-          .map((id, i) => (id ? { playerId: id, side: i < 2 ? 'A' : i < 4 ? 'B' : null, position: i, courseHandicap: hcp ? courseHcp(id) : null } as RoundPlayer : null))
+          .map((id, i) => (id ? { playerId: id, side: individual ? null : i < 2 ? 'A' : i < 4 ? 'B' : null, position: i, courseHandicap: hcp ? courseHcp(id) : null } as RoundPlayer : null))
           .filter((p): p is RoundPlayer => p !== null);
         const id = await run(() => api.startRound(league.id, eventId, n, roundPlayers));
         if (id) nav(`../round/${id}`);

@@ -1,5 +1,5 @@
-import { playingHandicap, strokesByHole, type FormatRules } from '@golfscorehq/engine';
-import { asBestBall, currentMarker, matchSoFar } from './scoring';
+import { playingHandicap, stablefordPoints, strokesByHole, type FormatRules } from '@golfscorehq/engine';
+import { currentMarker, handicapRules, matchSoFar } from './scoring';
 import type { Layout, RoundData } from './types';
 
 // What the live leaderboard (and later the Clubhouse TV) shows during a round.
@@ -16,6 +16,10 @@ export interface LiveLine {
   /** What the leaderboard ranks on: net to par when the league plays with handicaps, otherwise gross. */
   toPar: number;
   grossToPar: number;
+  /** Stableford points so far (net with handicaps on); null in other formats. */
+  points: number | null;
+  /** Lower is better: to par, or minus the points in Stableford. Equal ranks are tied. */
+  rank: number;
   finished: boolean;
 }
 
@@ -43,14 +47,17 @@ export interface LiveBoard {
   groupsDone: number;
   /** True when lines rank on net scores. */
   net: boolean;
+  format: 'bestBallMatch' | 'strokePlay' | 'stableford';
 }
 
 export function liveBoard(rounds: RoundData[], layout: Layout, rulesIn: FormatRules): LiveBoard {
-  const rules = asBestBall(rulesIn);
+  const rules = rulesIn;
   const lines: LiveLine[] = [];
   const highlights: LiveHighlight[] = [];
+  const pts = rules.format === 'stableford' ? rules.points : null;
 
-  const hcp = rules.handicaps?.enabled ? rules.handicaps : null;
+  const hcpRules = handicapRules(rules);
+  const hcp = hcpRules?.enabled ? hcpRules : null;
   for (const r of rounds) {
     for (const p of r.players) {
       // Net uses each golfer's own strokes (after the allowance), not off the low man.
@@ -59,6 +66,7 @@ export function liveBoard(rounds: RoundData[], layout: Layout, rulesIn: FormatRu
       let strokes = 0;
       let par = 0;
       let received = 0;
+      let points = 0;
       for (const [i, h] of layout.holes.entries()) {
         const s = r.scores[p.playerId]?.[h.number];
         if (s == null) break;
@@ -66,15 +74,20 @@ export function liveBoard(rounds: RoundData[], layout: Layout, rulesIn: FormatRu
         strokes += s;
         par += h.par;
         received += given?.[i] ?? 0;
+        if (pts) points += stablefordPoints(s - (given?.[i] ?? 0) - h.par, pts);
         const kind = s === 1 ? 'ace' : s - h.par <= -2 ? 'eagle' : s - h.par === -1 ? 'birdie' : null;
         if (kind) highlights.push({ playerId: p.playerId, holeNumber: h.number, kind });
       }
       if (thru === 0) continue;
       const gross = strokes - par;
-      lines.push({ playerId: p.playerId, roundId: r.id, teeSlot: r.teeSlot, side: p.side, thru, strokes, toPar: gross - received, grossToPar: gross, finished: thru === layout.holes.length });
+      const toPar = gross - received;
+      lines.push({
+        playerId: p.playerId, roundId: r.id, teeSlot: r.teeSlot, side: p.side, thru, strokes, toPar, grossToPar: gross,
+        points: pts ? points : null, rank: pts ? -points : toPar, finished: thru === layout.holes.length,
+      });
     }
   }
-  lines.sort((a, b) => a.toPar - b.toPar || b.thru - a.thru || a.teeSlot - b.teeSlot);
+  lines.sort((a, b) => a.rank - b.rank || b.thru - a.thru || a.teeSlot - b.teeSlot);
   const order = { ace: 0, eagle: 1, birdie: 2 } as const;
   highlights.sort((a, b) => order[a.kind] - order[b.kind] || a.holeNumber - b.holeNumber);
 
@@ -104,7 +117,11 @@ export function liveBoard(rounds: RoundData[], layout: Layout, rulesIn: FormatRu
     groupsOnCourse: rounds.filter((r) => r.status !== 'submitted').length,
     groupsDone: rounds.filter((r) => r.status === 'submitted').length,
     net: !!hcp,
+    format: rules.format === 'scramble' ? 'bestBallMatch' : rules.format,
   };
 }
 
 export const fmtLiveToPar = (n: number) => (n === 0 ? 'E' : n > 0 ? `+${n}` : String(n));
+
+/** What a line shows as its score: points in Stableford, otherwise to par. */
+export const lineScore = (l: LiveLine) => (l.points !== null ? `${l.points} pts` : fmtLiveToPar(l.toPar));

@@ -236,6 +236,24 @@ describe('plans (by feature, never by size)', () => {
     await weekWithRound(tony, oak, scramble);
   });
 
+  it('lets Free play stroke play without prize money; Stableford and prize money need Pro', async () => {
+    const individual = (format: string, payouts: number[]) => JSON.stringify({
+      format, payouts, ...(format === 'stableford' ? { points: { albatross: 5, eagle: 4, birdie: 3, par: 2, bogey: 1, double: 0 } } : {}),
+      skins: NO_MONEY, ctp: { enabled: false, amountPerHole: 0, resolution: 'markerChain' },
+    });
+    const { eventId, roundId } = await weekWithRound(tony, oak, individual('strokePlay', []));
+    await expect(weekWithRound(tony, oak, individual('strokePlay', [3000, 2000]), 2028)).rejects.toThrow(/plan_feature: Side games/);
+    await expect(weekWithRound(tony, oak, individual('stableford', []), 2029)).rejects.toThrow(/plan_feature: This format/);
+
+    await setPlan(oak, 'pro');
+    await weekWithRound(tony, oak, individual('stableford', [3000, 2000]), 2030);
+    // Prize money for a place can be posted for a golfer in the week.
+    const al = await addPlayer(tony, oak, 'Al');
+    await as(db, tony, () => db.query(`insert into round_players (round_id, player_id, league_id) values ($1, $2, $3)`, [roundId, al, oak]));
+    await as(db, tony, () => db.query('select settle_event($1, $2::jsonb)', [eventId, JSON.stringify([{ player_id: al, round_id: roundId, kind: 'place', amount_cents: 3000, hole_number: null }])]));
+    expect(await rows(db, 'select kind, amount_cents from ledger_entries where event_id = $1', [eventId])).toEqual([{ kind: 'place', amount_cents: 3000 }]);
+  });
+
   it('treats a lapsed Pro league as Free without deleting anything', async () => {
     await setPlan(oak, 'pro', '2020-01-01T00:00:00Z');
     expect(await as(db, tony, () => rows(db, `select effective_plan($1) as p`, [oak]))).toEqual([{ p: 'free' }]);

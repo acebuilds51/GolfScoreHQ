@@ -1,5 +1,6 @@
+import { individualLines, rankIndividual } from './individual';
 import { scoreMatch } from './match';
-import type { BestBallMatchRules } from './rules';
+import { isIndividual, type BestBallMatchRules, type FormatRules } from './rules';
 import type { Cents, Layout, LedgerEntry, MatchRoundInput, PlayerId } from './types';
 
 /** One group's round in a given week, with the holes it was played on. */
@@ -27,6 +28,13 @@ export interface PlayerSeasonStats {
   skins: number;
   ctps: number;
   money: Cents;
+  /** Individual formats: weeks won outright or tied for 1st, and top-3 finishes. */
+  weekWins: number;
+  top3: number;
+  /** Stableford: points over complete rounds. */
+  points: number;
+  pointsRounds: number;
+  averagePoints: number | null;
 }
 
 const avg = (xs: number[]) => (xs.length ? Math.round((xs.reduce((s, x) => s + x, 0) / xs.length) * 10) / 10 : null);
@@ -35,6 +43,7 @@ function blank(playerId: PlayerId): PlayerSeasonStats {
   return {
     playerId, rounds: 0, toPar: [], averageToPar: null, last4AverageToPar: null, best: null,
     birdies: 0, eagles: 0, aces: 0, matchWins: 0, matchLosses: 0, matchHalves: 0, skins: 0, ctps: 0, money: 0,
+    weekWins: 0, top3: 0, points: 0, pointsRounds: 0, averagePoints: null,
   };
 }
 
@@ -42,9 +51,25 @@ function blank(playerId: PlayerId): PlayerSeasonStats {
  * Season stats per player. Scoring is compared to par so front-nine and
  * back-nine rounds (or 9 vs 18 holes) can share one average.
  */
-export function seasonStats(played: PlayedRound[], ledger: LedgerEntry[], rules: BestBallMatchRules): Record<PlayerId, PlayerSeasonStats> {
+export function seasonStats(played: PlayedRound[], ledger: LedgerEntry[], rules: FormatRules): Record<PlayerId, PlayerSeasonStats> {
   const stats: Record<PlayerId, PlayerSeasonStats> = {};
   const get = (id: PlayerId) => (stats[id] ??= blank(id));
+
+  // Individual formats: each week's finishing places (and Stableford points) across the whole field.
+  if (isIndividual(rules)) {
+    const weeks = new Map<number, PlayedRound[]>();
+    for (const p of played) weeks.set(p.week, [...(weeks.get(p.week) ?? []), p]);
+    for (const group of weeks.values()) {
+      const layout = group[0]!.layout;
+      const placed = rankIndividual(individualLines(group.map((g) => g.round), layout.holes, rules), rules);
+      for (const l of placed) {
+        const s = get(l.playerId);
+        if (l.place === 1) s.weekWins++;
+        if (l.place !== null && l.place <= 3) s.top3++;
+        if (l.complete && l.points !== null) { s.points += l.points; s.pointsRounds++; }
+      }
+    }
+  }
 
   for (const { week, layout, round } of [...played].sort((a, b) => a.week - b.week)) {
     const par = layout.holes.reduce((s, h) => s + h.par, 0);
@@ -66,7 +91,8 @@ export function seasonStats(played: PlayedRound[], ledger: LedgerEntry[], rules:
         if (!s.best || entry.toPar < s.best.toPar) s.best = entry;
       }
     }
-    const m = scoreMatch(round, layout.holes.length, rules);
+    if (rules.format !== 'bestBallMatch') continue;
+    const m = scoreMatch(round, layout.holes.length, rules, layout.holes);
     const sides = { A: round.players.filter((p) => p.side === 'A'), B: round.players.filter((p) => p.side === 'B') };
     if (sides.A.length && sides.B.length) {
       for (const side of ['A', 'B'] as const) {
@@ -90,6 +116,7 @@ export function seasonStats(played: PlayedRound[], ledger: LedgerEntry[], rules:
   for (const s of Object.values(stats)) {
     s.averageToPar = avg(s.toPar.map((r) => r.toPar));
     s.last4AverageToPar = avg(s.toPar.slice(-4).map((r) => r.toPar));
+    s.averagePoints = s.pointsRounds ? Math.round((s.points / s.pointsRounds) * 10) / 10 : null;
   }
   return stats;
 }
@@ -127,7 +154,7 @@ export function headToHead(played: PlayedRound[], rules: BestBallMatchRules): Re
 
 export type AwardKey =
   | 'lowAverage' | 'bestRound' | 'mostSkins' | 'ctpKing' | 'birdieMachine'
-  | 'eagleClub' | 'aceClub' | 'matchPlayChamp' | 'moneyLeader' | 'hotStreak' | 'mostImproved';
+  | 'eagleClub' | 'aceClub' | 'matchPlayChamp' | 'weeklyWins' | 'pointsLeader' | 'moneyLeader' | 'hotStreak' | 'mostImproved';
 
 export interface Award {
   key: AwardKey;
@@ -165,6 +192,8 @@ export function seasonAwards(stats: Record<PlayerId, PlayerSeasonStats>, opts: A
     top('ctpKing', 'CTP king', all.map((s) => [s.playerId, s.ctps]), 'high'),
     top('birdieMachine', 'Birdie machine', all.map((s) => [s.playerId, s.birdies]), 'high'),
     top('matchPlayChamp', 'Match play champ', all.map((s) => [s.playerId, s.matchWins]), 'high'),
+    top('weeklyWins', 'Most weekly wins', all.map((s) => [s.playerId, s.weekWins]), 'high'),
+    top('pointsLeader', 'Stableford points leader', all.map((s) => [s.playerId, s.points]), 'high'),
     top('moneyLeader', 'Money leader', all.map((s) => [s.playerId, s.money]), 'high'),
     top(
       'hotStreak', 'Hottest finish',

@@ -5,6 +5,7 @@ import type { WeeklyRecap } from '@golfscorehq/engine';
 import { buildRecapEmail } from '../../../../supabase/functions/send-recap/email';
 import { cleanStory } from '../../../../supabase/functions/send-recap/story';
 import { buildWeekRecap } from './recap';
+import { BASIC_FORMATS, playsForMoney, type FormatKey } from './scoring';
 import { DEMO_COURSES } from './demoCourses';
 import { sha256Hex, randomToken } from './util';
 
@@ -60,7 +61,8 @@ const empty = (): Db => ({
 /** Mirrors the database's plan check on season rules. */
 function usesSideGames(r: Season['rules']): boolean {
   const any = r as unknown as Record<string, any>;
-  return !!(any.skins?.enabled || any.ctp?.enabled || any.presses?.enabled || any.match?.stake > 0 || any.teamPot > 0);
+  return !!(any.skins?.enabled || any.ctp?.enabled || any.presses?.enabled || any.match?.stake > 0 || any.teamPot > 0
+    || (Array.isArray(any.payouts) && any.payouts.some((c: number) => c > 0)));
 }
 
 function load(): Db {
@@ -106,6 +108,10 @@ export function demoApi(): DemoApi {
   }
   const has = (db: Db, leagueId: string, feature: string) =>
     FEATURES[db.leagues.find((l) => l.id === leagueId)?.plan ?? 'free'].includes(feature);
+  /** Same as rules_are_basic_format() in the database: other formats need Pro. */
+  const checkFormat = (db: Db, leagueId: string, r: Season['rules']) => {
+    if (!BASIC_FORMATS.includes(r.format as FormatKey) && !has(db, leagueId, 'all_formats')) throw new Error('plan_feature: This format needs GolfScoreHQ Pro');
+  };
   /** Same rule as the database: members score until the week is settled, then only commissioners. */
   function scorable(db: Db, roundId: string) {
     const r = db.rounds.find((x) => x.id === roundId);
@@ -145,7 +151,7 @@ export function demoApi(): DemoApi {
     if (!has(db, ev.leagueId, 'weekly_recap')) throw new Error('The weekly recap email needs GolfScoreHQ Pro.');
     if (ev.status !== 'settled') throw new Error('Settle the week first, then send the recap.');
     const season = db.seasons.find((s) => s.id === ev.seasonId)!;
-    if (season.rules.format !== 'bestBallMatch') throw new Error("Recap emails for this format aren't available yet.");
+    if (season.rules.format === 'scramble') throw new Error("Recap emails for this format aren't available yet.");
     const layout = db.courses.flatMap((c) => c.layouts).find((l) => l.id === ev.layoutId);
     if (!layout) throw new Error('This week has no course.');
     const league = db.leagues.find((l) => l.id === ev.leagueId)!;
@@ -157,8 +163,7 @@ export function demoApi(): DemoApi {
       weekLedger: db.ledger.filter((e) => e.eventId === eventId),
       seasonLedger: db.ledger.filter((e) => earlier.has(e.eventId)),
     });
-    const rules = season.rules;
-    const playsForMoney = rules.match.stake > 0 || rules.presses.enabled || rules.skins.enabled || rules.ctp.enabled;
+    const forMoney = playsForMoney(season.rules);
 
     const recipients: typeof players = [];
     const missing: string[] = [];
@@ -175,8 +180,8 @@ export function demoApi(): DemoApi {
     const sample = buildRecapEmail({
       leagueName: league.name, weekNumber: ev.weekNumber, leagueUrl: `${location.origin}/l/${league.slug}`, recapBody: text,
       playerName: first?.displayName ?? 'Golfer', payment: db.paymentHandles[league.id] ?? { venmo: null, paypalMe: null, zelle: null },
-      weekCents: playsForMoney && first ? recap.weekBalances[first.id] ?? 0 : null,
-      seasonCents: playsForMoney && first ? recap.seasonBalances[first.id] ?? 0 : null,
+      weekCents: forMoney && first ? recap.weekBalances[first.id] ?? 0 : null,
+      seasonCents: forMoney && first ? recap.seasonBalances[first.id] ?? 0 : null,
       story: story ? cleanStory(story) : null,
     });
     return { recap, preview: { subject: sample.subject, text: sample.text, recipients: recipients.length, missing, alreadySent: db.recapSends[eventId] ?? null } };
@@ -426,6 +431,7 @@ export function demoApi(): DemoApi {
     async createSeason(leagueId, s) {
       const db = load();
       requireCommissioner(db, leagueId);
+      checkFormat(db, leagueId, s.rules);
       if (usesSideGames(s.rules) && !has(db, leagueId, 'side_games')) throw new Error('plan_feature: Side games and money needs GolfScoreHQ Pro');
       const season: Season = { ...s, id: id(), leagueId };
       db.seasons.push(season);
@@ -436,6 +442,7 @@ export function demoApi(): DemoApi {
       const db = load();
       const s = db.seasons.find((x) => x.id === seasonId)!;
       requireCommissioner(db, s.leagueId);
+      checkFormat(db, s.leagueId, rules);
       if (usesSideGames(rules) && !has(db, s.leagueId, 'side_games')) throw new Error('plan_feature: Side games and money needs GolfScoreHQ Pro');
       s.rules = rules;
       save(db);
@@ -627,8 +634,12 @@ export function demoApi(): DemoApi {
       const first = (pid: string) => (db.players.find((p) => p.id === pid)?.displayName ?? '?').split(' ')[0];
       const lines: string[] = [];
       const best = recap.highlights[0];
-      if (best) lines.push(`${first(best.playerId)} got things going with ${best.kind === 'ace' ? 'an ace' : `a ${best.kind}`} on ${best.holeNumber}, and the rest of the field spent the night trying to catch up.`);
-      if (recap.lowRound) lines.push(`${recap.lowRound.playerIds.map(first).join(' and ')} posted the low round, a ${recap.lowRound.score}.`);
+      if (best) lines.push(`${first(best.playerId)} got things going with ${best.kind === 'birdie' ? 'a birdie' : `an ${best.kind}`} on ${best.holeNumber}, and the rest of the field spent the night trying to catch up.`);
+      const winners = recap.leaderboard.filter((l) => l.place === 1);
+      if (winners.length) {
+        const how = recap.format === 'stableford' ? `${winners[0]!.points} points` : recap.net ? `a net ${winners[0]!.score - winners[0]!.grossToPar + winners[0]!.toPar}` : `a ${winners[0]!.score}`;
+        lines.push(`${winners.map((w) => first(w.playerId)).join(' and ')} ${winners.length > 1 ? 'shared the top spot' : 'took the week'} with ${how}.`);
+      } else if (recap.lowRound) lines.push(`${recap.lowRound.playerIds.map(first).join(' and ')} posted the low round, a ${recap.lowRound.score}.`);
       const skins = new Map<string, number>();
       for (const s of recap.skins) for (const p of s.playerIds) skins.set(p, (skins.get(p) ?? 0) + 1);
       const topSkins = [...skins].sort((a, b) => b[1] - a[1])[0];

@@ -1,11 +1,12 @@
-import { matchStrokes, ownStrokes, scoreMatch, strokesByHole, totalsByPlayer, type BestBallMatchRules } from '@golfscorehq/engine';
+import { compareLines, individualLine, matchStrokes, ownStrokes, scoreMatch, strokesByHole, totalsByPlayer, type BestBallMatchRules, type IndividualLine } from '@golfscorehq/engine';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
 import { applyQueue, compact, enqueue, flush, readQueue, type FlushResult, type PendingOp } from '../lib/pendingQueue';
-import { asBestBall, basicRules, currentMarker, fmtMoney, holesCompleted, matchSoFar, scoreMark, toEngineRound } from '../lib/scoring';
+import { asBestBall, currentMarker, fmtMoney, handicapRules, holesCompleted, individualRules, matchSoFar, scoreMark, toEngineRound } from '../lib/scoring';
+import { fmtToPar } from '../lib/standings';
 import type { CtpEntry, Layout, Player, RoundData, Season } from '../lib/types';
 import { loadWeek, teamName } from './WeekPage';
 
@@ -33,7 +34,9 @@ export function ScoreRoundPage() {
 function Scorer({ initial, layout, season, players, others, eventId, locked }: { initial: RoundData; layout: Layout; season: Season; players: Player[]; others: RoundData[]; eventId: string; locked: boolean }) {
   const { league } = useLeague();
   const nav = useNavigate();
-  const rules = asBestBall(season.rules);
+  const rules = season.rules;
+  const bestBall = rules.format === 'bestBallMatch' ? rules : null;
+  const ind = individualRules(rules);
   const names = useMemo(() => new Map(players.map((p) => [p.id, p.displayName])), [players]);
   // Start from what the server has plus anything still waiting on this phone, so nothing looks lost.
   const [round, setRound] = useState<RoundData>(() => applyQueue(initial, readQueue(initial.id)));
@@ -92,14 +95,22 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
   }, [holeIdx]);
 
   const status = matchSoFar(round, layout, season.rules);
-  // Strokes each golfer gets on this hole: the match's strokes, or their own when only skins are net.
-  const hcpRules = rules.handicaps?.enabled ? rules.handicaps : undefined;
+  // Strokes each golfer gets on this hole: the match's strokes, or their own when playing their own ball (or only skins are net).
+  const hcpRules = handicapRules(rules)?.enabled ? handicapRules(rules) : undefined;
   const strokesHere = useMemo(() => {
     if (!hcpRules) return new Map<string, number>();
     const er = toEngineRound(round, layout);
-    const per = hcpRules.match !== 'gross' ? matchStrokes(er, hcpRules) : ownStrokes(er, hcpRules);
+    const per = bestBall && hcpRules.match !== 'gross' ? matchStrokes(er, hcpRules) : ownStrokes(er, hcpRules);
     return new Map(round.players.map((p) => [p.playerId, strokesByHole(per[p.playerId] ?? 0, layout.holes)[holeIdx] ?? 0]));
-  }, [hcpRules, round, layout, holeIdx]);
+  }, [hcpRules, bestBall, round, layout, holeIdx]);
+  // Stroke play and Stableford: each golfer's running total, counting the score being entered on this hole.
+  const running = useMemo(() => {
+    if (!ind) return new Map<string, IndividualLine>();
+    const withDraft: RoundData = { ...round, scores: { ...round.scores } };
+    for (const p of round.players) withDraft.scores[p.playerId] = { ...round.scores[p.playerId], [hole.number]: draft[p.playerId] ?? hole.par };
+    const er = toEngineRound(withDraft, layout);
+    return new Map(round.players.map((p) => [p.playerId, individualLine(er, p.playerId, layout.holes, ind)]));
+  }, [ind, round, layout, hole, draft]);
   const sideIds = (s: 'A' | 'B' | null) => round.players.filter((p) => p.side === s).map((p) => p.playerId);
   const hasMatch = sideIds('A').length > 0 && sideIds('B').length > 0;
 
@@ -230,9 +241,16 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
                     </span>
                   )}
                 </div>
-                {(label || p.side === null || (strokesHere.get(p.playerId) ?? 0) !== 0) && (
+                {(label || (bestBall && p.side === null) || (strokesHere.get(p.playerId) ?? 0) !== 0) && (
                   <div className={`small ${v < hole.par ? 'under' : 'muted'}`}>
-                    {[label, (strokesHere.get(p.playerId) ?? 0) !== 0 ? `net ${v - strokesHere.get(p.playerId)!}` : '', p.side === null ? 'skins only' : ''].filter(Boolean).join(' · ')}
+                    {[label, (strokesHere.get(p.playerId) ?? 0) !== 0 ? `net ${v - strokesHere.get(p.playerId)!}` : '', bestBall && p.side === null ? 'skins only' : ''].filter(Boolean).join(' · ')}
+                  </div>
+                )}
+                {ind && running.get(p.playerId) && (
+                  <div className="small muted">
+                    {ind.format === 'stableford'
+                      ? `${running.get(p.playerId)!.holePoints[holeIdx]} pts here · ${running.get(p.playerId)!.points} total`
+                      : `${fmtToPar(running.get(p.playerId)!.toPar)}${hcpRules ? ' net' : ''} thru ${running.get(p.playerId)!.thru}`}
                   </div>
                 )}
               </div>
@@ -246,7 +264,7 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
 
       {ctpOn && (
         <section className="card stack ctp">
-          <h3>Closest to the pin — {fmtMoney(rules.ctp.amountPerHole)}</h3>
+          <h3>Closest to the pin{rules.ctp.amountPerHole > 0 ? ` — ${fmtMoney(rules.ctp.amountPerHole)}` : ''}</h3>
           <p className="small">Current marker: <strong>{marker.disputed ? 'disputed' : marker.holder ? names.get(marker.holder) ?? '?' : 'none yet'}</strong></p>
           <label>
             Did anyone in your group get inside it?
@@ -270,8 +288,8 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
         </section>
       )}
 
-      {rules.presses.enabled && hasMatch && (
-        <Presses round={round} layout={layout} holeNumber={hole.number} names={names} rules={rules} onChange={setRound} />
+      {bestBall?.presses.enabled && hasMatch && (
+        <Presses round={round} layout={layout} holeNumber={hole.number} names={names} rules={bestBall} onChange={setRound} />
       )}
 
       <ErrorText>{error}</ErrorText>
@@ -348,7 +366,9 @@ function Review({ round, layout, season, names, queueLength, busy, error, locked
   locked: boolean; eventId: string; onEditHole: (i: number) => void; onSubmit: () => void;
 }) {
   const rules = asBestBall(season.rules);
+  const ind = individualRules(season.rules);
   const m = scoreMatch(toEngineRound(round, layout), layout.holes.length, rules, layout.holes);
+  const lines = ind ? round.players.map((p) => individualLine(toEngineRound(round, layout), p.playerId, layout.holes, ind)) : [];
   const money = totalsByPlayer(m.ledger);
   const par = layout.holes.reduce((s, h) => s + h.par, 0);
   const sideIds = (s: 'A' | 'B') => round.players.filter((p) => p.side === s).map((p) => p.playerId);
@@ -376,7 +396,7 @@ function Review({ round, layout, season, names, queueLength, busy, error, locked
               const tot = s.reduce<number>((t, v) => t + (v ?? 0), 0);
               return (
                 <tr key={p.playerId}>
-                  <td className="name">{(names.get(p.playerId) ?? '?').split(' ')[0]}{p.side === null ? '*' : ''}</td>
+                  <td className="name">{(names.get(p.playerId) ?? '?').split(' ')[0]}{!ind && p.side === null ? '*' : ''}</td>
                   {s.map((v, i) => {
                     const d = v == null ? null : v - layout.holes[i]!.par;
                     const won = hasMatch && p.side && m.holeWinners[i] === p.side;
@@ -389,6 +409,24 @@ function Review({ round, layout, season, names, queueLength, busy, error, locked
           </tbody>
         </table>
       </div>
+
+      {ind && (
+        <section className="card stack">
+          <h3>{ind.format === 'stableford' ? `Stableford points${ind.handicaps?.enabled ? ' (net)' : ''}` : ind.handicaps?.enabled ? 'Net scores' : 'Totals'}</h3>
+          <div className="small">
+            {[...lines].sort(compareLines(ind)).map((l) => (
+              <div key={l.playerId} className="row between">
+                <span>{names.get(l.playerId)}</span>
+                <span>
+                  {ind.format === 'stableford' ? <strong>{l.points} pts</strong> : <strong>{fmtToPar(l.toPar)}{ind.handicaps?.enabled ? ' net' : ''}</strong>}
+                  <span className="muted"> · {l.gross} gross{l.complete ? '' : ` thru ${l.thru}`}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+          {!locked && <p className="small muted">Places{rules.skins.enabled ? ', skins' : ''}{rules.ctp.enabled ? ' and closest to the pin' : ''} are worked out across the whole field when the week is settled.</p>}
+        </section>
+      )}
 
       {hasMatch && (
         <section className="card stack">

@@ -244,7 +244,7 @@ export interface TvFeed {
   generatedAt?: string;
 }
 
-export type LedgerKind = 'match' | 'press' | 'skin' | 'ctp' | 'scramblePot';
+export type LedgerKind = 'match' | 'press' | 'skin' | 'ctp' | 'scramblePot' | 'place';
 
 export interface LedgerRow {
   playerId: string;

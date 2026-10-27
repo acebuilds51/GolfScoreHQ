@@ -1,5 +1,5 @@
 import { seasonAwards, seasonStats, type Award, type LedgerEntry, type PlayedRound } from '@golfscorehq/engine';
-import { asBestBall, toEngineRound } from './scoring';
+import { toEngineRound } from './scoring';
 import type { Layout, LeagueEvent, LedgerRow, Player, RoundData, Season } from './types';
 
 export interface WeekScore {
@@ -23,13 +23,19 @@ export interface StandingRow {
   wins: number;
   losses: number;
   halves: number;
+  /** Stroke play and Stableford: weeks won (ties count) and top-3 finishes. */
+  weekWins: number;
+  top3: number;
+  /** Stableford points over full rounds, and per round. */
+  points: number;
+  averagePoints: number | null;
   skins: number;
   ctps: number;
   money: number;
   weeks: WeekScore[];
 }
 
-export type SortKey = 'money' | 'average' | 'wins' | 'skins' | 'ctps';
+export type SortKey = 'money' | 'average' | 'wins' | 'weekWins' | 'points' | 'skins' | 'ctps';
 
 export interface Standings {
   rows: StandingRow[];
@@ -65,7 +71,7 @@ export function buildStandings(input: {
     .filter((e) => settled.has(e.eventId))
     .map((e) => ({ playerId: e.playerId, amount: e.amountCents, kind: e.kind, ...(e.roundId ? { roundId: e.roundId } : {}), ...(e.holeNumber ? { holeNumber: e.holeNumber } : {}) }));
 
-  const stats = seasonStats(played, ledger, asBestBall(input.season.rules));
+  const stats = seasonStats(played, ledger, input.season.rules);
   const byId = new Map(input.players.map((p) => [p.id, p]));
 
   const rows: StandingRow[] = Object.values(stats)
@@ -86,6 +92,10 @@ export function buildStandings(input: {
         wins: s.matchWins,
         losses: s.matchLosses,
         halves: s.matchHalves,
+        weekWins: s.weekWins,
+        top3: s.top3,
+        points: s.points,
+        averagePoints: s.averagePoints,
         skins: s.skins,
         ctps: s.ctps,
         money: s.money,
@@ -102,6 +112,8 @@ export function sortStandings(rows: StandingRow[], key: SortKey): StandingRow[] 
     money: (a, b) => b.money - a.money || byAvg(a) - byAvg(b),
     average: (a, b) => byAvg(a) - byAvg(b) || b.rounds - a.rounds,
     wins: (a, b) => b.wins - a.wins || a.losses - b.losses,
+    weekWins: (a, b) => b.weekWins - a.weekWins || b.top3 - a.top3 || byAvg(a) - byAvg(b),
+    points: (a, b) => b.points - a.points || (b.averagePoints ?? 0) - (a.averagePoints ?? 0),
     skins: (a, b) => b.skins - a.skins || b.money - a.money,
     ctps: (a, b) => b.ctps - a.ctps || b.money - a.money,
   };

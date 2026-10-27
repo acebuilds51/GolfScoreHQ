@@ -3,7 +3,17 @@ import { Link } from 'react-router-dom';
 import { EmptyState, ErrorText, ProLock, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
-import { allLayouts, basicRules, describeRules, fmtDate, formFromRules, handicapsFromForm, layoutForWeek, nextDate, OCBC_STYLE_FORM, rulesFromForm, type SideGameForm } from '../lib/scoring';
+import type { FormatRules } from '@golfscorehq/engine';
+import {
+  allLayouts, BASIC_FORMATS, describeRules, fmtDate, FORMAT_NAMES, formFromRules, handicapsFromForm, layoutForWeek, nextDate,
+  OCBC_STYLE_FORM, plainRules, rulesFromForm, type FormatKey, type SideGameForm,
+} from '../lib/scoring';
+
+const FORMAT_HELP: Record<FormatKey, string> = {
+  bestBallMatch: 'Two teams of two in each group. Each hole goes to the team with the lowest single score.',
+  strokePlay: 'Everyone plays their own ball against the whole league. Lowest total wins the week.',
+  stableford: 'Points on every hole: 2 for par, 3 for birdie, 1 for bogey, 0 for double or worse. Most points wins, and one bad hole never ruins the night.',
+};
 import { isCommissioner, type Season } from '../lib/types';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -124,6 +134,7 @@ function AddWeek({ season, weekNumber, courses, onAdded }: { season: Season; wee
 function SeasonForm({ season, onSaved, onCancel }: { season?: Season; onSaved: () => void; onCancel?: () => void }) {
   const { league } = useLeague();
   const pro = league.features.includes('side_games');
+  const allFormats = league.features.includes('all_formats');
   const thisYear = new Date().getFullYear();
   const [year, setYear] = useState(String(season?.year ?? (new Date().getMonth() >= 8 ? thisYear + 1 : thisYear)));
   const [name, setName] = useState(season?.name ?? '');
@@ -140,8 +151,9 @@ function SeasonForm({ season, onSaved, onCancel }: { season?: Season; onSaved: (
         e.preventDefault();
         const y = Number(year);
         if (!(y >= 2020 && y <= 2100)) return setError('Enter the season year, e.g. 2027.');
+        if (!allFormats && !BASIC_FORMATS.includes(form.format)) return setError(`${FORMAT_NAMES[form.format]} needs GolfScoreHQ Pro.`);
         // Handicaps are on every plan; side games and money need Pro.
-        const rules = pro ? rulesFromForm(form) : { ...basicRules(), handicaps: handicapsFromForm(form) };
+        const rules: FormatRules = pro ? rulesFromForm(form) : { ...plainRules(form.format), handicaps: handicapsFromForm(form) } as FormatRules;
         const ok = await run(async () => {
           if (season) await api.updateSeasonRules(season.id, rules);
           else await api.createSeason(league.id, { year: y, name: name.trim(), rules, startDate: startDate || null, leagueDay: Number(leagueDay) });
@@ -168,23 +180,47 @@ function SeasonForm({ season, onSaved, onCancel }: { season?: Season; onSaved: (
       )}
 
       <div className="subcard stack">
-        <div>
+        <div className="stack">
           <strong>Format</strong>
-          <p className="small muted">2 vs 2 best ball match: each hole goes to the team with the lowest single score. More formats are coming.</p>
+          <div className="format-picks" role="radiogroup" aria-label="Format">
+            {(Object.keys(FORMAT_NAMES) as FormatKey[]).map((f) => {
+              const locked = !allFormats && !BASIC_FORMATS.includes(f);
+              return (
+                <label key={f} className={`format-pick${form.format === f ? ' on' : ''}${locked ? ' locked' : ''}`}>
+                  <input type="radio" name="format" value={f} checked={form.format === f} disabled={locked} onChange={() => { set({ format: f }); setError(null); }} />
+                  <span className="grow">
+                    <strong>{FORMAT_NAMES[f]}</strong>{locked && <> <ProLock /></>}
+                    <span className="small muted block">{FORMAT_HELP[f]}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          {season && form.format !== season.rules.format && <p className="small warn">Changing the format mid-season also changes how earlier weeks count in the standings. Money already posted doesn't change.</p>}
         </div>
         <div className="row between wrap">
           <strong>Side games and money</strong>
           {!pro && <ProLock />}
         </div>
-        {!pro && <p className="small muted">Free leagues track scores and match results. Pro adds the match bet, presses, skins and closest to the pin, settled automatically.</p>}
+        {!pro && <p className="small muted">Free leagues track scores and results. Pro adds {form.format === 'bestBallMatch' ? 'the match bet, presses' : 'prize money by place'}, skins and closest to the pin, settled automatically.</p>}
         <fieldset className="side-games" disabled={!pro}>
-          <label className="inline">
-            Match bet per man ($)
-            <input inputMode="decimal" value={form.matchStake} onChange={(e) => set({ matchStake: e.target.value })} />
-          </label>
-          <label className="check-row"><input type="checkbox" checked={form.pressesEnabled} onChange={(e) => set({ pressesEnabled: e.target.checked })} /> Presses</label>
-          {form.pressesEnabled && (
-            <label className="inline">Press per man ($)<input inputMode="decimal" value={form.pressStake} onChange={(e) => set({ pressStake: e.target.value })} /></label>
+          {form.format === 'bestBallMatch' ? (
+            <>
+              <label className="inline">
+                Match bet per man ($)
+                <input inputMode="decimal" value={form.matchStake} onChange={(e) => set({ matchStake: e.target.value })} />
+              </label>
+              <label className="check-row"><input type="checkbox" checked={form.pressesEnabled} onChange={(e) => set({ pressesEnabled: e.target.checked })} /> Presses</label>
+              {form.pressesEnabled && (
+                <label className="inline">Press per man ($)<input inputMode="decimal" value={form.pressStake} onChange={(e) => set({ pressStake: e.target.value })} /></label>
+              )}
+            </>
+          ) : (
+            <label className="inline">
+              Prize money each week by place ($)
+              <input value={form.payouts} placeholder="30, 20, 10" onChange={(e) => set({ payouts: e.target.value })} />
+              <span className="small muted">1st, 2nd, 3rd… separated by commas. Leave it empty for no prize money. Golfers tied for a place split the money for the places they cover.</span>
+            </label>
           )}
           <label className="check-row"><input type="checkbox" checked={form.skinsEnabled} onChange={(e) => set({ skinsEnabled: e.target.checked })} /> Skins across the whole league</label>
           {form.skinsEnabled && (
@@ -222,16 +258,24 @@ function SeasonForm({ season, onSaved, onCancel }: { season?: Season; onSaved: (
             <label className="inline">
               Percent of handicap used
               <input inputMode="numeric" value={form.hcpAllowance} onChange={(e) => set({ hcpAllowance: e.target.value.replace(/\D/g, '') })} />
-              <span className="small muted">100 = full handicap. 90% is common for 2-man best ball, 85% for USGA four-ball.</span>
+              <span className="small muted">
+                {form.format === 'bestBallMatch'
+                  ? '100 = full handicap. 90% is common for 2-man best ball, 85% for USGA four-ball.'
+                  : '100 = full handicap. 95% is the USGA recommendation for individual stroke play and Stableford.'}
+              </span>
             </label>
-            <label className="inline">
-              Strokes in the match
-              <select value={form.hcpMatch} onChange={(e) => set({ hcpMatch: e.target.value as SideGameForm['hcpMatch'] })}>
-                <option value="offLow">Off the low man (the best player in the group plays scratch)</option>
-                <option value="full">Everyone gets their full strokes</option>
-                <option value="gross">No strokes in the match (gross)</option>
-              </select>
-            </label>
+            {form.format === 'bestBallMatch' ? (
+              <label className="inline">
+                Strokes in the match
+                <select value={form.hcpMatch} onChange={(e) => set({ hcpMatch: e.target.value as SideGameForm['hcpMatch'] })}>
+                  <option value="offLow">Off the low man (the best player in the group plays scratch)</option>
+                  <option value="full">Everyone gets their full strokes</option>
+                  <option value="gross">No strokes in the match (gross)</option>
+                </select>
+              </label>
+            ) : (
+              <p className="small muted">The leaderboard and places use net scores: each golfer gets their own strokes.</p>
+            )}
             <label className="inline">
               Skins
               <select value={form.hcpSkins} onChange={(e) => set({ hcpSkins: e.target.value as SideGameForm['hcpSkins'] })}>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { liveBoard } from '../src/lib/live';
-import { OCBC_STYLE_FORM, rulesFromForm } from '../src/lib/scoring';
+import { formFromRules, OCBC_STYLE_FORM, parsePayouts, rulesFromForm } from '../src/lib/scoring';
 import type { Layout, RoundData } from '../src/lib/types';
 
 const front: Layout = { id: 'f', name: 'Front 9', tees: null, rating: null, slope: null, holes: [4, 3, 5, 4, 3, 4, 4, 4, 4].map((par, i) => ({ number: i + 1, par })) };
@@ -15,6 +15,27 @@ function round(id: string, teeSlot: number, scores: Record<string, number[]>, ex
     ...extra,
   };
 }
+
+describe('Stableford season form and live board', () => {
+  const form = { ...OCBC_STYLE_FORM, format: 'stableford' as const, payouts: '$30, 20,, 10, 0' };
+  const sf = rulesFromForm(form);
+
+  it('saves Stableford rules with prize money by place and reads them back', () => {
+    expect(sf).toMatchObject({ format: 'stableford', payouts: [3000, 2000, 1000], points: { par: 2, birdie: 3 } });
+    expect(formFromRules(sf)).toMatchObject({ format: 'stableford', payouts: '30, 20, 10' });
+    expect(parsePayouts('')).toEqual([]);
+  });
+
+  it('ranks on points, most first', () => {
+    // Al: birdie, par, bogey = 3+2+1 = 6. Bob: par, par, par = 6, thru 3. Cy: eagle on 1 = 4, thru 1.
+    const g = round('g1', 1, { al: [3, 3, 6], bob: [4, 3, 5], cy: [2] }, {
+      players: ['al', 'bob', 'cy'].map((p, i) => ({ playerId: p, side: null, position: i })),
+    });
+    const b = liveBoard([g], front, sf);
+    expect(b.format).toBe('stableford');
+    expect(b.lines.map((l) => [l.playerId, l.points, l.thru])).toEqual([['al', 6, 3], ['bob', 6, 3], ['cy', 4, 1]]);
+  });
+});
 
 describe('live leaderboard', () => {
   // Group 1 has finished 3 holes; group 2 has finished 2.

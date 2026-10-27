@@ -3,8 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 import { EmptyState, ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAsync, useLeague, useLiveRefresh } from '../lib/hooks';
-import { fmtLiveToPar, liveBoard, type LiveBoard } from '../lib/live';
-import { asBestBall, fmtDate } from '../lib/scoring';
+import { fmtLiveToPar, lineScore, liveBoard, type LiveBoard } from '../lib/live';
+import { fmtDate, playsForMoney } from '../lib/scoring';
 import type { FormatRules } from '@golfscorehq/engine';
 import { loadWeek, teamName } from './WeekPage';
 
@@ -85,15 +85,17 @@ const first = (names: Map<string, string>, id: string) => names.get(id) ?? '?';
 export function LeaderPanel({ board, names, holes }: PanelProps & { holes: number }) {
   const lines = board.lines;
   const top = lines[0]!;
-  const leaders = lines.filter((l) => l.toPar === top.toPar);
+  const leaders = lines.filter((l) => l.rank === top.rank);
   const rest = lines.slice(leaders.length);
   const thruLabel = (l: (typeof lines)[number]) => (l.finished ? 'Final' : `Thru ${l.thru}`);
   // Positions with ties: T2, T2, 4 …
   const pos = (i: number) => {
-    const at = lines.findIndex((l) => l.toPar === lines[i]!.toPar);
-    const tied = lines.filter((l) => l.toPar === lines[i]!.toPar).length > 1;
+    const at = lines.findIndex((l) => l.rank === lines[i]!.rank);
+    const tied = lines.filter((l) => l.rank === lines[i]!.rank).length > 1;
     return `${tied ? 'T' : ''}${at + 1}`;
   };
+  const stableford = board.format === 'stableford';
+  const skinsOnly = (l: (typeof lines)[number]) => board.format === 'bestBallMatch' && l.side === null;
   return (
     <section className="leader-card">
       <div className="leader-hero">
@@ -101,8 +103,8 @@ export function LeaderPanel({ board, names, holes }: PanelProps & { holes: numbe
           {leaders.length > 1 ? `Tied for the lead · ${thruLabel(top)}` : `Leader · ${thruLabel(top).toLowerCase()}`}{board.net ? ' · net' : ''}
         </div>
         <div className="num leader-hero-name">{leaders.map((l) => first(names, l.playerId)).join(' · ')}</div>
-        <div className="num leader-hero-score">{fmtLiveToPar(top.toPar)}</div>
-        {board.net && leaders.length === 1 && <div className="leader-hero-label">{fmtLiveToPar(top.grossToPar)} gross</div>}
+        <div className="num leader-hero-score">{lineScore(top)}</div>
+        {(board.net || stableford) && leaders.length === 1 && <div className="leader-hero-label">{fmtLiveToPar(top.grossToPar)} gross</div>}
       </div>
       {rest.length > 0 && (
         <ol className="leader-list">
@@ -111,9 +113,9 @@ export function LeaderPanel({ board, names, holes }: PanelProps & { holes: numbe
               <span className="num leader-pos">{pos(i + leaders.length)}</span>
               <span className="grow">
                 <span className="leader-name">{first(names, l.playerId)}</span>
-                <span className="small muted"> {l.finished ? 'F' : `${l.thru}/${holes}`}{board.net ? ` · ${fmtLiveToPar(l.grossToPar)} gross` : ''}{l.side === null ? ' · skins' : ''}</span>
+                <span className="small muted"> {l.finished ? 'F' : `${l.thru}/${holes}`}{board.net || stableford ? ` · ${fmtLiveToPar(l.grossToPar)} gross` : ''}{skinsOnly(l) ? ' · skins' : ''}</span>
               </span>
-              <span className={`num leader-score${l.toPar < 0 ? ' under' : ''}`}>{fmtLiveToPar(l.toPar)}</span>
+              <span className={`num leader-score${!stableford && l.toPar < 0 ? ' under' : ''}`}>{lineScore(l)}</span>
             </li>
           ))}
         </ol>
@@ -130,7 +132,7 @@ export function MatchesPanel({ board, names, holes }: PanelProps & { holes: numb
         <div key={m.roundId} className="row small match-line">
           <span className="tee-badge">{m.teeSlot}</span>
           <span className="grow">
-            {teamName(m.teamA, names)}{m.teamB.length > 0 && <> <span className="muted">vs</span> {teamName(m.teamB, names)}</>}
+            {m.teamA.length ? teamName(m.teamA, names) : teamName(m.extra, names)}{m.teamB.length > 0 && <> <span className="muted">vs</span> {teamName(m.teamB, names)}</>}
             <span className="muted"> · {m.label}</span>
           </span>
           <span className={`badge ${m.status === 'submitted' ? 'badge-ok' : 'badge-live'}`}>{m.status === 'submitted' ? 'In' : m.thru >= holes ? 'Done' : `Hole ${m.thru + 1}`}</span>
@@ -183,7 +185,6 @@ export function HighlightsPanel({ board, names }: PanelProps) {
 }
 
 function RulesNote({ rules }: { rules: FormatRules }) {
-  const r = asBestBall(rules);
-  if (!r.skins.enabled && !r.ctp.enabled) return null;
+  if (!playsForMoney(rules)) return null;
   return <p className="small muted">Everything here is live and unofficial until the commissioner settles the week.</p>;
 }
