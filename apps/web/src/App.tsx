@@ -20,6 +20,7 @@ import { StandingsPage } from './pages/StandingsPage';
 import { AwardsPage } from './pages/AwardsPage';
 import { PlayerPage } from './pages/PlayerPage';
 import { SetupServicePage } from './pages/SetupServicePage';
+import { ImportPage } from './pages/ImportPage';
 import { StaffPage } from './pages/StaffPage';
 import { SignInPage } from './pages/SignInPage';
 import { TvPage } from './pages/TvPage';
@@ -55,6 +56,7 @@ export function App() {
             <Route path="awards" element={<AwardsPage />} />
             <Route path="player/:playerId" element={<PlayerPage />} />
             <Route path="setup" element={<SetupServicePage />} />
+            <Route path="import" element={<ImportPage />} />
             <Route path="live" element={<LivePage />} />
             <Route path="live/:eventId" element={<LivePage />} />
             <Route path="roster" element={<RosterPage />} />

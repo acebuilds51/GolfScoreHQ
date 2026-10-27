@@ -52,6 +52,7 @@ export function SetupServicePage() {
       <div>
         <h2>We set up your league</h2>
         <p className="muted">Send us whatever you have — a spreadsheet, last season's results, photos of scorecards — and we'll enter your roster, handicaps, course and history for you. We'll email you if we have a question and when it's done.</p>
+        <p className="small muted">Would rather do it yourself? <Link to="../import">Import past rounds</Link> from a spreadsheet, and add golfers on the <Link to="../roster">Roster</Link> page.</p>
       </div>
 
       {requests.map((r) => <RequestCard key={r.id} request={r} onChanged={data.reload} />)}

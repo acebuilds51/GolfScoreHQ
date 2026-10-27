@@ -25,7 +25,8 @@ Status key: **Built** = data model and logic done and tested. **Next** = needs t
 
 ### 3. "We set up your league"
 - **Built:** `setup_requests` (commissioner uploads a spreadsheet; staff update status through the service role).
-- **Next:** upload screen; an import tool for staff that maps a spreadsheet to roster, rounds and scores (the OCBC 2026 export is the first test case).
+- **Built (app):** upload screen and staff queue (`/staff`, with consent-based temporary commissioner access); **Import past rounds** (Pro): paste or CSV, one row per golfer per round, columns guessed and adjustable, or the old OCBC app's export (teams, presses, CTPs); imports into the current or a new past season, adds missing golfers, never touches weeks that already have scores, optionally settles each week.
+- **Next:** run the real OCBC 2026 export through it; .xlsx files directly (today: copy-paste or CSV).
 
 ### 4. Season awards and stats
 - **Built:** `seasonStats()`, `headToHead()` and `seasonAwards()` in the engine: lowest average, best round, skins leader, CTP king, birdie machine, eagle and hole-in-one clubs, match play champ, money leader, hottest finish, most improved (handicap). Ties share an award.
