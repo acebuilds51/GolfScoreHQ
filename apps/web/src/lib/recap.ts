@@ -21,7 +21,7 @@ export function buildWeekRecap(input: {
   players: Pick<Player, 'id' | 'displayName'>[];
   hideMoney?: boolean;
 }): { recap: WeeklyRecap; text: string } {
-  const rules = asBestBall(input.season.rules);
+  const rules = input.season.rules.format === 'scramble' ? asBestBall(input.season.rules) : input.season.rules;
   const recap = withPostedResults(
     weeklyRecap(input.event.weekNumber, input.rounds.map((r) => toEngineRound(r, input.layout)), { id: input.layout.id, name: input.layout.name, holes: input.layout.holes }, rules),
     input.weekLedger.map(toEntry),

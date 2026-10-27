@@ -8,6 +8,10 @@ const name = (id: string) => NAMES[id] ?? '?';
 const recap: WeeklyRecap = {
   week: 4,
   layoutName: 'Front 9',
+  format: 'bestBallMatch',
+  net: false,
+  skinsEnabled: true,
+  leaderboard: [],
   matches: [
     { roundId: 'r1', teeSlot: 1, teamA: ['jim', 'bill'], teamB: ['rick', 'tig'], holesWon: { A: 5, B: 3 }, winner: 'A' },
     { roundId: 'r2', teeSlot: 2, teamA: ['al'], teamB: ['bob'], holesWon: { A: 2, B: 4 }, winner: 'B' },
@@ -35,7 +39,8 @@ const recap: WeeklyRecap = {
 describe('league results picture', () => {
   it('leaves money off by default', () => {
     const m = resultsModel(recap, name, { includeMoney: false, ctpCents: { 2: 3600 } });
-    expect(m.lowRound).toEqual({ names: 'Jim Jones', score: 34, toPar: '2 under' });
+    expect(m.lowRound).toEqual({ label: 'Low round', names: 'Jim Jones', score: 34, toPar: '2 under' });
+    expect(m.listLabel).toBe('Matches');
     expect(m.matches).toEqual([
       { text: 'Jim & Billy def. Rick & Tiger', score: '5–3' },
       { text: 'Bob def. Al', score: '4–2' },
@@ -78,5 +83,27 @@ describe('winner card', () => {
   it('names everyone tied for low', () => {
     const tied = { ...recap, lowRound: { playerIds: ['jim', 'bill'], score: 34, toPar: -2 } };
     expect(winnerModel(tied, name)).toMatchObject({ label: 'Low round (tied)', name: 'Jim Jones & Billy Bob' });
+  });
+});
+
+describe('stroke play and Stableford pictures', () => {
+  const leaderboard: WeeklyRecap['leaderboard'] = [
+    { playerId: 'bill', place: 1, tied: false, score: 38, grossToPar: 2, toPar: -3, points: 21 },
+    { playerId: 'jim', place: 2, tied: false, score: 34, grossToPar: -2, toPar: -2, points: 20 },
+  ];
+
+  it('Stableford: the winner on points heads the picture, then the leaderboard', () => {
+    const r: WeeklyRecap = { ...recap, format: 'stableford', net: true, matches: [], leaderboard };
+    const m = resultsModel(r, name, { includeMoney: false });
+    expect(m.lowRound).toEqual({ label: 'Winner', names: 'Billy Bob', score: 21, toPar: 'points' });
+    expect(m.listLabel).toBe('Leaderboard');
+    expect(m.matches).toEqual([{ text: '1. Billy Bob', score: '21 pts' }, { text: '2. Jim Jones', score: '20 pts' }]);
+    expect(winnerModel(r, name)).toMatchObject({ label: 'Week winner', name: 'Billy Bob', score: 21 });
+  });
+
+  it('net stroke play shows the net score', () => {
+    const r: WeeklyRecap = { ...recap, format: 'strokePlay', net: true, matches: [], leaderboard };
+    expect(resultsModel(r, name, { includeMoney: false }).lowRound).toEqual({ label: 'Winner', names: 'Billy Bob', score: 33, toPar: 'Net · 3 under' });
+    expect(resultsModel(r, name, { includeMoney: false }).matches[0]!.score).toBe('−3');
   });
 });

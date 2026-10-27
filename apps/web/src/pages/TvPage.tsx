@@ -4,7 +4,7 @@ import { useParams } from 'react-router-dom';
 import { api } from '../lib/backend';
 import { textOn } from '../lib/brand';
 import { fmtLiveToPar, liveBoard, type LiveBoard } from '../lib/live';
-import { asBestBall, fmtDate, fmtMoney } from '../lib/scoring';
+import { fmtDate, fmtMoney } from '../lib/scoring';
 import type { TvFeed, TvPanel } from '../lib/types';
 
 const POLL_MS = 15000;
@@ -55,7 +55,7 @@ function TvMessage({ title, text }: { title: string; text?: string }) {
 
 function TvScreen({ feed, stale }: { feed: TvFeed; stale: boolean }) {
   const settings = feed.display?.settings ?? { hideMoney: true, secondsPerPanel: 15, panels: ['live', 'matches', 'skins', 'ctp', 'highlights', 'standings'] as TvPanel[] };
-  const rules = asBestBall(feed.season!.rules);
+  const rules = feed.season!.rules;
   const layout = feed.layout!;
   const names = useMemo(() => new Map((feed.players ?? []).map((p) => [p.id, p.displayName])), [feed.players]);
   const board = useMemo(() => liveBoard(feed.rounds ?? [], layout, feed.season!.rules), [feed.rounds, layout, feed.season]);
@@ -112,7 +112,7 @@ function TvScreen({ feed, stale }: { feed: TvFeed; stale: boolean }) {
           <div className="tv-center"><h2>Waiting for the first scores</h2></div>
         ) : (
           <section className="tv-panel" key={panel}>
-            <h2 className="tv-panel-title">{PANEL_TITLES[panel]}</h2>
+            <h2 className="tv-panel-title">{panel === 'matches' && board.format !== 'bestBallMatch' ? 'Groups' : PANEL_TITLES[panel]}</h2>
             {panel === 'live' && <TvLeaderboard board={board} names={names} holes={layout.holes.length} />}
             {panel === 'matches' && <TvMatches board={board} names={names} holes={layout.holes.length} />}
             {panel === 'skins' && <TvSkins board={board} names={names} />}
@@ -143,23 +143,24 @@ type P = { board: LiveBoard; names: Map<string, string> };
 
 function TvLeaderboard({ board, names, holes }: P & { holes: number }) {
   const rows = board.lines.slice(0, 12);
+  const stableford = board.format === 'stableford';
   let rank = 0;
   let prev: number | null = null;
   return (
     <table className="tv-table">
-      <thead><tr><th>#</th><th className="left">Golfer</th><th>Thru</th><th>Score</th>{board.net && <th>Gross</th>}<th>{board.net ? 'Net' : 'To par'}</th></tr></thead>
+      <thead><tr><th>#</th><th className="left">Golfer</th><th>Thru</th><th>Score</th>{(board.net || stableford) && <th>Gross</th>}<th>{stableford ? 'Points' : board.net ? 'Net' : 'To par'}</th></tr></thead>
       <tbody>
         {rows.map((l, i) => {
-          if (l.toPar !== prev) rank = i + 1;
-          prev = l.toPar;
+          if (l.rank !== prev) rank = i + 1;
+          prev = l.rank;
           return (
             <tr key={`${l.roundId}-${l.playerId}`}>
               <td className="dim">{rank}</td>
-              <td className="left">{names.get(l.playerId) ?? '?'}{l.side === null && <span className="dim small"> · skins</span>}</td>
+              <td className="left">{names.get(l.playerId) ?? '?'}{board.format === 'bestBallMatch' && l.side === null && <span className="dim small"> · skins</span>}</td>
               <td>{l.finished ? 'F' : `${l.thru}/${holes}`}</td>
               <td>{l.strokes}</td>
-              {board.net && <td className="dim">{fmtLiveToPar(l.grossToPar)}</td>}
-              <td className={l.toPar < 0 ? 'under' : ''}>{fmtLiveToPar(l.toPar)}</td>
+              {(board.net || stableford) && <td className="dim">{fmtLiveToPar(l.grossToPar)}</td>}
+              <td className={!stableford && l.toPar < 0 ? 'under' : ''}>{stableford ? l.points : fmtLiveToPar(l.toPar)}</td>
             </tr>
           );
         })}
@@ -177,7 +178,7 @@ function TvMatches({ board, names, holes }: P & { holes: number }) {
       {board.matches.map((m) => (
         <div key={m.roundId} className="tv-row">
           <span className="tv-tee">{m.teeSlot}</span>
-          <span className="grow">{firstNames(m.teamA, names)}{m.teamB.length > 0 && <><span className="dim"> vs </span>{firstNames(m.teamB, names)}</>}</span>
+          <span className="grow">{firstNames(m.teamA.length ? m.teamA : m.extra, names)}{m.teamB.length > 0 && <><span className="dim"> vs </span>{firstNames(m.teamB, names)}</>}</span>
           <span className="tv-status">{m.label}</span>
           <span className={`tv-pill ${m.status === 'submitted' ? 'final' : 'live'}`}>{m.status === 'submitted' ? 'In' : m.thru >= holes ? 'Done' : `Hole ${m.thru + 1}`}</span>
         </div>

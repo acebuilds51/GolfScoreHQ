@@ -5,7 +5,9 @@ import { useAction, useAsync, useLeague } from '../lib/hooks';
 import { buildWeekRecap } from '../lib/recap';
 import { ShareWeek } from './ShareWeek';
 import { STORY_MAX_CHARS } from '../../../../supabase/functions/send-recap/story';
-import { asBestBall, fmtMoney } from '../lib/scoring';
+import type { IndividualRules, PlacedLine } from '@golfscorehq/engine';
+import { fmtMoney, individualRules, playsForMoney } from '../lib/scoring';
+import { fmtToPar } from '../lib/standings';
 import { settleWeek, totalsFromLedger, type PlayerTotals } from '../lib/settlement';
 import { isCommissioner, type Layout, type LeagueEvent, type RoundData, type Season } from '../lib/types';
 
@@ -25,8 +27,10 @@ export function WeekResults({ event, season, layout, rounds, names, onChanged }:
   const { busy, error, run } = useAction();
   const decisions = extra.data?.decisions ?? {};
   const preview = useMemo(() => settleWeek(rounds, layout, season.rules, decisions), [rounds, layout, season.rules, decisions]);
-  const rules = asBestBall(season.rules);
-  const hasMoney = rules.match.stake > 0 || rules.presses.enabled || rules.skins.enabled || rules.ctp.enabled;
+  const rules = season.rules;
+  const ind = individualRules(rules);
+  const hasMoney = playsForMoney(rules);
+  const shareable = rules.format !== 'scramble';
   const name = (id: string | null) => (id ? names.get(id) ?? '?' : '—');
 
   if (event.status === 'rainout') {
@@ -65,6 +69,7 @@ export function WeekResults({ event, season, layout, rounds, names, onChanged }:
           )}
         </div>
         {!hasMoney && <p className="muted">Scores are final for this week.</p>}
+        {ind && <Leaderboard rules={ind} lines={preview.leaderboard} name={name} placeMoney={Object.fromEntries(ledger.filter((e) => e.kind === 'place').map((e) => [e.playerId, e.amountCents]))} />}
         {rules.skins.enabled && (
           <div>
             <h3>Skins</h3>
@@ -77,10 +82,10 @@ export function WeekResults({ event, season, layout, rounds, names, onChanged }:
             {ctp.length ? ctp.map((s, i) => <div key={i} className="row between small"><span>Hole {s.holeNumber} — {name(s.playerId)}</span><span className="good">{fmtMoney(s.amountCents)}</span></div>) : <p className="small muted">Nobody claimed a CTP.</p>}
           </div>
         )}
-        {totals.length > 0 && <MoneyTable totals={totals} name={name} />}
+        {totals.length > 0 && <MoneyTable totals={totals} name={name} individual={!!ind} />}
         <ErrorText>{error}</ErrorText>
-        {season.rules.format === 'bestBallMatch' && <ShareWeek event={event} season={season} layout={layout} rounds={rounds} names={names} />}
-        {league.features.includes('weekly_recap') && season.rules.format === 'bestBallMatch' && (
+        {shareable && <ShareWeek event={event} season={season} layout={layout} rounds={rounds} names={names} />}
+        {league.features.includes('weekly_recap') && shareable && (
           <WeekRecap event={event} season={season} layout={layout} rounds={rounds} names={names} />
         )}
       </section>
@@ -113,6 +118,7 @@ export function WeekResults({ event, season, layout, rounds, names, onChanged }:
               </select>
             </label>
           ))}
+          {ind && <Leaderboard rules={ind} lines={preview.leaderboard} name={name} placeMoney={Object.fromEntries(preview.entries.filter((e) => e.kind === 'place').map((e) => [e.playerId, e.amountCents]))} />}
           {hasMoney ? (
             <>
               {rules.skins.enabled && (
@@ -128,7 +134,7 @@ export function WeekResults({ event, season, layout, rounds, names, onChanged }:
                   {preview.ctp.map((c) => `hole ${c.holeNumber} ${c.disputed ? 'disputed' : c.winner ? name(c.winner).split(' ')[0] : 'nobody'}`).join(', ')}
                 </p>
               )}
-              <MoneyTable totals={preview.totals} name={name} />
+              <MoneyTable totals={preview.totals} name={name} individual={!!ind} />
             </>
           ) : (
             <p className="small muted">This league doesn't play for money, so settling just makes the scores final.</p>
@@ -286,17 +292,48 @@ function WeekRecap({ event, season, layout, rounds, names }: {
   );
 }
 
-function MoneyTable({ totals, name }: { totals: PlayerTotals[]; name: (id: string) => string }) {
+/** Stroke play or Stableford finishing order. Unfinished rounds are listed without a place. */
+function Leaderboard({ rules, lines, name, placeMoney }: { rules: IndividualRules; lines: PlacedLine[]; name: (id: string) => string; placeMoney: Record<string, number> }) {
+  if (!lines.length) return null;
+  const net = !!rules.handicaps?.enabled;
+  return (
+    <div>
+      <h3>{rules.format === 'stableford' ? 'Stableford' : 'Stroke play'}{net ? ' (net)' : ''}</h3>
+      <div className="scroll-x">
+        <table className="money">
+          <thead><tr><th>Pos</th><th>Golfer</th><th>Gross</th>{net && rules.format === 'strokePlay' && <th>Net</th>}{rules.format === 'stableford' && <th>Points</th>}{Object.keys(placeMoney).length > 0 && <th>Won</th>}</tr></thead>
+          <tbody>
+            {lines.map((l) => (
+              <tr key={`${l.roundId}-${l.playerId}`}>
+                <td>{l.place === null ? '—' : `${l.tied ? 'T' : ''}${l.place}`}</td>
+                <td className="name">{name(l.playerId)}</td>
+                <td>{l.complete ? l.gross : `thru ${l.thru}`}</td>
+                {net && rules.format === 'strokePlay' && <td><strong>{fmtToPar(l.toPar)}</strong></td>}
+                {rules.format === 'stableford' && <td><strong>{l.points}</strong></td>}
+                {Object.keys(placeMoney).length > 0 && <td className="good">{placeMoney[l.playerId] ? fmtMoney(placeMoney[l.playerId]!) : ''}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {lines.some((l) => !l.complete) && <p className="small muted">Only finished rounds get a place.</p>}
+    </div>
+  );
+}
+
+function MoneyTable({ totals, name, individual }: { totals: PlayerTotals[]; name: (id: string) => string; individual: boolean }) {
   return (
     <div className="scroll-x">
       <table className="money">
-        <thead><tr><th>Golfer</th><th>Match</th><th>Press</th><th>Skins</th><th>CTP</th><th>Total</th></tr></thead>
+        <thead><tr><th>Golfer</th>{individual ? <th>Place</th> : <><th>Match</th><th>Press</th></>}<th>Skins</th><th>CTP</th><th>Total</th></tr></thead>
         <tbody>
           {totals.map((t) => (
             <tr key={t.playerId}>
               <td className="name">{name(t.playerId)}</td>
-              <td>{t.match ? signed(t.match) : ''}</td>
-              <td>{t.press ? signed(t.press) : ''}</td>
+              {individual ? <td>{t.place ? signed(t.place) : ''}</td> : <>
+                <td>{t.match ? signed(t.match) : ''}</td>
+                <td>{t.press ? signed(t.press) : ''}</td>
+              </>}
               <td>{t.skin ? signed(t.skin) : ''}</td>
               <td>{t.ctp ? signed(t.ctp) : ''}</td>
               <td className={t.total > 0 ? 'good' : t.total < 0 ? 'warn' : ''}><strong>{signed(t.total)}</strong></td>

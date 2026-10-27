@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { EmptyState, ErrorText, ProLock, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAsync, useLeague } from '../lib/hooks';
-import { allLayouts, asBestBall, fmtMoney } from '../lib/scoring';
+import { allLayouts, fmtMoney, individualRules, playsForMoney } from '../lib/scoring';
 import { buildStandings, fmtToPar, sortStandings, type SortKey, type StandingRow } from '../lib/standings';
 
 const AWARD_UNITS: Record<string, (v: number) => string> = {
@@ -15,6 +15,8 @@ const AWARD_UNITS: Record<string, (v: number) => string> = {
   eagleClub: () => '',
   aceClub: () => '',
   matchPlayChamp: (v) => `${v} win${v === 1 ? '' : 's'}`,
+  weeklyWins: (v) => `${v} week${v === 1 ? '' : 's'} won`,
+  pointsLeader: (v) => `${v} points`,
   moneyLeader: (v) => `+${fmtMoney(v)}`,
   hotStreak: (v) => `${v} better lately`,
   mostImproved: (v) => `index down ${v}`,
@@ -30,10 +32,12 @@ export function StandingsPage() {
     return { season, standings: buildStandings({ season, events, rounds, ledger, layouts: allLayouts(courses), players }) };
   }, [league.id]);
 
-  const rules = data.data ? asBestBall(data.data.season.rules) : null;
-  const hasMoney = !!rules && (rules.match.stake > 0 || rules.presses.enabled || rules.skins.enabled || rules.ctp.enabled);
+  const rules = data.data ? data.data.season.rules : null;
+  const hasMoney = !!rules && playsForMoney(rules);
+  const individual = !!rules && individualRules(rules) !== null;
+  const stableford = rules?.format === 'stableford';
   const [sort, setSort] = useState<SortKey | null>(null);
-  const sortKey: SortKey = sort ?? (hasMoney ? 'money' : 'average');
+  const sortKey: SortKey = sort ?? (hasMoney ? 'money' : stableford ? 'points' : 'average');
   const rows = useMemo(() => (data.data ? sortStandings(data.data.standings.rows, sortKey) : []), [data.data, sortKey]);
   const [open, setOpen] = useState<string | null>(null);
 
@@ -55,8 +59,10 @@ export function StandingsPage() {
 
   const sorts: { key: SortKey; label: string; show: boolean }[] = [
     { key: 'money', label: 'Money', show: hasMoney },
+    { key: 'points', label: 'Points', show: stableford },
     { key: 'average', label: 'Average', show: true },
-    { key: 'wins', label: 'Wins', show: true },
+    { key: 'wins', label: 'Wins', show: !individual },
+    { key: 'weekWins', label: 'Wins', show: individual },
     { key: 'skins', label: 'Skins', show: !!rules?.skins.enabled },
     { key: 'ctps', label: 'CTP', show: !!rules?.ctp.enabled },
   ];
@@ -85,7 +91,9 @@ export function StandingsPage() {
               <th>Avg</th>
               <th>Last 4</th>
               <th>Best</th>
-              <th>W-L-H</th>
+              {stableford && <th>Pts</th>}
+              {stableford && <th>Avg pts</th>}
+              {individual ? <><th>Wins</th><th>Top 3</th></> : <th>W-L-H</th>}
               {rules?.skins.enabled && <th>Skins</th>}
               {rules?.ctp.enabled && <th>CTP</th>}
               {hasMoney && <th>Money</th>}
@@ -94,7 +102,7 @@ export function StandingsPage() {
           <tbody>
             {rows.map((r, i) => (
               <Row key={r.playerId} r={r} rank={i + 1} open={open === r.playerId} onToggle={() => setOpen(open === r.playerId ? null : r.playerId)}
-                skins={!!rules?.skins.enabled} ctp={!!rules?.ctp.enabled} money={hasMoney} />
+                skins={!!rules?.skins.enabled} ctp={!!rules?.ctp.enabled} money={hasMoney} individual={individual} stableford={stableford} />
             ))}
           </tbody>
         </table>
@@ -126,8 +134,10 @@ export function StandingsPage() {
   );
 }
 
-function Row({ r, rank, open, onToggle, skins, ctp, money }: { r: StandingRow; rank: number; open: boolean; onToggle: () => void; skins: boolean; ctp: boolean; money: boolean }) {
-  const cols = 6 + (skins ? 1 : 0) + (ctp ? 1 : 0) + (money ? 1 : 0);
+function Row({ r, rank, open, onToggle, skins, ctp, money, individual, stableford }: {
+  r: StandingRow; rank: number; open: boolean; onToggle: () => void; skins: boolean; ctp: boolean; money: boolean; individual: boolean; stableford: boolean;
+}) {
+  const cols = 6 + (individual ? 1 : 0) + (stableford ? 2 : 0) + (skins ? 1 : 0) + (ctp ? 1 : 0) + (money ? 1 : 0);
   return (
     <>
       <tr className="clickable" onClick={onToggle} aria-expanded={open}>
@@ -140,7 +150,9 @@ function Row({ r, rank, open, onToggle, skins, ctp, money }: { r: StandingRow; r
         <td>{r.average ?? '—'}{r.averageToPar !== null && <span className="muted small"> ({fmtToPar(r.averageToPar)})</span>}</td>
         <td>{fmtToPar(r.last4AverageToPar)}</td>
         <td>{r.best ? r.best.score : '—'}</td>
-        <td>{r.wins}-{r.losses}-{r.halves}</td>
+        {stableford && <td><strong>{r.points || ''}</strong></td>}
+        {stableford && <td>{r.averagePoints ?? '—'}</td>}
+        {individual ? <><td>{r.weekWins || ''}</td><td>{r.top3 || ''}</td></> : <td>{r.wins}-{r.losses}-{r.halves}</td>}
         {skins && <td>{r.skins || ''}</td>}
         {ctp && <td>{r.ctps || ''}</td>}
         {money && <td className={r.money > 0 ? 'good' : r.money < 0 ? 'warn' : ''}><strong>{r.money > 0 ? '+' : r.money < 0 ? '−' : ''}{fmtMoney(Math.abs(r.money))}</strong></td>}

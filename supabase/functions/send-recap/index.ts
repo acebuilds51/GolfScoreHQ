@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
 
   if (!layout) return json({ error: 'This week has no course.' }, 400);
   const rules = season?.rules;
-  if (rules?.format !== 'bestBallMatch') return json({ error: "Recap emails for this format aren't available yet." }, 400);
+  if (!['bestBallMatch', 'strokePlay', 'stableford'].includes(rules?.format)) return json({ error: "Recap emails for this format aren't available yet." }, 400);
 
   // Same shape the app gives the engine.
   const engineRounds = (rounds ?? []).map((r: Row) => {
@@ -90,7 +90,8 @@ Deno.serve(async (req) => {
   const recap = withPostedResults(weeklyRecap(event.week_number, engineRounds, layout, rules), weekLedger, (seasonLedger ?? []).map(toEntry));
   const names = new Map((players ?? []).map((p: Row) => [p.id, p.display_name]));
   const recapBody: string = recapText(recap, (id: string) => names.get(id) ?? '?', { leagueName: league!.name });
-  const playsForMoney = rules.match.stake > 0 || rules.presses.enabled || rules.skins.enabled || rules.ctp.enabled;
+  const playsForMoney = rules.skins.enabled || rules.ctp.enabled
+    || (rules.format === 'bestBallMatch' ? rules.match.stake > 0 || rules.presses.enabled : (rules.payouts ?? []).some((c: number) => c > 0));
 
   if (body.draftStory) {
     const aiKey = env('ANTHROPIC_API_KEY');

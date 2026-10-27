@@ -1,11 +1,14 @@
 import {
   dollars,
+  isIndividual,
   scoreMatch,
   settleCtp,
+  STANDARD_STABLEFORD,
   type BestBallMatchRules,
   type CtpReport,
   type FormatRules,
   type HandicapRules,
+  type IndividualRules,
   type MatchRoundInput,
   type MatchResult,
 } from '@golfscorehq/engine';
@@ -33,7 +36,42 @@ export function basicRules(): BestBallMatchRules {
   };
 }
 
+export type FormatKey = 'bestBallMatch' | 'strokePlay' | 'stableford';
+
+export const FORMAT_NAMES: Record<FormatKey, string> = {
+  bestBallMatch: '2 vs 2 best ball match',
+  strokePlay: 'Stroke play',
+  stableford: 'Stableford',
+};
+
+/** Free leagues play these; the rest need Pro ("all formats"). Matches rules_are_basic_format() in the database. */
+export const BASIC_FORMATS: FormatKey[] = ['bestBallMatch', 'strokePlay'];
+
+/** No side games or money, in the chosen format (what Free allows). */
+export function plainRules(format: FormatKey): FormatRules {
+  const b = basicRules();
+  if (format === 'bestBallMatch') return b;
+  if (format === 'strokePlay') return { format, payouts: [], skins: b.skins, ctp: b.ctp };
+  return { format, points: STANDARD_STABLEFORD, payouts: [], skins: b.skins, ctp: b.ctp };
+}
+
+/** Each golfer plays their own ball against the field: groups have no sides. */
+export const individualRules = (r: FormatRules): IndividualRules | null => (isIndividual(r) ? r : null);
+
+export const handicapRules = (r: FormatRules): HandicapRules | undefined => (r.format === 'scramble' ? undefined : r.handicaps);
+
+/** Anything in these rules pays out money. */
+export function playsForMoney(r: FormatRules): boolean {
+  if (r.skins.enabled || r.ctp.enabled) return true;
+  if (r.format === 'bestBallMatch') return r.match.stake > 0 || r.presses.enabled;
+  if (r.format === 'scramble') return r.teamPot > 0;
+  return r.payouts.some((c) => c > 0);
+}
+
 export interface SideGameForm {
+  format: FormatKey;
+  /** Prize money by place, in dollars, comma separated: "30, 20, 10". */
+  payouts: string;
   matchStake: string;
   pressesEnabled: boolean;
   pressStake: string;
@@ -50,6 +88,7 @@ export interface SideGameForm {
 }
 
 export const OCBC_STYLE_FORM: SideGameForm = {
+  format: 'bestBallMatch', payouts: '30, 20, 10',
   matchStake: '5', pressesEnabled: true, pressStake: '10',
   skinsEnabled: true, skinsPot: '180', skinsTieRule: 'noSkin',
   ctpEnabled: true, ctpAmount: '36',
@@ -68,33 +107,47 @@ export function handicapsFromForm(f: SideGameForm): HandicapRules {
 
 const money = (s: string) => Math.max(0, dollars(Number(s) || 0));
 
-export function rulesFromForm(f: SideGameForm): BestBallMatchRules {
+/** "30, 20, 10" → cents by place. Blank or zero places at the end are dropped. */
+export function parsePayouts(s: string): number[] {
+  const out = s.split(/[,\s]+/).filter(Boolean).map((x) => money(x.replace(/^\$/, ''))).slice(0, 10);
+  while (out.length && !out[out.length - 1]) out.pop();
+  return out;
+}
+
+export function rulesFromForm(f: SideGameForm): FormatRules {
+  const skins = {
+    enabled: f.skinsEnabled,
+    tieRule: f.skinsTieRule,
+    payout: f.skinsTieRule === 'carryover' ? 'perHole' : 'splitPot',
+    pot: f.skinsEnabled ? money(f.skinsPot) : 0,
+  } as const;
+  const ctp = { enabled: f.ctpEnabled, amountPerHole: f.ctpEnabled ? money(f.ctpAmount) : 0, resolution: 'markerChain' } as const;
+  if (f.format === 'strokePlay') return { format: 'strokePlay', payouts: parsePayouts(f.payouts), skins, ctp, handicaps: handicapsFromForm(f) };
+  if (f.format === 'stableford') return { format: 'stableford', points: STANDARD_STABLEFORD, payouts: parsePayouts(f.payouts), skins, ctp, handicaps: handicapsFromForm(f) };
   return {
     format: 'bestBallMatch',
     holeScoring: 'bestBall',
     match: { stake: money(f.matchStake) },
     presses: { enabled: f.pressesEnabled, stake: f.pressesEnabled ? money(f.pressStake) : 0 },
-    skins: {
-      enabled: f.skinsEnabled,
-      tieRule: f.skinsTieRule,
-      payout: f.skinsTieRule === 'carryover' ? 'perHole' : 'splitPot',
-      pot: f.skinsEnabled ? money(f.skinsPot) : 0,
-    },
-    ctp: { enabled: f.ctpEnabled, amountPerHole: f.ctpEnabled ? money(f.ctpAmount) : 0, resolution: 'markerChain' },
+    skins,
+    ctp,
     handicaps: handicapsFromForm(f),
   };
 }
 
 export function formFromRules(r: FormatRules): SideGameForm {
-  if (r.format !== 'bestBallMatch') return { ...OCBC_STYLE_FORM };
+  if (r.format === 'scramble') return { ...OCBC_STYLE_FORM };
   const d = (c: number) => String(c / 100);
   const h = { ...DEFAULT_HANDICAPS, ...r.handicaps };
-  return {
-    matchStake: d(r.match.stake), pressesEnabled: r.presses.enabled, pressStake: d(r.presses.stake),
+  const base = {
+    ...OCBC_STYLE_FORM,
+    format: r.format,
     skinsEnabled: r.skins.enabled, skinsPot: d(r.skins.pot), skinsTieRule: r.skins.tieRule,
     ctpEnabled: r.ctp.enabled, ctpAmount: d(r.ctp.amountPerHole),
     hcpEnabled: h.enabled, hcpAllowance: String(h.allowance), hcpMatch: h.match, hcpSkins: h.skins, hcpSource: h.source ?? 'ghinFirst',
   };
+  if (r.format !== 'bestBallMatch') return { ...base, payouts: r.payouts.map(d).join(', '), matchStake: '0', pressesEnabled: false };
+  return { ...base, matchStake: d(r.match.stake), pressesEnabled: r.presses.enabled, pressStake: d(r.presses.stake) };
 }
 
 export function asBestBall(r: FormatRules): BestBallMatchRules {
@@ -103,17 +156,28 @@ export function asBestBall(r: FormatRules): BestBallMatchRules {
 
 export const fmtMoney = (cents: number) => `$${(cents / 100).toFixed(2).replace(/\.00$/, '')}`;
 
+const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'}`;
+
 export function describeRules(r: FormatRules): string[] {
-  if (r.format !== 'bestBallMatch') return ['Scramble'];
-  const out = ['2 vs 2 best ball match'];
-  if (r.match.stake) out.push(`${fmtMoney(r.match.stake)} a man on the match`);
-  if (r.presses.enabled) out.push(`presses ${fmtMoney(r.presses.stake)} a man`);
+  if (r.format === 'scramble') return ['Scramble'];
+  const out = [FORMAT_NAMES[r.format]];
+  if (r.format === 'stableford') out.push('points: double bogey 0, bogey 1, par 2, birdie 3, eagle 4, albatross 5');
+  if (r.format === 'bestBallMatch') {
+    if (r.match.stake) out.push(`${fmtMoney(r.match.stake)} a man on the match`);
+    if (r.presses.enabled) out.push(`presses ${fmtMoney(r.presses.stake)} a man`);
+  } else if (r.payouts.some((c) => c > 0)) {
+    out.push(`pays ${r.payouts.map((c, i) => `${ordinal(i + 1)} ${fmtMoney(c)}`).join(', ')}`);
+  }
   if (r.skins.enabled) out.push(`skins ${fmtMoney(r.skins.pot)} pot${r.skins.tieRule === 'carryover' ? ' (ties carry over)' : ' (ties: no skin)'}`);
   if (r.ctp.enabled) out.push(`CTP ${fmtMoney(r.ctp.amountPerHole)} per par 3`);
   const h = r.handicaps;
   if (h?.enabled) {
-    const match = h.match === 'gross' ? 'gross match' : `net match (${h.allowance}%${h.match === 'offLow' ? ', off the low man' : ''})`;
-    out.push(`${match}, ${h.skins} skins`);
+    if (r.format === 'bestBallMatch') {
+      const match = h.match === 'gross' ? 'gross match' : `net match (${h.allowance}%${h.match === 'offLow' ? ', off the low man' : ''})`;
+      out.push(`${match}, ${h.skins} skins`);
+    } else {
+      out.push(`net scoring (${h.allowance}% of handicap), ${h.skins} skins`);
+    }
   } else {
     out.push('gross scoring');
   }

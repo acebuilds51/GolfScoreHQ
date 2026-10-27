@@ -19,11 +19,32 @@ export interface CardWeek {
 }
 
 const toParWords = (n: number) => (n === 0 ? 'Even par' : n < 0 ? `${-n} under` : `${n} over`);
+const toParShort = (n: number) => (n === 0 ? 'E' : n > 0 ? `+${n}` : `−${-n}`);
 const first = (name: string) => name.split(' ')[0] || name;
 const teamFirst = (ids: string[], name: (id: string) => string) => ids.map((id) => first(name(id))).join(' & ');
 
+/**
+ * The headline result: the low round in match formats; the week's winner in
+ * stroke play and Stableford (points, or the net score when playing net).
+ */
+function headline(recap: WeeklyRecap): { label: string; ids: string[]; score: number; toPar: string } | null {
+  const winners = recap.leaderboard.filter((l) => l.place === 1);
+  if (winners.length) {
+    const w = winners[0]!;
+    const tied = winners.length > 1;
+    const ids = winners.map((l) => l.playerId);
+    if (recap.format === 'stableford') return { label: tied ? 'Winners (tied)' : 'Winner', ids, score: w.points ?? 0, toPar: 'points' };
+    if (recap.net) return { label: tied ? 'Winners (tied)' : 'Winner', ids, score: w.score - w.grossToPar + w.toPar, toPar: `Net · ${toParWords(w.toPar).toLowerCase()}` };
+    return { label: tied ? 'Winners (tied)' : 'Winner', ids, score: w.score, toPar: toParWords(w.toPar) };
+  }
+  const low = recap.lowRound;
+  return low ? { label: low.playerIds.length > 1 ? 'Low round (tied)' : 'Low round', ids: low.playerIds, score: low.score, toPar: toParWords(low.toPar) } : null;
+}
+
 export interface ResultsModel {
-  lowRound: { names: string; score: number; toPar: string } | null;
+  lowRound: { label: string; names: string; score: number; toPar: string } | null;
+  /** "Matches" or "Leaderboard". */
+  listLabel: string;
   matches: { text: string; score: string }[];
   moreMatches: number;
   skins: { name: string; count: number; cents: number | null }[];
@@ -38,7 +59,11 @@ const MAX_LIST = 5;
 
 /** What goes on the league results picture. `ctpCents` is what each CTP paid, by hole, from the posted results. */
 export function resultsModel(recap: WeeklyRecap, name: (id: string) => string, opts: { includeMoney: boolean; ctpCents?: Record<number, number> }): ResultsModel {
-  const matches = recap.matches.map((m) => {
+  const placeScore = (l: WeeklyRecap['leaderboard'][number]) =>
+    recap.format === 'stableford' ? `${l.points} pts` : recap.net ? toParShort(l.toPar) : String(l.score);
+  const matches = recap.leaderboard.length
+    ? recap.leaderboard.map((l) => ({ text: `${l.tied ? 'T' : ''}${l.place}. ${name(l.playerId)}`, score: placeScore(l) }))
+    : recap.matches.map((m) => {
     const [w, l] = m.winner === 'B' ? [m.teamB, m.teamA] : [m.teamA, m.teamB];
     const [hw, hl] = m.winner === 'B' ? [m.holesWon.B, m.holesWon.A] : [m.holesWon.A, m.holesWon.B];
     if (!l.length) return { text: `${teamFirst(w, name)}`, score: '' };
@@ -64,10 +89,10 @@ export function resultsModel(recap: WeeklyRecap, name: (id: string) => string, o
     .filter((c) => c.winner)
     .map((c) => ({ hole: c.holeNumber, name: name(c.winner!), cents: opts.includeMoney ? opts.ctpCents?.[c.holeNumber] ?? null : null }));
 
+  const top = headline(recap);
   return {
-    lowRound: recap.lowRound
-      ? { names: recap.lowRound.playerIds.map(name).join(' & '), score: recap.lowRound.score, toPar: toParWords(recap.lowRound.toPar) }
-      : null,
+    lowRound: top ? { label: top.label, names: top.ids.map(name).join(' & '), score: top.score, toPar: top.toPar } : null,
+    listLabel: recap.leaderboard.length ? 'Leaderboard' : 'Matches',
     matches: matches.slice(0, MAX_MATCHES),
     moreMatches: Math.max(0, matches.length - MAX_MATCHES),
     skins: skins.slice(0, MAX_LIST),
@@ -89,9 +114,9 @@ export interface WinnerModel {
 
 /** The low-round winner's card. Ties name everyone tied. */
 export function winnerModel(recap: WeeklyRecap, name: (id: string) => string): WinnerModel | null {
-  const low = recap.lowRound;
-  if (!low) return null;
-  const ids = new Set(low.playerIds);
+  const top = headline(recap);
+  if (!top) return null;
+  const ids = new Set(top.ids);
   const birdies = recap.highlights.filter((h) => ids.has(h.playerId) && h.kind === 'birdie').length;
   const eagles = recap.highlights.filter((h) => ids.has(h.playerId) && h.kind !== 'birdie').length;
   const skins = recap.skins.filter((s) => s.playerIds.some((p) => ids.has(p))).length;
@@ -102,10 +127,10 @@ export function winnerModel(recap: WeeklyRecap, name: (id: string) => string): W
   if (skins) stats.push({ value: String(skins), label: skins === 1 ? 'Skin' : 'Skins' });
   if (ctps.length) stats.push({ value: ctps.join(' '), label: 'CTP' });
   return {
-    label: low.playerIds.length > 1 ? 'Low round (tied)' : 'Low round',
-    name: low.playerIds.map(name).join(' & '),
-    score: low.score,
-    toPar: toParWords(low.toPar),
+    label: top.label === 'Winner' ? 'Week winner' : top.label,
+    name: top.ids.map(name).join(' & '),
+    score: top.score,
+    toPar: top.toPar,
     stats: stats.slice(0, 3),
   };
 }
@@ -273,7 +298,7 @@ export async function drawResultsCard(m: ResultsModel, brand: CardBrand, week: C
     ctx.textAlign = 'left';
     ctx.fillStyle = c.accent;
     ctx.font = `600 32px ${BODY}`;
-    ctx.fillText('Low round', 70, y);
+    ctx.fillText(m.lowRound.label, 70, y);
     ctx.fillStyle = c.on;
     ctx.fillText(fitText(ctx, m.lowRound.names, 640, (px) => `700 ${px}px ${DISPLAY}`, 92, 52), 70, y + 92);
     ctx.textAlign = 'right';
@@ -311,7 +336,7 @@ export async function drawResultsCard(m: ResultsModel, brand: CardBrand, week: C
   };
 
   if (m.matches.length) {
-    label('Matches', inner);
+    label(m.listLabel, inner);
     y += 58;
     for (const mt of m.matches) { row(mt.text, mt.score, inner, innerW); y += 54; }
     if (m.moreMatches) { ctx.fillStyle = c.soft; ctx.font = `400 28px ${BODY}`; ctx.textAlign = 'left'; ctx.fillText(`+ ${m.moreMatches} more`, inner, y); y += 46; }

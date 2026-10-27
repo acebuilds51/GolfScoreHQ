@@ -33,6 +33,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 13. `20261107000000_ctp_nobody_fix.sql` (lets "nobody got inside the marker" save)
 14. `20261108000000_billing.sql` (Stripe billing for Pro and Club)
 15. `20261109000000_handicaps.sql` (GHIN/handicap index on golfers, course handicap fixed per round)
+16. `20261110000000_individual_formats.sql` (stroke play and Stableford: prize money by place)
 
 **B. Command line**
 

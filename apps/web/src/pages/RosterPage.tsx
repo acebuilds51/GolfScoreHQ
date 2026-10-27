@@ -5,6 +5,7 @@ import { useAction, useAsync, useLeague } from '../lib/hooks';
 import { isCommissioner, type Contact, type Player } from '../lib/types';
 import { checkGolferRows, parseRoster, type GolferRow } from '../lib/util';
 import { fmtIndex, leagueIndexes, loadPlayedRounds, parseIndex, type IndexInfo } from '../lib/handicaps';
+import { handicapRules } from '../lib/scoring';
 
 export function RosterPage() {
   const { league } = useLeague();
@@ -17,7 +18,7 @@ export function RosterPage() {
       loadPlayedRounds(api, league.id),
     ]);
     const rules = seasons[0]?.rules;
-    const hcp = rules?.format === 'bestBallMatch' ? rules.handicaps : undefined;
+    const hcp = rules ? handicapRules(rules) : undefined;
     const indexes = leagueIndexes(players, played, hcp?.source ?? 'ghinFirst');
     return { players, contacts, indexes, handicapsOn: !!hcp?.enabled };
   }, [league.id, commish]);

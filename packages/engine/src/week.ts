@@ -2,12 +2,30 @@ import { settleCtp, type CtpResult } from './ctp';
 import { scoreMatch, type MatchResult } from './match';
 import { splitEvenly } from './money';
 import { netRound, ownStrokes } from './net';
-import type { BestBallMatchRules, ScrambleRules } from './rules';
+import type { BestBallMatchRules, HandicapRules, ScrambleRules, SkinsRules } from './rules';
 import { settleSkins, type SkinsCompetitor, type SkinsResult } from './skins';
 import type { Cents, Layout, LedgerEntry, MatchRoundInput, PlayerId, ScrambleRoundInput } from './types';
 
-function par3s(layout: Layout): number[] {
+export function par3s(layout: Layout): number[] {
   return layout.holes.filter((h) => h.par === 3).map((h) => h.number);
+}
+
+/**
+ * Field-wide individual skins across every group. Net skins give each golfer
+ * their own strokes (not off the low man). Skins-only players compete too.
+ */
+export function fieldSkins(rounds: MatchRoundInput[], layout: Layout, rules: SkinsRules, handicaps: HandicapRules | undefined): SkinsResult {
+  const net = handicaps?.enabled && handicaps.skins === 'net';
+  const competitors: SkinsCompetitor[] = rounds.flatMap((r) => {
+    const scored = net ? netRound(r, layout.holes, ownStrokes(r, handicaps)) : r;
+    return r.players.map((p) => ({
+      id: `${r.id}:${p.id}`,
+      playerIds: [p.id],
+      scores: scored.scores[p.id] ?? [],
+      roundId: r.id,
+    }));
+  });
+  return settleSkins(competitors, layout.holes.map((h) => h.number), rules);
 }
 
 export interface BestBallWeekResult {
@@ -25,19 +43,7 @@ export interface BestBallWeekResult {
 export function settleBestBallWeek(rounds: MatchRoundInput[], layout: Layout, rules: BestBallMatchRules): BestBallWeekResult {
   const holeCount = layout.holes.length;
   const matches = rounds.map((r) => scoreMatch(r, holeCount, rules, layout.holes));
-
-  // Net skins: each golfer gets their own strokes (not off the low man).
-  const netSkins = rules.handicaps?.enabled && rules.handicaps.skins === 'net';
-  const competitors: SkinsCompetitor[] = rounds.flatMap((r) => {
-    const scored = netSkins ? netRound(r, layout.holes, ownStrokes(r, rules.handicaps)) : r;
-    return r.players.map((p) => ({
-      id: `${r.id}:${p.id}`,
-      playerIds: [p.id],
-      scores: scored.scores[p.id] ?? [],
-      roundId: r.id,
-    }));
-  });
-  const skins = settleSkins(competitors, layout.holes.map((h) => h.number), rules.skins);
+  const skins = fieldSkins(rounds, layout, rules.skins, rules.handicaps);
   const ctp = settleCtp(rounds.map((r) => ({ roundId: r.id, teeSlot: r.teeSlot, ctp: r.ctp })), par3s(layout), rules.ctp);
 
   return {

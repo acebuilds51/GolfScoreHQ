@@ -76,4 +76,45 @@ export interface ScrambleRules {
   ctp: CtpRules;
 }
 
-export type FormatRules = BestBallMatchRules | ScrambleRules;
+/** Stableford points for a hole, by the score against par (net or gross). */
+export interface StablefordPoints {
+  albatross: number;
+  eagle: number;
+  birdie: number;
+  par: number;
+  bogey: number;
+  /** Double bogey or worse (including a pick-up). */
+  double: number;
+}
+
+export const STANDARD_STABLEFORD: StablefordPoints = { albatross: 5, eagle: 4, birdie: 3, par: 2, bogey: 1, double: 0 };
+
+/** What every individual format shares: each golfer plays their own ball against the whole field. */
+interface IndividualRulesBase {
+  /**
+   * Prize money for the week's finishing places, 1st first (e.g. [3000, 2000, 1000]).
+   * Golfers tied for a place share the money for the places they cover.
+   */
+  payouts: Cents[];
+  skins: SkinsRules;
+  ctp: CtpRules;
+  /** With handicaps on, the leaderboard and places use net scores (each golfer's own strokes after the allowance). */
+  handicaps?: HandicapRules;
+}
+
+/** Individual stroke play: lowest total (gross or net) wins. */
+export interface StrokePlayRules extends IndividualRulesBase {
+  format: 'strokePlay';
+}
+
+/** Individual Stableford: points per hole against par, most points wins. */
+export interface StablefordRules extends IndividualRulesBase {
+  format: 'stableford';
+  points: StablefordPoints;
+}
+
+export type IndividualRules = StrokePlayRules | StablefordRules;
+
+export type FormatRules = BestBallMatchRules | ScrambleRules | StrokePlayRules | StablefordRules;
+
+export const isIndividual = (r: FormatRules): r is IndividualRules => r.format === 'strokePlay' || r.format === 'stableford';

@@ -81,7 +81,7 @@ export interface ScrambleRoundInput {
   ctp?: Record<number, CtpReport>;
 }
 
-export type LedgerKind = 'match' | 'press' | 'skin' | 'ctp' | 'scramblePot';
+export type LedgerKind = 'match' | 'press' | 'skin' | 'ctp' | 'scramblePot' | 'place';
 
 export interface LedgerEntry {
   playerId: PlayerId;

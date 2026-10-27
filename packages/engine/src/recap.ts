@@ -1,5 +1,6 @@
+import { settleIndividualWeek } from './individual';
 import { totalsByPlayer } from './money';
-import type { BestBallMatchRules } from './rules';
+import type { BestBallMatchRules, IndividualRules } from './rules';
 import type { Cents, Layout, LedgerEntry, MatchRoundInput, PlayerId, Side } from './types';
 import { settleBestBallWeek } from './week';
 
@@ -18,9 +19,29 @@ export interface RecapHighlight {
   holeNumber: number;
 }
 
+/** A finishing place in stroke play or Stableford (complete rounds only). */
+export interface RecapPlace {
+  playerId: PlayerId;
+  place: number;
+  tied: boolean;
+  /** Gross strokes. */
+  score: number;
+  grossToPar: number;
+  /** Net to par when the league plays net, otherwise the same as grossToPar. */
+  toPar: number;
+  /** Stableford points; null in stroke play. */
+  points: number | null;
+}
+
 export interface WeeklyRecap {
   week: number;
   layoutName: string;
+  format: 'bestBallMatch' | 'strokePlay' | 'stableford';
+  /** Scores (and places) are net. */
+  net: boolean;
+  skinsEnabled: boolean;
+  /** Stroke play and Stableford: the week's finishing order, best first. Empty for match formats. */
+  leaderboard: RecapPlace[];
   matches: RecapMatch[];
   skins: { holeNumber: number; playerIds: PlayerId[]; value: Cents }[];
   ctp: { holeNumber: number; winner: PlayerId | null; disputed: boolean }[];
@@ -39,13 +60,20 @@ export function weeklyRecap(
   week: number,
   rounds: MatchRoundInput[],
   layout: Layout,
-  rules: BestBallMatchRules,
+  rules: BestBallMatchRules | IndividualRules,
   earlierLedger: LedgerEntry[] = [],
 ): WeeklyRecap {
-  const settled = settleBestBallWeek(rounds, layout, rules);
+  const individual = rules.format !== 'bestBallMatch';
+  const settled = individual ? settleIndividualWeek(rounds, layout, rules) : settleBestBallWeek(rounds, layout, rules);
   const par = layout.holes.reduce((s, h) => s + h.par, 0);
 
-  const matches: RecapMatch[] = settled.matches
+  const leaderboard: RecapPlace[] = 'leaderboard' in settled
+    ? settled.leaderboard
+        .filter((l) => l.place !== null)
+        .map((l) => ({ playerId: l.playerId, place: l.place!, tied: l.tied, score: l.gross, grossToPar: l.grossToPar, toPar: l.toPar, points: l.points }))
+    : [];
+
+  const matches: RecapMatch[] = ('matches' in settled ? settled.matches : [])
     .map((m) => {
       const r = rounds.find((x) => x.id === m.roundId)!;
       return {
@@ -83,6 +111,10 @@ export function weeklyRecap(
   return {
     week,
     layoutName: layout.name,
+    format: rules.format,
+    net: !!rules.handicaps?.enabled,
+    skinsEnabled: rules.skins.enabled,
+    leaderboard,
     matches,
     skins: settled.skins.wins.map((w) => ({ holeNumber: w.holeNumber, playerIds: w.playerIds, value: w.value })),
     ctp: settled.ctp.holes.map((h) => ({ holeNumber: h.holeNumber, winner: h.winner, disputed: h.conflict })),
@@ -108,6 +140,7 @@ export function withPostedResults(recap: WeeklyRecap, weekLedger: LedgerEntry[],
   };
 }
 
+const toParText = (n: number) => (n === 0 ? 'E' : n > 0 ? `+${n}` : String(n));
 const money = (c: Cents) => `${c < 0 ? '-' : '+'}$${(Math.abs(c) / 100).toFixed(2).replace(/\.00$/, '')}`;
 
 /**
@@ -132,11 +165,27 @@ export function recapText(recap: WeeklyRecap, name: (id: PlayerId) => string, op
     lines.push('');
   }
 
-  lines.push('SKINS');
-  if (recap.skins.length) {
-    for (const s of recap.skins) lines.push(`  Hole ${s.holeNumber}: ${names(s.playerIds)}${opts.hideMoney ? '' : ` (${money(s.value)})`}`);
-  } else lines.push('  No skins — every hole tied');
-  lines.push('');
+  if (recap.leaderboard.length) {
+    const top = recap.leaderboard.filter((l) => l.place <= 10);
+    lines.push(recap.format === 'stableford' ? `STABLEFORD${recap.net ? ' (NET)' : ''}` : `STROKE PLAY${recap.net ? ' (NET)' : ''}`);
+    for (const l of top) {
+      const pos = `${l.tied ? 'T' : ''}${l.place}.`;
+      const result = recap.format === 'stableford'
+        ? `${l.points} pts (${l.score})`
+        : recap.net ? `net ${toParText(l.toPar)} (${l.score} gross)` : `${l.score} (${toParText(l.toPar)})`;
+      lines.push(`  ${pos} ${name(l.playerId)} — ${result}`);
+    }
+    if (recap.leaderboard.length > top.length) lines.push(`  …and ${recap.leaderboard.length - top.length} more`);
+    lines.push('');
+  }
+
+  if (recap.skinsEnabled) {
+    lines.push('SKINS');
+    if (recap.skins.length) {
+      for (const s of recap.skins) lines.push(`  Hole ${s.holeNumber}: ${names(s.playerIds)}${opts.hideMoney ? '' : ` (${money(s.value)})`}`);
+    } else lines.push('  No skins — every hole tied');
+    lines.push('');
+  }
 
   if (recap.ctp.length) {
     lines.push('CLOSEST TO THE PIN');
@@ -147,8 +196,7 @@ export function recapText(recap: WeeklyRecap, name: (id: PlayerId) => string, op
   }
 
   if (recap.lowRound) {
-    const tp = recap.lowRound.toPar;
-    lines.push(`LOW ROUND: ${names(recap.lowRound.playerIds)} — ${recap.lowRound.score} (${tp === 0 ? 'E' : tp > 0 ? `+${tp}` : tp})`, '');
+    lines.push(`LOW ROUND${recap.net || recap.format === 'stableford' ? ' (GROSS)' : ''}: ${names(recap.lowRound.playerIds)} — ${recap.lowRound.score} (${toParText(recap.lowRound.toPar)})`, '');
   }
 
   if (recap.highlights.length) {
