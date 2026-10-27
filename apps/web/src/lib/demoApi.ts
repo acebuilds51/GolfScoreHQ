@@ -5,7 +5,7 @@ import type { WeeklyRecap } from '@golfscorehq/engine';
 import { buildRecapEmail } from '../../../../supabase/functions/send-recap/email';
 import { cleanStory } from '../../../../supabase/functions/send-recap/story';
 import { buildWeekRecap } from './recap';
-import { BASIC_FORMATS, playsForMoney, type FormatKey } from './scoring';
+import { BASIC_FORMATS, playsForMoney, weekRules, type FormatKey } from './scoring';
 import { DEMO_COURSES } from './demoCourses';
 import { sha256Hex, randomToken } from './util';
 
@@ -150,8 +150,8 @@ export function demoApi(): DemoApi {
     if (!isCommissioner(roleIn(db, ev.leagueId))) throw new Error('Only commissioners can send the recap.');
     if (!has(db, ev.leagueId, 'weekly_recap')) throw new Error('The weekly recap email needs GolfScoreHQ Pro.');
     if (ev.status !== 'settled') throw new Error('Settle the week first, then send the recap.');
-    const season = db.seasons.find((s) => s.id === ev.seasonId)!;
-    if (season.rules.format === 'scramble') throw new Error("Recap emails for this format aren't available yet.");
+    const seasonRow = db.seasons.find((s) => s.id === ev.seasonId)!;
+    const season = { ...seasonRow, rules: weekRules(seasonRow, ev) };
     const layout = db.courses.flatMap((c) => c.layouts).find((l) => l.id === ev.layoutId);
     if (!layout) throw new Error('This week has no course.');
     const league = db.leagues.find((l) => l.id === ev.leagueId)!;
@@ -471,6 +471,11 @@ export function demoApi(): DemoApi {
       const db = load();
       const e = db.events.find((x) => x.id === eventId)!;
       requireCommissioner(db, e.leagueId);
+      if (patch.rulesOverride) {
+        // Same as the events_override_plan trigger: special weeks need Pro.
+        if (!has(db, e.leagueId, 'all_formats')) throw new Error('plan_feature: Special weeks needs GolfScoreHQ Pro');
+        if (usesSideGames(patch.rulesOverride) && !has(db, e.leagueId, 'side_games')) throw new Error('plan_feature: Side games and money needs GolfScoreHQ Pro');
+      }
       Object.assign(e, Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)));
       save(db);
     },
@@ -638,11 +643,12 @@ export function demoApi(): DemoApi {
       const winners = recap.leaderboard.filter((l) => l.place === 1);
       if (winners.length) {
         const how = recap.format === 'stableford' ? `${winners[0]!.points} points` : recap.net ? `a net ${winners[0]!.score - winners[0]!.grossToPar + winners[0]!.toPar}` : `a ${winners[0]!.score}`;
-        lines.push(`${winners.map((w) => first(w.playerId)).join(' and ')} ${winners.length > 1 ? 'shared the top spot' : 'took the week'} with ${how}.`);
+        const who = winners.map((w) => w.playerIds.map(first).join(', ')).join(' and ');
+        lines.push(`${recap.format === 'scramble' ? `The team of ${who}` : who} ${winners.length > 1 ? 'shared the top spot' : 'took the week'} with ${how}.`);
       } else if (recap.lowRound) lines.push(`${recap.lowRound.playerIds.map(first).join(' and ')} posted the low round, a ${recap.lowRound.score}.`);
       const skins = new Map<string, number>();
       for (const s of recap.skins) for (const p of s.playerIds) skins.set(p, (skins.get(p) ?? 0) + 1);
-      const topSkins = [...skins].sort((a, b) => b[1] - a[1])[0];
+      const topSkins = recap.format === 'scramble' ? undefined : [...skins].sort((a, b) => b[1] - a[1])[0];
       const close = recap.matches.find((m) => m.winner === null);
       const second = [
         topSkins ? (topSkins[1] > 1 ? `${first(topSkins[0])} cleaned up with ${topSkins[1]} skins.` : `${first(topSkins[0])} grabbed a skin.`) : '',
@@ -792,7 +798,7 @@ export function demoApi(): DemoApi {
           : { name: lg.name, slug: lg.slug, logoUrl: null, brandColor: null, accentColor: null },
         display: { name: d.name, settings: d.settings },
         season: season ? { year: season.year, name: season.name, rules: season.rules } : null,
-        event: ev ? { id: ev.id, weekNumber: ev.weekNumber, eventDate: ev.eventDate, status: ev.status } : null,
+        event: ev ? { id: ev.id, weekNumber: ev.weekNumber, eventDate: ev.eventDate, status: ev.status, rulesOverride: ev.rulesOverride ?? null } : null,
         layout,
         players: db.players.filter((p) => p.leagueId === lg.id).map((p) => ({ id: p.id, displayName: p.displayName, isSub: p.isSub })),
         rounds: ev ? db.rounds.filter((r) => r.eventId === ev.id).map(({ leagueId: _l, ...r }) => ({ ...r, presses: [] })) : [],

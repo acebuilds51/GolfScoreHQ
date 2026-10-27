@@ -1,11 +1,14 @@
-import { compareLines, individualLine, matchStrokes, ownStrokes, scoreMatch, strokesByHole, totalsByPlayer, type BestBallMatchRules, type IndividualLine } from '@golfscorehq/engine';
+import {
+  compareLines, individualLine, matchStrokes, ownStrokes, scoreMatch, scrambleRoundFrom, scrambleStandings, strokesByHole, teamStrokesByHole, totalsByPlayer,
+  type BestBallMatchRules, type IndividualLine,
+} from '@golfscorehq/engine';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
 import { applyQueue, compact, enqueue, flush, readQueue, type FlushResult, type PendingOp } from '../lib/pendingQueue';
-import { asBestBall, currentMarker, fmtMoney, handicapRules, holesCompleted, individualRules, matchSoFar, scoreMark, toEngineRound } from '../lib/scoring';
+import { asBestBall, currentMarker, fmtMoney, handicapRules, holesCompleted, individualRules, isScramble, matchSoFar, scoreMark, toEngineRound } from '../lib/scoring';
 import { fmtToPar } from '../lib/standings';
 import type { CtpEntry, Layout, Player, RoundData, Season } from '../lib/types';
 import { loadWeek, teamName } from './WeekPage';
@@ -37,6 +40,8 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
   const rules = season.rules;
   const bestBall = rules.format === 'bestBallMatch' ? rules : null;
   const ind = individualRules(rules);
+  // Scramble: the group is one team with one score per hole, saved for every player.
+  const scramble = isScramble(rules) ? rules : null;
   const names = useMemo(() => new Map(players.map((p) => [p.id, p.displayName])), [players]);
   // Start from what the server has plus anything still waiting on this phone, so nothing looks lost.
   const [round, setRound] = useState<RoundData>(() => applyQueue(initial, readQueue(initial.id)));
@@ -60,7 +65,8 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
   // Draft scores for this hole: what's saved, or par to start.
   const [draft, setDraft] = useState<Record<string, number>>({});
   useEffect(() => {
-    setDraft(Object.fromEntries(round.players.map((p) => [p.playerId, round.scores[p.playerId]?.[hole.number] ?? hole.par])));
+    const team = round.players.map((p) => round.scores[p.playerId]?.[hole.number]).find((s) => s != null) ?? hole.par;
+    setDraft(Object.fromEntries(round.players.map((p) => [p.playerId, scramble ? team : round.scores[p.playerId]?.[hole.number] ?? hole.par])));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [holeIdx]);
 
@@ -100,9 +106,20 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
   const strokesHere = useMemo(() => {
     if (!hcpRules) return new Map<string, number>();
     const er = toEngineRound(round, layout);
+    if (scramble) {
+      const team = teamStrokesByHole(scrambleRoundFrom(er), layout.holes, scramble)[holeIdx] ?? 0;
+      return new Map(round.players.map((p) => [p.playerId, team]));
+    }
     const per = bestBall && hcpRules.match !== 'gross' ? matchStrokes(er, hcpRules) : ownStrokes(er, hcpRules);
     return new Map(round.players.map((p) => [p.playerId, strokesByHole(per[p.playerId] ?? 0, layout.holes)[holeIdx] ?? 0]));
-  }, [hcpRules, bestBall, round, layout, holeIdx]);
+  }, [hcpRules, bestBall, scramble, round, layout, holeIdx]);
+  // Scramble: the team's total so far, counting the score being entered on this hole.
+  const teamSoFar = useMemo(() => {
+    if (!scramble) return null;
+    const withDraft: RoundData = { ...round, scores: { ...round.scores } };
+    for (const p of round.players) withDraft.scores[p.playerId] = { ...round.scores[p.playerId], [hole.number]: draft[p.playerId] ?? hole.par };
+    return scrambleStandings([scrambleRoundFrom(toEngineRound(withDraft, layout))], layout.holes, scramble)[0] ?? null;
+  }, [scramble, round, layout, hole, draft]);
   // Stroke play and Stableford: each golfer's running total, counting the score being entered on this hole.
   const running = useMemo(() => {
     if (!ind) return new Map<string, IndividualLine>();
@@ -174,7 +191,11 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
     : `${teamName(sideIds(lead > 0 ? 'A' : 'B'), names)} ${Math.abs(lead)} up thru ${status.thru}`;
   const step = (playerId: string, by: number) => {
     // Count from the latest value, not the rendered one, so quick double-taps both count.
-    setDraft((d) => ({ ...d, [playerId]: Math.min(20, Math.max(1, (d[playerId] ?? hole.par) + by)) }));
+    setDraft((d) => {
+      const v = Math.min(20, Math.max(1, (d[playerId] ?? hole.par) + by));
+      // A scramble team has one score: every player gets it.
+      return scramble ? Object.fromEntries(round.players.map((p) => [p.playerId, v])) : { ...d, [playerId]: v };
+    });
     navigator.vibrate?.(8);
   };
   const next = () => {
@@ -191,7 +212,7 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
       .sort((a, b) => a.s - b.s)[0];
     if (!best) return;
     const d = best.s - hole.par;
-    const first = (names.get(best.id) ?? '').split(' ')[0];
+    const first = scramble ? 'Team' : (names.get(best.id) ?? '').split(' ')[0];
     if (best.s === 1) setCheer(`Hole in one! ${first}`);
     else if (d <= -2) setCheer(`${d <= -3 ? 'Albatross' : 'Eagle'}! ${first}`);
   }
@@ -227,14 +248,14 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
       </div>
 
       <div className="score-list">
-        {round.players.map((p) => {
+        {(scramble ? round.players.slice(0, 1) : round.players).map((p) => {
           const v = draft[p.playerId] ?? hole.par;
           const label = toParLabel(v - hole.par);
           return (
             <div key={p.playerId} className="score-row">
               <div className="grow">
                 <div className="score-name">
-                  {names.get(p.playerId) ?? '?'}
+                  {scramble ? `Team · ${teamName(round.players.map((x) => x.playerId), names)}` : names.get(p.playerId) ?? '?'}
                   {(strokesHere.get(p.playerId) ?? 0) !== 0 && (
                     <span className="stroke-dots" title={`${Math.abs(strokesHere.get(p.playerId)!)} stroke${Math.abs(strokesHere.get(p.playerId)!) === 1 ? '' : 's'} ${strokesHere.get(p.playerId)! > 0 ? 'given' : 'back'} on this hole`}>
                       {strokesHere.get(p.playerId)! > 0 ? '●'.repeat(strokesHere.get(p.playerId)!) : '○'.repeat(-strokesHere.get(p.playerId)!)}
@@ -253,10 +274,11 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
                       : `${fmtToPar(running.get(p.playerId)!.toPar)}${hcpRules ? ' net' : ''} thru ${running.get(p.playerId)!.thru}`}
                   </div>
                 )}
+                {teamSoFar && <div className="small muted">{fmtToPar(teamSoFar.toPar)}{hcpRules ? ' net' : ''} thru {teamSoFar.thru} · one score for the whole team</div>}
               </div>
-              <button type="button" className="step minus" aria-label={`One fewer stroke for ${names.get(p.playerId)}`} onClick={() => step(p.playerId, -1)}>−</button>
+              <button type="button" className="step minus" aria-label={`One fewer stroke for ${scramble ? 'the team' : names.get(p.playerId)}`} onClick={() => step(p.playerId, -1)}>−</button>
               <span className={`num score-big${v < hole.par ? ' under' : ''}`}>{v}</span>
-              <button type="button" className="step plus" aria-label={`One more stroke for ${names.get(p.playerId)}`} onClick={() => step(p.playerId, 1)}>+</button>
+              <button type="button" className="step plus" aria-label={`One more stroke for ${scramble ? 'the team' : names.get(p.playerId)}`} onClick={() => step(p.playerId, 1)}>+</button>
             </div>
           );
         })}
@@ -367,6 +389,8 @@ function Review({ round, layout, season, names, queueLength, busy, error, locked
 }) {
   const rules = asBestBall(season.rules);
   const ind = individualRules(season.rules);
+  const scramble = isScramble(season.rules) ? season.rules : null;
+  const team = scramble ? scrambleStandings([scrambleRoundFrom(toEngineRound(round, layout))], layout.holes, scramble)[0] ?? null : null;
   const m = scoreMatch(toEngineRound(round, layout), layout.holes.length, rules, layout.holes);
   const lines = ind ? round.players.map((p) => individualLine(toEngineRound(round, layout), p.playerId, layout.holes, ind)) : [];
   const money = totalsByPlayer(m.ledger);
@@ -391,12 +415,12 @@ function Review({ round, layout, season, names, queueLength, busy, error, locked
             <tr className="muted"><td>Par</td>{layout.holes.map((h) => <td key={h.number}>{h.par}</td>)}<td>{par}</td></tr>
           </thead>
           <tbody>
-            {round.players.map((p) => {
+            {(scramble ? round.players.slice(0, 1) : round.players).map((p) => {
               const s = layout.holes.map((h) => round.scores[p.playerId]?.[h.number] ?? null);
               const tot = s.reduce<number>((t, v) => t + (v ?? 0), 0);
               return (
                 <tr key={p.playerId}>
-                  <td className="name">{(names.get(p.playerId) ?? '?').split(' ')[0]}{!ind && p.side === null ? '*' : ''}</td>
+                  <td className="name">{scramble ? 'Team' : (names.get(p.playerId) ?? '?').split(' ')[0]}{!ind && !scramble && p.side === null ? '*' : ''}</td>
                   {s.map((v, i) => {
                     const d = v == null ? null : v - layout.holes[i]!.par;
                     const won = hasMatch && p.side && m.holeWinners[i] === p.side;
@@ -424,7 +448,20 @@ function Review({ round, layout, season, names, queueLength, busy, error, locked
               </div>
             ))}
           </div>
-          {!locked && <p className="small muted">Places{rules.skins.enabled ? ', skins' : ''}{rules.ctp.enabled ? ' and closest to the pin' : ''} are worked out across the whole field when the week is settled.</p>}
+          {!locked && <p className="small muted">Places{season.rules.skins.enabled ? ', skins' : ''}{season.rules.ctp.enabled ? ' and closest to the pin' : ''} are worked out across the whole field when the week is settled.</p>}
+        </section>
+      )}
+
+      {team && (
+        <section className="card stack">
+          <h3>Team score</h3>
+          <p className="small">{teamName(team.players, names)}</p>
+          <p>
+            <strong className="num">{team.total || '–'}</strong> <span className="muted">({fmtToPar(team.grossToPar)})</span>
+            {scramble?.handicaps?.enabled && <> · <strong>{fmtToPar(team.toPar)} net</strong></>}
+            {!team.complete && <span className="muted"> · thru {team.thru}</span>}
+          </p>
+          {!locked && <p className="small muted">Team places{season.rules.skins.enabled ? ', skins' : ''}{season.rules.ctp.enabled ? ' and closest to the pin' : ''} are worked out when the week is settled.</p>}
         </section>
       )}
 

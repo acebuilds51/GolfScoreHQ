@@ -70,10 +70,20 @@ export interface BestBallMatchRules {
 
 export interface ScrambleRules {
   format: 'scramble';
-  /** Paid to the team with the lowest total (split on a tie). */
+  /** Paid to the team with the lowest total (split on a tie). Used when there are no payouts by place. */
   teamPot: Cents;
+  /**
+   * Prize money by team finishing place, 1st first. Each team's share is split
+   * evenly among its players; teams tied for a place share the places they cover.
+   */
+  payouts?: Cents[];
   skins: SkinsRules;
   ctp: CtpRules;
+  /**
+   * Net scramble: each team gets a team handicap from its players' Course
+   * Handicaps (USGA weights, see teamHandicap). Only `enabled` and `skins` apply.
+   */
+  handicaps?: HandicapRules;
 }
 
 /** Stableford points for a hole, by the score against par (net or gross). */

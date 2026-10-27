@@ -79,6 +79,8 @@ export interface ScrambleRoundInput {
   players: PlayerId[];
   teamScores: HoleScores;
   ctp?: Record<number, CtpReport>;
+  /** Each player's Course Handicap, fixed when the team started (for a net scramble). */
+  courseHandicaps?: Record<PlayerId, number | null>;
 }
 
 export type LedgerKind = 'match' | 'press' | 'skin' | 'ctp' | 'scramblePot' | 'place';

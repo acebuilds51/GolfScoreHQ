@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { liveBoard } from '../src/lib/live';
+import { settleWeek } from '../src/lib/settlement';
 import { formFromRules, OCBC_STYLE_FORM, parsePayouts, rulesFromForm } from '../src/lib/scoring';
 import type { Layout, RoundData } from '../src/lib/types';
 
@@ -37,6 +38,30 @@ describe('Stableford season form and live board', () => {
   });
 });
 
+describe('scramble live board and settlement', () => {
+  const sc = rulesFromForm({ ...OCBC_STYLE_FORM, format: 'scramble', payouts: '80, 40', ctpEnabled: false, skinsEnabled: false });
+  // Each team's score is saved for every player on it.
+  const team = (id: string, slot: number, ids: string[], holes: number[]) =>
+    round(id, slot, Object.fromEntries(ids.map((p) => [p, holes])), { players: ids.map((p, i) => ({ playerId: p, side: null, position: i })) });
+  const t1 = team('t1', 1, ['al', 'ann', 'bob', 'bea'], [3, 3, 4, 3, 3, 4, 4, 4, 4]); // 32
+  const t2 = team('t2', 2, ['cy', 'dee'], [4, 2, 5, 4, 3, 4, 4, 4, 4]); //               34
+  const t3 = team('t3', 3, ['ed', 'flo'], [4, 3]); //                                    thru 2
+
+  it('shows one line per team', () => {
+    const b = liveBoard([t1, t2, t3], front, sc);
+    expect(b.lines.map((l) => [l.roundId, l.team, l.toPar, l.thru])).toEqual([
+      ['t1', ['al', 'ann', 'bob', 'bea'], -3, 9], ['t2', ['cy', 'dee'], -1, 9], ['t3', ['ed', 'flo'], 0, 2],
+    ]);
+  });
+
+  it('pays places to finished teams, split among each team', () => {
+    const w = settleWeek([t1, t2, t3], front, sc);
+    expect(w.teams.map((t) => [t.roundId, t.place])).toEqual([['t1', 1], ['t2', 2], ['t3', null]]);
+    // $80 for 1st split four ways, $40 for 2nd split two ways: $20 each.
+    expect(Object.fromEntries(w.totals.map((t) => [t.playerId, t.scramblePot]))).toEqual({ al: 2000, ann: 2000, bob: 2000, bea: 2000, cy: 2000, dee: 2000 });
+  });
+});
+
 describe('live leaderboard', () => {
   // Group 1 has finished 3 holes; group 2 has finished 2.
   const g1 = round('g1', 1, { al: [3, 3, 5], ann: [4, 3, 6], bob: [4, 2, 5], bea: [5, 3, 5] }, { ctp: { 2: { playerId: 'bob', beat: null } } });
@@ -64,7 +89,7 @@ describe('live leaderboard', () => {
 
   it('follows the CTP marker chain and collects birdies, eagles and aces', () => {
     expect(board.ctp.find((c) => c.holeNumber === 2)).toEqual({ holeNumber: 2, holder: 'pete', disputed: false });
-    expect(board.highlights[0]).toEqual({ playerId: 'pete', holeNumber: 2, kind: 'ace' });
+    expect(board.highlights[0]).toEqual({ playerId: 'pete', team: null, holeNumber: 2, kind: 'ace' });
     expect(board.highlights.filter((h) => h.kind === 'birdie').map((h) => h.playerId).sort()).toEqual(['al', 'bob', 'dee']);
   });
 

@@ -125,6 +125,8 @@ export interface LeagueEvent {
   eventDate: string | null;
   layoutId: string | null;
   status: EventStatus;
+  /** A special week (e.g. the scramble) played under different rules; null = the season's rules. */
+  rulesOverride?: import('@golfscorehq/engine').FormatRules | null;
 }
 
 export interface RoundPlayer {
@@ -236,7 +238,7 @@ export interface TvFeed {
   league: { name: string; slug?: string; logoUrl?: string | null; brandColor?: string | null; accentColor?: string | null };
   display?: { name: string; settings: TvSettings };
   season?: { year: number; name: string; rules: import('@golfscorehq/engine').FormatRules } | null;
-  event?: { id: string; weekNumber: number; eventDate: string | null; status: EventStatus } | null;
+  event?: { id: string; weekNumber: number; eventDate: string | null; status: EventStatus; rulesOverride?: import('@golfscorehq/engine').FormatRules | null } | null;
   layout?: (Layout & { courseName: string | null }) | null;
   players?: { id: string; displayName: string; isSub: boolean }[];
   rounds?: RoundData[];

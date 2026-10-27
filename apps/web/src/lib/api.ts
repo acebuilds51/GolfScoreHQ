@@ -66,7 +66,7 @@ export interface Api {
   events(seasonId: string): Promise<LeagueEvent[]>;
   event(eventId: string): Promise<LeagueEvent | null>;
   createEvent(leagueId: string, seasonId: string, e: { weekNumber: number; eventDate: string | null; layoutId: string | null }): Promise<string>;
-  updateEvent(eventId: string, patch: { layoutId?: string | null; eventDate?: string | null; status?: LeagueEvent['status'] }): Promise<void>;
+  updateEvent(eventId: string, patch: { layoutId?: string | null; eventDate?: string | null; status?: LeagueEvent['status']; rulesOverride?: LeagueEvent['rulesOverride'] }): Promise<void>;
 
   eventRounds(eventId: string): Promise<RoundData[]>;
   round(roundId: string): Promise<RoundData | null>;

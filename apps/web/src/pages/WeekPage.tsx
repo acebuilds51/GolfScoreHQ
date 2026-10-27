@@ -1,10 +1,12 @@
+import { teamHandicap } from '@golfscorehq/engine';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague, useLiveRefresh } from '../lib/hooks';
 import { courseHandicapFor, leagueIndexes, loadPlayedRounds } from '../lib/handicaps';
-import { allLayouts, fmtDate, handicapRules, individualRules, matchSoFar } from '../lib/scoring';
+import { allLayouts, describeRules, fmtDate, handicapRules, individualRules, isScramble, matchSoFar, weekRules } from '../lib/scoring';
+import { SpecialWeek } from './SpecialWeek';
 import { isCommissioner, type Layout, type Player, type RoundData, type RoundPlayer, type Season } from '../lib/types';
 import { WeekResults } from './WeekResults';
 import { WhosPlaying } from './WhosPlaying';
@@ -15,9 +17,11 @@ export async function loadWeek(leagueId: string, eventId: string) {
     api.event(eventId), api.seasons(leagueId), api.courses(leagueId), api.players(leagueId), api.eventRounds(eventId),
   ]);
   if (!event) return null;
-  const season = seasons.find((s) => s.id === event.seasonId) ?? null;
+  const seasonRow = seasons.find((s) => s.id === event.seasonId) ?? null;
+  // Every screen for this week works from the week's own rules (a scramble week, say), not the season's.
+  const season = seasonRow ? { ...seasonRow, rules: weekRules(seasonRow, event) } : null;
   const layout = allLayouts(courses).find((l) => l.id === event.layoutId) ?? null;
-  return { event, season, layouts: allLayouts(courses), layout, players, rounds };
+  return { event, season, seasonRules: seasonRow?.rules ?? null, layouts: allLayouts(courses), layout, players, rounds };
 }
 
 export const teamName = (ids: string[], names: Map<string, string>) => ids.map((id) => (names.get(id) ?? '?').split(' ')[0]).join(' / ');
@@ -34,8 +38,9 @@ export function WeekPage() {
 
   if (data.error) return <div className="page"><ErrorText>{data.error}</ErrorText></div>;
   if (!data.data) return (data.loading ? <PageSkeleton /> : <div className="page muted">Week not found.</div>);
-  const { event, season, layout, layouts, players, rounds } = data.data;
+  const { event, season, seasonRules, layout, layouts, players, rounds } = data.data;
   const names = new Map(players.map((p) => [p.id, p.displayName]));
+  const special = !!event.rulesOverride;
 
   return (
     <div className="page stack">
@@ -44,9 +49,14 @@ export function WeekPage() {
           <Link to="../play" className="small">← All weeks</Link>
           <h2>Week {event.weekNumber}{event.eventDate ? ` · ${fmtDate(event.eventDate)}` : ''}</h2>
           <p className="small muted">{layout ? `${layout.courseName} · ${layout.name} · par ${layout.holes.reduce((s, h) => s + h.par, 0)}` : 'No course picked for this week'}</p>
+          {special && season && <p className="special-week-tag small"><strong>Special week:</strong> {describeRules(season.rules).join(' · ')}</p>}
         </div>
         {commish && event.status === 'scheduled' && <LayoutPicker eventId={event.id} layoutId={event.layoutId} layouts={layouts} onChanged={data.reload} />}
       </div>
+
+      {commish && seasonRules && seasonRules.format !== 'scramble' && event.status === 'scheduled' && (
+        <SpecialWeek event={event} seasonRules={seasonRules} hasGroups={rounds.length > 0} onChanged={data.reload} />
+      )}
 
       {layout && season && event.status !== 'settled' && event.status !== 'rainout' && (
         starting
@@ -81,7 +91,7 @@ function GroupRow({ round, names, layout, season }: { round: RoundData; names: M
   const side = (s: 'A' | 'B' | null) => round.players.filter((p) => p.side === s).map((p) => p.playerId);
   const status = layout && season ? matchSoFar(round, layout, season.rules) : null;
   const extra = side(null);
-  const individual = !!season && individualRules(season.rules) !== null;
+  const individual = !!season && (individualRules(season.rules) !== null || isScramble(season.rules));
   return (
     <li>
       <Link className="list-row link-row" to={`../round/${round.id}`}>
@@ -125,7 +135,9 @@ function StartGroup({ eventId, rounds, players, season, layout, onCancel }: {
   const { league } = useLeague();
   const nav = useNavigate();
   const hcp = handicapRules(season.rules)?.enabled ? handicapRules(season.rules)! : null;
-  const individual = individualRules(season.rules) !== null;
+  const scramble = isScramble(season.rules);
+  // Individual formats and scrambles have no sides: everyone in the group is one field entry or one team.
+  const individual = scramble || individualRules(season.rules) !== null;
   // Handicaps are fixed when the group starts: work out everyone's index now.
   const indexes = useAsync(
     async () => (hcp ? leagueIndexes(players, await loadPlayedRounds(api, league.id), hcp.source ?? 'ghinFirst') : null),
@@ -147,7 +159,9 @@ function StartGroup({ eventId, rounds, players, season, layout, onCancel }: {
   const roster = [...players.filter((p) => p.active), ...extraNames.map((x) => ({ id: x.id, displayName: x.name, isSub: true, active: true, userId: null }))]
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
   // Individual formats: everyone plays their own ball, no teams.
-  const slotLabels = individual
+  const slotLabels = scramble
+    ? ['Team member 1', 'Team member 2', 'Team member 3', 'Team member 4', 'Team member 5']
+    : individual
     ? ['Golfer 1', 'Golfer 2', 'Golfer 3', 'Golfer 4', 'Golfer 5']
     : ['Team A — player 1', 'Team A — player 2', 'Team B — player 1', 'Team B — player 2', 'Skins and CTP only (optional)'];
 
@@ -202,6 +216,9 @@ function StartGroup({ eventId, rounds, players, season, layout, onCancel }: {
           </label>
         ))}
       </div>
+      {hcp && scramble && indexes.data && picks.some(Boolean) && (
+        <p className="small">Team handicap: <strong>{teamHandicap(picks.filter(Boolean).map((id) => courseHcp(id)))}</strong> <span className="muted">(25/20/15/10% of course handicaps, low to high; 35/15% for twosomes)</span></p>
+      )}
       {hcp && <p className="small muted">Handicaps are locked in when you start, for this week only.</p>}
       <div className="row wrap">
         <input placeholder="Sub's name" value={subName} onChange={(e) => setSubName(e.target.value)} style={{ maxWidth: 260 }} />

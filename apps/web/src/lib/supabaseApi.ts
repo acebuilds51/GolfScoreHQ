@@ -281,11 +281,11 @@ export function supabaseApi(url: string, anonKey: string): Api {
       check(await sb.from('seasons').update({ rules }).eq('id', seasonId));
     },
     async events(seasonId) {
-      const rows = check(await sb.from('events').select('id, season_id, week_number, event_date, layout_id, status').eq('season_id', seasonId).order('week_number')) as Row[];
+      const rows = check(await sb.from('events').select('id, season_id, week_number, event_date, layout_id, status, rules_override').eq('season_id', seasonId).order('week_number')) as Row[];
       return rows.map(toEvent);
     },
     async event(eventId) {
-      const r = check(await sb.from('events').select('id, season_id, week_number, event_date, layout_id, status').eq('id', eventId).maybeSingle()) as Row | null;
+      const r = check(await sb.from('events').select('id, season_id, week_number, event_date, layout_id, status, rules_override').eq('id', eventId).maybeSingle()) as Row | null;
       return r ? toEvent(r) : null;
     },
     async createEvent(leagueId, seasonId, e) {
@@ -299,6 +299,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
       if (patch.layoutId !== undefined) row.layout_id = patch.layoutId;
       if (patch.eventDate !== undefined) row.event_date = patch.eventDate;
       if (patch.status !== undefined) row.status = patch.status;
+      if (patch.rulesOverride !== undefined) row.rules_override = patch.rulesOverride;
       check(await sb.from('events').update(row).eq('id', eventId));
     },
 
@@ -514,7 +515,7 @@ function toSeason(r: Row): Season {
 }
 
 function toEvent(r: Row): LeagueEvent {
-  return { id: r.id, seasonId: r.season_id, weekNumber: r.week_number, eventDate: r.event_date, layoutId: r.layout_id, status: r.status };
+  return { id: r.id, seasonId: r.season_id, weekNumber: r.week_number, eventDate: r.event_date, layoutId: r.layout_id, status: r.status, rulesOverride: r.rules_override ?? null };
 }
 
 function toRound(r: Row): RoundData {

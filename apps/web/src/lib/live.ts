@@ -1,4 +1,4 @@
-import { playingHandicap, stablefordPoints, strokesByHole, type FormatRules } from '@golfscorehq/engine';
+import { playingHandicap, stablefordPoints, strokesByHole, teamHandicap, type FormatRules } from '@golfscorehq/engine';
 import { currentMarker, handicapRules, matchSoFar } from './scoring';
 import type { Layout, RoundData } from './types';
 
@@ -7,6 +7,8 @@ import type { Layout, RoundData } from './types';
 
 export interface LiveLine {
   playerId: string;
+  /** Scramble: everyone on the team (the line is the whole team). Null otherwise. */
+  team: string[] | null;
   roundId: string;
   teeSlot: number;
   side: 'A' | 'B' | null;
@@ -27,12 +29,15 @@ export interface LiveSkin {
   holeNumber: number;
   /** The one golfer with the low score so far, or null if it's tied (or nobody has played it). */
   playerId: string | null;
+  /** Scramble: the team holding the skin. */
+  team: string[] | null;
   score: number | null;
   tiedCount: number;
 }
 
 export interface LiveHighlight {
   playerId: string;
+  team: string[] | null;
   holeNumber: number;
   kind: 'ace' | 'eagle' | 'birdie';
 }
@@ -47,7 +52,13 @@ export interface LiveBoard {
   groupsDone: number;
   /** True when lines rank on net scores. */
   net: boolean;
-  format: 'bestBallMatch' | 'strokePlay' | 'stableford';
+  format: 'bestBallMatch' | 'strokePlay' | 'stableford' | 'scramble';
+}
+
+/** Who a line, skin or highlight belongs to: the golfer, or a scramble team by first names. */
+export function whoName(names: Map<string, string>, x: { playerId: string | null; team: string[] | null }): string {
+  if (x.team && x.team.length > 1) return x.team.map((id) => (names.get(id) ?? '?').split(' ')[0]).join(' / ');
+  return x.playerId ? names.get(x.playerId) ?? '?' : '?';
 }
 
 export function liveBoard(rounds: RoundData[], layout: Layout, rulesIn: FormatRules): LiveBoard {
@@ -58,10 +69,15 @@ export function liveBoard(rounds: RoundData[], layout: Layout, rulesIn: FormatRu
 
   const hcpRules = handicapRules(rules);
   const hcp = hcpRules?.enabled ? hcpRules : null;
+  // Scramble: one line per team, from the team score saved on its first player.
+  const scramble = rules.format === 'scramble';
+  const entrants = (r: RoundData) => (scramble ? r.players.slice(0, 1) : r.players);
+  const teamOf = (r: RoundData) => (scramble ? r.players.map((p) => p.playerId) : null);
   for (const r of rounds) {
-    for (const p of r.players) {
-      // Net uses each golfer's own strokes (after the allowance), not off the low man.
-      const given = hcp ? strokesByHole(playingHandicap(p.courseHandicap ?? 0, hcp.allowance), layout.holes) : null;
+    for (const p of entrants(r)) {
+      // Net uses each golfer's own strokes (after the allowance), not off the low man; a scramble team uses its team handicap.
+      const own = scramble ? teamHandicap(r.players.map((x) => x.courseHandicap)) : playingHandicap(p.courseHandicap ?? 0, hcp?.allowance ?? 100);
+      const given = hcp ? strokesByHole(own, layout.holes) : null;
       let thru = 0;
       let strokes = 0;
       let par = 0;
@@ -76,13 +92,13 @@ export function liveBoard(rounds: RoundData[], layout: Layout, rulesIn: FormatRu
         received += given?.[i] ?? 0;
         if (pts) points += stablefordPoints(s - (given?.[i] ?? 0) - h.par, pts);
         const kind = s === 1 ? 'ace' : s - h.par <= -2 ? 'eagle' : s - h.par === -1 ? 'birdie' : null;
-        if (kind) highlights.push({ playerId: p.playerId, holeNumber: h.number, kind });
+        if (kind) highlights.push({ playerId: p.playerId, team: teamOf(r), holeNumber: h.number, kind });
       }
       if (thru === 0) continue;
       const gross = strokes - par;
       const toPar = gross - received;
       lines.push({
-        playerId: p.playerId, roundId: r.id, teeSlot: r.teeSlot, side: p.side, thru, strokes, toPar, grossToPar: gross,
+        playerId: p.playerId, team: teamOf(r), roundId: r.id, teeSlot: r.teeSlot, side: p.side, thru, strokes, toPar, grossToPar: gross,
         points: pts ? points : null, rank: pts ? -points : toPar, finished: thru === layout.holes.length,
       });
     }
@@ -93,12 +109,12 @@ export function liveBoard(rounds: RoundData[], layout: Layout, rulesIn: FormatRu
 
   const skins: LiveSkin[] = rules.skins.enabled
     ? layout.holes.map((h) => {
-        const scores = rounds.flatMap((r) => r.players.map((p) => ({ playerId: p.playerId, s: r.scores[p.playerId]?.[h.number] })))
-          .filter((x): x is { playerId: string; s: number } => x.s != null);
-        if (!scores.length) return { holeNumber: h.number, playerId: null, score: null, tiedCount: 0 };
+        const scores = rounds.flatMap((r) => entrants(r).map((p) => ({ playerId: p.playerId, team: teamOf(r), s: r.scores[p.playerId]?.[h.number] })))
+          .filter((x): x is { playerId: string; team: string[] | null; s: number } => x.s != null);
+        if (!scores.length) return { holeNumber: h.number, playerId: null, team: null, score: null, tiedCount: 0 };
         const low = Math.min(...scores.map((x) => x.s));
         const at = scores.filter((x) => x.s === low);
-        return { holeNumber: h.number, playerId: at.length === 1 ? at[0]!.playerId : null, score: low, tiedCount: at.length };
+        return { holeNumber: h.number, playerId: at.length === 1 ? at[0]!.playerId : null, team: at.length === 1 ? at[0]!.team : null, score: low, tiedCount: at.length };
       })
     : [];
 
@@ -117,7 +133,7 @@ export function liveBoard(rounds: RoundData[], layout: Layout, rulesIn: FormatRu
     groupsOnCourse: rounds.filter((r) => r.status !== 'submitted').length,
     groupsDone: rounds.filter((r) => r.status === 'submitted').length,
     net: !!hcp,
-    format: rules.format === 'scramble' ? 'bestBallMatch' : rules.format,
+    format: rules.format,
   };
 }
 

@@ -6,6 +6,7 @@ export * from './skins';
 export * from './ctp';
 export * from './week';
 export * from './individual';
+export * from './scramble';
 export * from './handicap';
 export * from './net';
 export * from './templates';

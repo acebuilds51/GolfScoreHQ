@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { EmptyState, ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAsync, useLeague, useLiveRefresh } from '../lib/hooks';
-import { fmtLiveToPar, lineScore, liveBoard, type LiveBoard } from '../lib/live';
+import { fmtLiveToPar, lineScore, liveBoard, whoName, type LiveBoard } from '../lib/live';
 import { fmtDate, playsForMoney } from '../lib/scoring';
 import type { FormatRules } from '@golfscorehq/engine';
 import { loadWeek, teamName } from './WeekPage';
@@ -102,7 +102,7 @@ export function LeaderPanel({ board, names, holes }: PanelProps & { holes: numbe
         <div className="leader-hero-label">
           {leaders.length > 1 ? `Tied for the lead · ${thruLabel(top)}` : `Leader · ${thruLabel(top).toLowerCase()}`}{board.net ? ' · net' : ''}
         </div>
-        <div className="num leader-hero-name">{leaders.map((l) => first(names, l.playerId)).join(' · ')}</div>
+        <div className="num leader-hero-name">{leaders.map((l) => whoName(names, l)).join(' · ')}</div>
         <div className="num leader-hero-score">{lineScore(top)}</div>
         {(board.net || stableford) && leaders.length === 1 && <div className="leader-hero-label">{fmtLiveToPar(top.grossToPar)} gross</div>}
       </div>
@@ -112,7 +112,7 @@ export function LeaderPanel({ board, names, holes }: PanelProps & { holes: numbe
             <li key={`${l.roundId}-${l.playerId}`}>
               <span className="num leader-pos">{pos(i + leaders.length)}</span>
               <span className="grow">
-                <span className="leader-name">{first(names, l.playerId)}</span>
+                <span className="leader-name">{whoName(names, l)}</span>
                 <span className="small muted"> {l.finished ? 'F' : `${l.thru}/${holes}`}{board.net || stableford ? ` · ${fmtLiveToPar(l.grossToPar)} gross` : ''}{skinsOnly(l) ? ' · skins' : ''}</span>
               </span>
               <span className={`num leader-score${!stableford && l.toPar < 0 ? ' under' : ''}`}>{lineScore(l)}</span>
@@ -148,7 +148,7 @@ export function SkinsPanel({ board, names }: PanelProps) {
     <section className="card stack">
       <h3>Skins so far</h3>
       {leaders.length === 0 ? <p className="small muted">No outright low scores yet.</p> : leaders.map((s) => (
-        <div key={s.holeNumber} className="row between small"><span>Hole {s.holeNumber}</span><span><strong>{first(names, s.playerId!)}</strong> <span className="muted">({s.score})</span></span></div>
+        <div key={s.holeNumber} className="row between small"><span>Hole {s.holeNumber}</span><span><strong>{whoName(names, s)}</strong> <span className="muted">({s.score})</span></span></div>
       ))}
       <p className="small muted">Leaders can be tied by later groups. Skins are paid when the week is settled.</p>
     </section>
@@ -177,7 +177,7 @@ export function HighlightsPanel({ board, names }: PanelProps) {
       <h3>Highlights</h3>
       <div className="week-chips">
         {board.highlights.map((h, i) => (
-          <span key={i} className={`chip ${h.kind}`}>{label[h.kind]} · {first(names, h.playerId).split(' ')[0]} · #{h.holeNumber}</span>
+          <span key={i} className={`chip ${h.kind}`}>{label[h.kind]} · {h.team ? whoName(names, h) : first(names, h.playerId).split(' ')[0]} · #{h.holeNumber}</span>
         ))}
       </div>
     </section>

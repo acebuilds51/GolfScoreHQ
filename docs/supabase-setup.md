@@ -34,6 +34,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 14. `20261108000000_billing.sql` (Stripe billing for Pro and Club)
 15. `20261109000000_handicaps.sql` (GHIN/handicap index on golfers, course handicap fixed per round)
 16. `20261110000000_individual_formats.sql` (stroke play and Stableford: prize money by place)
+17. `20261111000000_scramble.sql` (Clubhouse TV knows when a week is a scramble)
 
 **B. Command line**
 

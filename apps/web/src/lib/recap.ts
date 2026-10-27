@@ -1,5 +1,5 @@
 import { recapText, weeklyRecap, withPostedResults, type LedgerEntry, type WeeklyRecap } from '@golfscorehq/engine';
-import { asBestBall, toEngineRound } from './scoring';
+import { toEngineRound, weekRules } from './scoring';
 import type { Layout, LeagueEvent, LedgerRow, Player, RoundData, Season } from './types';
 
 const toEntry = (e: LedgerRow): LedgerEntry => ({
@@ -21,7 +21,8 @@ export function buildWeekRecap(input: {
   players: Pick<Player, 'id' | 'displayName'>[];
   hideMoney?: boolean;
 }): { recap: WeeklyRecap; text: string } {
-  const rules = input.season.rules.format === 'scramble' ? asBestBall(input.season.rules) : input.season.rules;
+  // The week's own rules (a scramble week), else the season's.
+  const rules = weekRules(input.season, input.event);
   const recap = withPostedResults(
     weeklyRecap(input.event.weekNumber, input.rounds.map((r) => toEngineRound(r, input.layout)), { id: input.layout.id, name: input.layout.name, holes: input.layout.holes }, rules),
     input.weekLedger.map(toEntry),

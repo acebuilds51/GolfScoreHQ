@@ -71,7 +71,9 @@ export function seasonStats(played: PlayedRound[], ledger: LedgerEntry[], rules:
     }
   }
 
-  for (const { week, layout, round } of [...played].sort((a, b) => a.week - b.week)) {
+  // Scramble scores are team scores: they never count toward a golfer's own scoring.
+  const ownBall = rules.format === 'scramble' ? [] : played;
+  for (const { week, layout, round } of [...ownBall].sort((a, b) => a.week - b.week)) {
     const par = layout.holes.reduce((s, h) => s + h.par, 0);
     for (const p of round.players) {
       const s = get(p.id);

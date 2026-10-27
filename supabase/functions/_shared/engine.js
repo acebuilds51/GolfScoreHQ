@@ -265,31 +265,6 @@ function settleBestBallWeek(rounds, layout, rules) {
     ledger: [...matches.flatMap((m) => m.ledger), ...skins.ledger, ...ctp.ledger]
   };
 }
-function settleScrambleWeek(rounds, layout, rules) {
-  const standings = rounds.map((r) => ({ roundId: r.id, players: r.players, total: r.teamScores.reduce((s, v) => s + (v ?? 0), 0) })).sort((x, y) => x.total - y.total);
-  const best = standings[0]?.total;
-  const winners = standings.filter((s) => s.total === best);
-  const ledger = [];
-  if (winners.length && rules.teamPot > 0) {
-    const perTeam = splitEvenly(rules.teamPot, winners.length);
-    winners.forEach((team, t) => {
-      const shares = splitEvenly(perTeam[t], team.players.length);
-      team.players.forEach(
-        (playerId, k) => ledger.push({ playerId, amount: shares[k], kind: "scramblePot", roundId: team.roundId })
-      );
-    });
-  }
-  const competitors = rounds.map((r) => ({
-    id: r.id,
-    playerIds: r.players,
-    scores: r.teamScores,
-    roundId: r.id
-  }));
-  const skins = settleSkins(competitors, layout.holes.map((h) => h.number), rules.skins);
-  const ctp = settleCtp(rounds.map((r) => ({ roundId: r.id, teeSlot: r.teeSlot, ctp: r.ctp })), par3s(layout), rules.ctp);
-  ledger.push(...skins.ledger, ...ctp.ledger);
-  return { standings, winners, skins, ctp, ledger };
-}
 
 // packages/engine/src/individual.ts
 function stablefordPoints(toPar, pts) {
@@ -364,6 +339,112 @@ function settleIndividualWeek(rounds, layout, rules) {
   const skins = fieldSkins(rounds, layout, rules.skins, rules.handicaps);
   const ctp = settleCtp(rounds.map((r) => ({ roundId: r.id, teeSlot: r.teeSlot, ctp: r.ctp })), par3s(layout), rules.ctp);
   return { leaderboard, skins, ctp, ledger: [...placePayouts(leaderboard, rules.payouts), ...skins.ledger, ...ctp.ledger] };
+}
+
+// packages/engine/src/scramble.ts
+var SCRAMBLE_WEIGHTS = {
+  1: [100],
+  2: [35, 15],
+  3: [20, 15, 10],
+  4: [25, 20, 15, 10],
+  5: [25, 20, 15, 10, 5]
+};
+function teamHandicap(courseHandicaps) {
+  const sorted = courseHandicaps.map((c) => c ?? 0).sort((a, b) => a - b);
+  const weights = SCRAMBLE_WEIGHTS[Math.min(sorted.length, 5)] ?? [];
+  return Math.round(sorted.reduce((sum, ch, i) => sum + ch * (weights[i] ?? 0) / 100, 0));
+}
+function scrambleRoundFrom(r) {
+  const holes = Math.max(0, ...Object.values(r.scores).map((s) => s.length));
+  const teamScores = Array.from({ length: holes }, (_, i) => {
+    for (const p of r.players) {
+      const v = r.scores[p.id]?.[i];
+      if (v != null) return v;
+    }
+    return null;
+  });
+  return {
+    id: r.id,
+    teeSlot: r.teeSlot,
+    players: r.players.map((p) => p.id),
+    teamScores,
+    ...r.ctp ? { ctp: r.ctp } : {},
+    ...r.courseHandicaps ? { courseHandicaps: r.courseHandicaps } : {}
+  };
+}
+var netOn = (rules) => !!rules.handicaps?.enabled;
+function teamStrokesByHole(r, holes, rules) {
+  if (!netOn(rules)) return holes.map(() => 0);
+  return strokesByHole(teamHandicap(r.players.map((p) => r.courseHandicaps?.[p])), holes);
+}
+function scrambleStandings(rounds, holes, rules) {
+  const lines = rounds.map((r) => {
+    const given = teamStrokesByHole(r, holes, rules);
+    let thru = 0, total = 0, par = 0, strokes = 0;
+    holes.forEach((h, i) => {
+      const s = r.teamScores[i];
+      if (s == null) return;
+      thru++;
+      total += s;
+      par += h.par;
+      strokes += given[i] ?? 0;
+    });
+    return {
+      roundId: r.id,
+      teeSlot: r.teeSlot,
+      players: r.players,
+      thru,
+      complete: holes.length > 0 && thru === holes.length,
+      total,
+      grossToPar: total - par,
+      strokes,
+      toPar: total - par - strokes,
+      place: null,
+      tied: false
+    };
+  });
+  const done = lines.filter((l) => l.complete).sort((a, b) => a.toPar - b.toPar || a.teeSlot - b.teeSlot);
+  const rest = lines.filter((l) => !l.complete).sort((a, b) => b.thru - a.thru || a.toPar - b.toPar || a.teeSlot - b.teeSlot);
+  for (const l of done) {
+    const same = done.filter((x) => x.toPar === l.toPar);
+    l.place = done.indexOf(same[0]) + 1;
+    l.tied = same.length > 1;
+  }
+  return [...done, ...rest];
+}
+function scramblePayouts(rules) {
+  return rules.payouts?.length ? rules.payouts : rules.teamPot > 0 ? [rules.teamPot] : [];
+}
+function settleScrambleWeek(rounds, layout, rules) {
+  const standings = scrambleStandings(rounds, layout.holes, rules);
+  const winners = standings.filter((s) => s.place === 1);
+  const ledger = [];
+  const payouts = scramblePayouts(rules);
+  const places = [...new Set(standings.map((s) => s.place).filter((p) => p !== null))];
+  for (const place of places) {
+    const tied = standings.filter((s) => s.place === place);
+    const pot = payouts.slice(place - 1, place - 1 + tied.length).reduce((s, c) => s + Math.max(0, c), 0);
+    if (pot <= 0) continue;
+    const perTeam = splitEvenly(pot, tied.length);
+    tied.forEach((team, t) => {
+      const shares = splitEvenly(perTeam[t], team.players.length);
+      team.players.forEach((playerId, k) => ledger.push({ playerId, amount: shares[k], kind: "scramblePot", roundId: team.roundId }));
+    });
+  }
+  const netSkins = netOn(rules) && rules.handicaps.skins === "net";
+  const competitors = rounds.map((r) => {
+    const given = netSkins ? teamStrokesByHole(r, layout.holes, rules) : null;
+    return {
+      id: r.id,
+      playerIds: r.players,
+      scores: given ? r.teamScores.map((s, i) => s == null ? null : s - (given[i] ?? 0)) : r.teamScores,
+      roundId: r.id
+    };
+  });
+  const skins = settleSkins(competitors, layout.holes.map((h) => h.number), rules.skins);
+  const ctp = settleCtp(rounds.map((r) => ({ roundId: r.id, teeSlot: r.teeSlot, ctp: r.ctp })), par3s(layout), rules.ctp);
+  ledger.push(...skins.ledger, ...ctp.ledger);
+  return { standings, winners, skins, ctp, ledger };
 }
 
 // packages/engine/src/handicap.ts
@@ -487,7 +568,8 @@ function seasonStats(played, ledger, rules) {
       }
     }
   }
-  for (const { week, layout, round } of [...played].sort((a, b) => a.week - b.week)) {
+  const ownBall = rules.format === "scramble" ? [] : played;
+  for (const { week, layout, round } of [...ownBall].sort((a, b) => a.week - b.week)) {
     const par = layout.holes.reduce((s, h) => s + h.par, 0);
     for (const p of round.players) {
       const s = get(p.id);
@@ -597,10 +679,10 @@ function seasonAwards(stats, opts = {}) {
 // packages/engine/src/recap.ts
 var KIND_ORDER = { ace: 0, eagle: 1, birdie: 2 };
 function weeklyRecap(week, rounds, layout, rules, earlierLedger = []) {
-  const individual = rules.format !== "bestBallMatch";
-  const settled = individual ? settleIndividualWeek(rounds, layout, rules) : settleBestBallWeek(rounds, layout, rules);
+  const scramble = rules.format === "scramble";
+  const settled = rules.format === "scramble" ? settleScrambleWeek(rounds.map(scrambleRoundFrom), layout, rules) : rules.format === "bestBallMatch" ? settleBestBallWeek(rounds, layout, rules) : settleIndividualWeek(rounds, layout, rules);
   const par = layout.holes.reduce((s, h) => s + h.par, 0);
-  const leaderboard = "leaderboard" in settled ? settled.leaderboard.filter((l) => l.place !== null).map((l) => ({ playerId: l.playerId, place: l.place, tied: l.tied, score: l.gross, grossToPar: l.grossToPar, toPar: l.toPar, points: l.points })) : [];
+  const leaderboard = "leaderboard" in settled ? settled.leaderboard.filter((l) => l.place !== null).map((l) => ({ playerIds: [l.playerId], place: l.place, tied: l.tied, score: l.gross, grossToPar: l.grossToPar, toPar: l.toPar, points: l.points })) : "standings" in settled ? settled.standings.filter((t) => t.place !== null).map((t) => ({ playerIds: t.players, place: t.place, tied: t.tied, score: t.total, grossToPar: t.grossToPar, toPar: t.toPar, points: null })) : [];
   const matches = ("matches" in settled ? settled.matches : []).map((m) => {
     const r = rounds.find((x) => x.id === m.roundId);
     return {
@@ -614,7 +696,7 @@ function weeklyRecap(week, rounds, layout, rules, earlierLedger = []) {
   }).filter((m) => m.teamA.length && m.teamB.length).sort((a, b) => a.teeSlot - b.teeSlot);
   const highlights = [];
   let low = null;
-  for (const r of rounds) {
+  for (const r of scramble ? [] : rounds) {
     for (const p of r.players) {
       const scores = r.scores[p.id] ?? [];
       layout.holes.forEach((h, i) => {
@@ -659,7 +741,7 @@ function withPostedResults(recap, weekLedger, seasonLedger) {
 var toParText = (n) => n === 0 ? "E" : n > 0 ? `+${n}` : String(n);
 var money = (c) => `${c < 0 ? "-" : "+"}$${(Math.abs(c) / 100).toFixed(2).replace(/\.00$/, "")}`;
 function recapText(recap, name, opts = {}) {
-  const names = (ids) => ids.map(name).join(" & ");
+  const names = (ids) => recap.format === "scramble" && ids.length > 1 ? ids.map((id) => name(id).split(" ")[0]).join(" / ") : ids.map(name).join(" & ");
   const lines = [];
   lines.push(`${opts.leagueName ? opts.leagueName + " \u2014 " : ""}Week ${recap.week} recap (${recap.layoutName})`, "");
   if (recap.matches.length) {
@@ -674,11 +756,12 @@ function recapText(recap, name, opts = {}) {
   }
   if (recap.leaderboard.length) {
     const top2 = recap.leaderboard.filter((l) => l.place <= 10);
-    lines.push(recap.format === "stableford" ? `STABLEFORD${recap.net ? " (NET)" : ""}` : `STROKE PLAY${recap.net ? " (NET)" : ""}`);
+    const title = recap.format === "stableford" ? "STABLEFORD" : recap.format === "scramble" ? "SCRAMBLE" : "STROKE PLAY";
+    lines.push(`${title}${recap.net ? " (NET)" : ""}`);
     for (const l of top2) {
       const pos = `${l.tied ? "T" : ""}${l.place}.`;
       const result = recap.format === "stableford" ? `${l.points} pts (${l.score})` : recap.net ? `net ${toParText(l.toPar)} (${l.score} gross)` : `${l.score} (${toParText(l.toPar)})`;
-      lines.push(`  ${pos} ${name(l.playerId)} \u2014 ${result}`);
+      lines.push(`  ${pos} ${names(l.playerIds)} \u2014 ${result}`);
     }
     if (recap.leaderboard.length > top2.length) lines.push(`  \u2026and ${recap.leaderboard.length - top2.length} more`);
     lines.push("");
@@ -719,6 +802,7 @@ export {
   MAX_HANDICAP_INDEX,
   OCBC_BEST_BALL,
   OCBC_SCRAMBLE,
+  SCRAMBLE_WEIGHTS,
   STANDARD_STABLEFORD,
   bestBall,
   compareLines,
@@ -743,6 +827,9 @@ export {
   recapText,
   scoreDifferential,
   scoreMatch,
+  scramblePayouts,
+  scrambleRoundFrom,
+  scrambleStandings,
   seasonAwards,
   seasonStats,
   settleBestBallWeek,
@@ -755,6 +842,8 @@ export {
   splitEvenly,
   stablefordPoints,
   strokesByHole,
+  teamHandicap,
+  teamStrokesByHole,
   totalsByPlayer,
   weeklyRecap,
   withPostedResults

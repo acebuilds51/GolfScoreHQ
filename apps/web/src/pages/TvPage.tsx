@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../lib/backend';
 import { textOn } from '../lib/brand';
-import { fmtLiveToPar, liveBoard, type LiveBoard } from '../lib/live';
+import { fmtLiveToPar, liveBoard, whoName, type LiveBoard } from '../lib/live';
 import { fmtDate, fmtMoney } from '../lib/scoring';
 import type { TvFeed, TvPanel } from '../lib/types';
 
@@ -55,10 +55,11 @@ function TvMessage({ title, text }: { title: string; text?: string }) {
 
 function TvScreen({ feed, stale }: { feed: TvFeed; stale: boolean }) {
   const settings = feed.display?.settings ?? { hideMoney: true, secondsPerPanel: 15, panels: ['live', 'matches', 'skins', 'ctp', 'highlights', 'standings'] as TvPanel[] };
-  const rules = feed.season!.rules;
+  // The week's own rules (a scramble week), else the season's.
+  const rules = feed.event?.rulesOverride ?? feed.season!.rules;
   const layout = feed.layout!;
   const names = useMemo(() => new Map((feed.players ?? []).map((p) => [p.id, p.displayName])), [feed.players]);
-  const board = useMemo(() => liveBoard(feed.rounds ?? [], layout, feed.season!.rules), [feed.rounds, layout, feed.season]);
+  const board = useMemo(() => liveBoard(feed.rounds ?? [], layout, rules), [feed.rounds, layout, rules]);
   const settled = feed.event!.status === 'settled';
 
   // Panels that have something to show, in the commissioner's order.
@@ -80,7 +81,7 @@ function TvScreen({ feed, stale }: { feed: TvFeed; stale: boolean }) {
   const flash = useFlash(board, names);
   const clock = useClock();
   const qr = useQr(feed.league.slug ? `${window.location.origin}/l/${feed.league.slug}` : null);
-  const ticker = board.highlights.slice(0, 12).map((h) => `${h.kind === 'ace' ? 'Hole-in-one' : h.kind === 'eagle' ? 'Eagle' : 'Birdie'} — ${names.get(h.playerId) ?? '?'}, #${h.holeNumber}`);
+  const ticker = board.highlights.slice(0, 12).map((h) => `${h.kind === 'ace' ? 'Hole-in-one' : h.kind === 'eagle' ? 'Eagle' : 'Birdie'} — ${whoName(names, h)}, #${h.holeNumber}`);
 
   return (
     <div className="tv-root">
@@ -156,7 +157,7 @@ function TvLeaderboard({ board, names, holes }: P & { holes: number }) {
           return (
             <tr key={`${l.roundId}-${l.playerId}`}>
               <td className="dim">{rank}</td>
-              <td className="left">{names.get(l.playerId) ?? '?'}{board.format === 'bestBallMatch' && l.side === null && <span className="dim small"> · skins</span>}</td>
+              <td className="left">{whoName(names, l)}{board.format === 'bestBallMatch' && l.side === null && <span className="dim small"> · skins</span>}</td>
               <td>{l.finished ? 'F' : `${l.thru}/${holes}`}</td>
               <td>{l.strokes}</td>
               {(board.net || stableford) && <td className="dim">{fmtLiveToPar(l.grossToPar)}</td>}
@@ -193,7 +194,7 @@ function TvSkins({ board, names }: P) {
       {board.skins.map((s) => (
         <div key={s.holeNumber} className={`tv-cell ${s.playerId ? 'won' : ''}`}>
           <span className="dim">Hole {s.holeNumber}</span>
-          <strong>{s.playerId ? names.get(s.playerId) ?? '?' : s.tiedCount > 1 ? `Tied (${s.tiedCount})` : '—'}</strong>
+          <strong>{s.playerId ? whoName(names, s) : s.tiedCount > 1 ? `Tied (${s.tiedCount})` : '—'}</strong>
           {s.score !== null && <span className="dim">{s.score}</span>}
         </div>
       ))}
@@ -221,7 +222,7 @@ function TvHighlights({ board, names }: P) {
       {board.highlights.slice(0, 12).map((h, i) => (
         <div key={i} className={`tv-cell ${h.kind}`}>
           <span className="dim">{label[h.kind]} · #{h.holeNumber}</span>
-          <strong>{names.get(h.playerId) ?? '?'}</strong>
+          <strong>{whoName(names, h)}</strong>
         </div>
       ))}
     </div>
@@ -256,8 +257,8 @@ function useFlash(board: LiveBoard, names: Map<string, string>) {
   const [msg, setMsg] = useState<string | null>(null);
   useEffect(() => {
     const events = [
-      ...board.highlights.filter((h) => h.kind !== 'birdie').map((h) => ({ key: `h:${h.playerId}:${h.holeNumber}`, text: `${h.kind === 'ace' ? 'Hole-in-one' : 'Eagle'} — ${names.get(h.playerId) ?? '?'}, hole ${h.holeNumber}` })),
-      ...board.skins.filter((s) => s.playerId).map((s) => ({ key: `s:${s.holeNumber}:${s.playerId}`, text: `Skin leader — ${names.get(s.playerId!) ?? '?'}, hole ${s.holeNumber}` })),
+      ...board.highlights.filter((h) => h.kind !== 'birdie').map((h) => ({ key: `h:${h.playerId}:${h.holeNumber}`, text: `${h.kind === 'ace' ? 'Hole-in-one' : 'Eagle'} — ${whoName(names, h)}, hole ${h.holeNumber}` })),
+      ...board.skins.filter((s) => s.playerId).map((s) => ({ key: `s:${s.holeNumber}:${s.playerId}`, text: `Skin leader — ${whoName(names, s)}, hole ${s.holeNumber}` })),
     ];
     if (seen.current === null) {
       seen.current = new Set(events.map((e) => e.key)); // don't flash what was already there when the TV turned on

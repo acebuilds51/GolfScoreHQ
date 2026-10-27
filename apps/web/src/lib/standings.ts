@@ -1,5 +1,5 @@
 import { seasonAwards, seasonStats, type Award, type LedgerEntry, type PlayedRound } from '@golfscorehq/engine';
-import { toEngineRound } from './scoring';
+import { toEngineRound, weekRules } from './scoring';
 import type { Layout, LeagueEvent, LedgerRow, Player, RoundData, Season } from './types';
 
 export interface WeekScore {
@@ -65,6 +65,8 @@ export function buildStandings(input: {
     const ev = settled.get(r.eventId);
     const layout = ev?.layoutId ? layoutById.get(ev.layoutId) : undefined;
     if (!ev || !layout) continue;
+    // A scramble week's scores are team scores: they don't count toward anyone's own scoring.
+    if (weekRules(input.season, ev).format === 'scramble') continue;
     played.push({ week: ev.weekNumber, layout: { id: layout.id, name: layout.name, holes: layout.holes }, round: toEngineRound(r, layout) });
   }
   const ledger: LedgerEntry[] = input.ledger

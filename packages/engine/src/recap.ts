@@ -1,6 +1,7 @@
 import { settleIndividualWeek } from './individual';
 import { totalsByPlayer } from './money';
-import type { BestBallMatchRules, IndividualRules } from './rules';
+import type { BestBallMatchRules, IndividualRules, ScrambleRules } from './rules';
+import { scrambleRoundFrom, settleScrambleWeek } from './scramble';
 import type { Cents, Layout, LedgerEntry, MatchRoundInput, PlayerId, Side } from './types';
 import { settleBestBallWeek } from './week';
 
@@ -19,9 +20,9 @@ export interface RecapHighlight {
   holeNumber: number;
 }
 
-/** A finishing place in stroke play or Stableford (complete rounds only). */
+/** A finishing place in stroke play, Stableford (one golfer) or a scramble (a team). Complete rounds only. */
 export interface RecapPlace {
-  playerId: PlayerId;
+  playerIds: PlayerId[];
   place: number;
   tied: boolean;
   /** Gross strokes. */
@@ -36,11 +37,11 @@ export interface RecapPlace {
 export interface WeeklyRecap {
   week: number;
   layoutName: string;
-  format: 'bestBallMatch' | 'strokePlay' | 'stableford';
+  format: 'bestBallMatch' | 'strokePlay' | 'stableford' | 'scramble';
   /** Scores (and places) are net. */
   net: boolean;
   skinsEnabled: boolean;
-  /** Stroke play and Stableford: the week's finishing order, best first. Empty for match formats. */
+  /** Stroke play, Stableford and scramble: the week's finishing order, best first. Empty for match formats. */
   leaderboard: RecapPlace[];
   matches: RecapMatch[];
   skins: { holeNumber: number; playerIds: PlayerId[]; value: Cents }[];
@@ -60,18 +61,24 @@ export function weeklyRecap(
   week: number,
   rounds: MatchRoundInput[],
   layout: Layout,
-  rules: BestBallMatchRules | IndividualRules,
+  rules: BestBallMatchRules | IndividualRules | ScrambleRules,
   earlierLedger: LedgerEntry[] = [],
 ): WeeklyRecap {
-  const individual = rules.format !== 'bestBallMatch';
-  const settled = individual ? settleIndividualWeek(rounds, layout, rules) : settleBestBallWeek(rounds, layout, rules);
+  const scramble = rules.format === 'scramble';
+  const settled = rules.format === 'scramble'
+    ? settleScrambleWeek(rounds.map(scrambleRoundFrom), layout, rules)
+    : rules.format === 'bestBallMatch' ? settleBestBallWeek(rounds, layout, rules) : settleIndividualWeek(rounds, layout, rules);
   const par = layout.holes.reduce((s, h) => s + h.par, 0);
 
   const leaderboard: RecapPlace[] = 'leaderboard' in settled
     ? settled.leaderboard
         .filter((l) => l.place !== null)
-        .map((l) => ({ playerId: l.playerId, place: l.place!, tied: l.tied, score: l.gross, grossToPar: l.grossToPar, toPar: l.toPar, points: l.points }))
-    : [];
+        .map((l) => ({ playerIds: [l.playerId], place: l.place!, tied: l.tied, score: l.gross, grossToPar: l.grossToPar, toPar: l.toPar, points: l.points }))
+    : 'standings' in settled
+      ? settled.standings
+          .filter((t) => t.place !== null)
+          .map((t) => ({ playerIds: t.players, place: t.place!, tied: t.tied, score: t.total, grossToPar: t.grossToPar, toPar: t.toPar, points: null }))
+      : [];
 
   const matches: RecapMatch[] = ('matches' in settled ? settled.matches : [])
     .map((m) => {
@@ -90,7 +97,7 @@ export function weeklyRecap(
 
   const highlights: RecapHighlight[] = [];
   let low: WeeklyRecap['lowRound'] = null;
-  for (const r of rounds) {
+  for (const r of scramble ? [] : rounds) {
     for (const p of r.players) {
       const scores = r.scores[p.id] ?? [];
       layout.holes.forEach((h, i) => {
@@ -148,7 +155,9 @@ const money = (c: Cents) => `${c < 0 ? '-' : '+'}$${(Math.abs(c) / 100).toFixed(
  * display names; amounts are left out when hideMoney is set.
  */
 export function recapText(recap: WeeklyRecap, name: (id: PlayerId) => string, opts: { leagueName?: string; hideMoney?: boolean } = {}): string {
-  const names = (ids: PlayerId[]) => ids.map(name).join(' & ');
+  // A scramble team reads better by first names: "Al / Bob / Cal".
+  const names = (ids: PlayerId[]) =>
+    recap.format === 'scramble' && ids.length > 1 ? ids.map((id) => name(id).split(' ')[0]).join(' / ') : ids.map(name).join(' & ');
   const lines: string[] = [];
   lines.push(`${opts.leagueName ? opts.leagueName + ' — ' : ''}Week ${recap.week} recap (${recap.layoutName})`, '');
 
@@ -167,13 +176,14 @@ export function recapText(recap: WeeklyRecap, name: (id: PlayerId) => string, op
 
   if (recap.leaderboard.length) {
     const top = recap.leaderboard.filter((l) => l.place <= 10);
-    lines.push(recap.format === 'stableford' ? `STABLEFORD${recap.net ? ' (NET)' : ''}` : `STROKE PLAY${recap.net ? ' (NET)' : ''}`);
+    const title = recap.format === 'stableford' ? 'STABLEFORD' : recap.format === 'scramble' ? 'SCRAMBLE' : 'STROKE PLAY';
+    lines.push(`${title}${recap.net ? ' (NET)' : ''}`);
     for (const l of top) {
       const pos = `${l.tied ? 'T' : ''}${l.place}.`;
       const result = recap.format === 'stableford'
         ? `${l.points} pts (${l.score})`
         : recap.net ? `net ${toParText(l.toPar)} (${l.score} gross)` : `${l.score} (${toParText(l.toPar)})`;
-      lines.push(`  ${pos} ${name(l.playerId)} — ${result}`);
+      lines.push(`  ${pos} ${names(l.playerIds)} — ${result}`);
     }
     if (recap.leaderboard.length > top.length) lines.push(`  …and ${recap.leaderboard.length - top.length} more`);
     lines.push('');

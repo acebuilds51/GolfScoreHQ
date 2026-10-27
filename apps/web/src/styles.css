@@ -244,6 +244,7 @@ label.format-pick input { width: auto; margin-top: 3px; }
 label.format-pick.on { border-color: var(--league); box-shadow: 0 0 0 1px var(--league); }
 label.format-pick.locked { cursor: default; opacity: 0.7; }
 .block { display: block; }
+.special-week-tag { margin-top: 4px; padding: 4px 8px; border-radius: 8px; background: var(--surface-2); border-left: 3px solid var(--league); }
 
 /* Scoring */
 .scorer { max-width: 560px; }
