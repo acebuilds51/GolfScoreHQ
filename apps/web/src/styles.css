@@ -319,6 +319,14 @@ table.money th { color: var(--text-2); font-weight: 600; }
 .plan-card .badge { font-size: 0.8rem; }
 .upgrade { border: 2px solid var(--league); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .upgrade-price { font-size: 1.6rem; }
+.site-footer { max-width: 960px; margin: 24px auto 0; padding: 18px 16px 28px; border-top: 1px solid var(--border); color: var(--text-2); font-size: 0.82rem; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; }
+.site-footer nav { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.site-footer a { color: var(--text-2); }
+.legal h2 { margin-top: 22px; margin-bottom: 6px; font-size: 1.05rem; }
+.legal p, .legal li { line-height: 1.6; }
+.legal ul { padding-left: 20px; margin: 6px 0; }
+.pricing-grid { margin: 18px 0; align-items: start; }
+.pricing-featured { border: 2px solid var(--league); }
 .share-week { border-top: 1px solid var(--border); padding-top: 14px; }
 .share-week .btn { display: inline-flex; align-items: center; gap: 6px; }
 .share-preview img { width: 100%; max-width: 360px; border-radius: 12px; box-shadow: var(--shadow); }

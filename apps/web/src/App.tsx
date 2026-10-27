@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Header } from './components/Header';
 import { PageSkeleton } from './components/ui';
+import { SiteFooter } from './components/SiteFooter';
+import { PricingPage, PrivacyPage, RefundsPage, TermsPage } from './pages/LegalPages';
 import { AuthContext, useAuth, useAuthState } from './lib/hooks';
 import { CoursesPage } from './pages/CoursesPage';
 import { JoinInvitePage } from './pages/JoinInvitePage';
@@ -52,8 +54,13 @@ export function App() {
             <Route path="settings" element={<SettingsPage />} />
             <Route path="more" element={<MorePage />} />
           </Route>
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/refunds" element={<RefundsPage />} />
           <Route path="*" element={<div className="page"><h1>Page not found</h1></div>} />
         </Routes>
+        <SiteFooter />
       </main>
     </AuthContext.Provider>
   );
