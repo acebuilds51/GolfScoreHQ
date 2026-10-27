@@ -83,7 +83,10 @@ export function PlanSection() {
             </div>
             <ul className="ticks small">{PRO_PERKS.map((p) => <li key={p}>{p}</li>)}</ul>
             <div><button className="btn btn-primary" disabled={busy} onClick={() => go(() => api.startCheckout({ leagueId: league.id }))}>{busy ? 'Opening checkout…' : `Upgrade to Pro, ${PRICE.pro}/year`}</button></div>
-            <p className="small muted">Secure checkout by Stripe. Renews yearly; cancel anytime. Have a discount code? Enter it at checkout.</p>
+            <p className="small muted">
+              Secure checkout by Stripe. Renews yearly; cancel anytime. Full refund within 14 days. Have a discount code? Enter it at checkout.
+              By upgrading you agree to the <Link to="/terms">Terms</Link> and <Link to="/refunds">Refund Policy</Link>.
+            </p>
           </div>
           <p className="small muted">Running several leagues? A <strong>Club</strong> covers up to 5 of your leagues for {PRICE.club} a year. Set it up on <Link to="/leagues">Your leagues</Link>.</p>
         </>
