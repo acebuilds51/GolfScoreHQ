@@ -1,9 +1,8 @@
-/** How long the splash (index.html) stays up when the app opens, so its little animation plays. */
-export const SPLASH_MS = 1400;
+/** How long the splash (index.html) stays up when the app opens: long enough to read it and watch the putt drop. */
+export const SPLASH_MS = 3000;
 
 /**
- * Fade the splash out once it has been up SPLASH_MS (the app loads behind it,
- * so it never adds a wait of its own beyond that). The Clubhouse TV and links
+ * Fade the splash out once it has been up SPLASH_MS (the app loads behind it). The Clubhouse TV and links
  * opened from emails or texts skip it.
  */
 export function hideSplash(now = performance.now()) {
