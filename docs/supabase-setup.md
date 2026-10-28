@@ -39,6 +39,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 19. `20261113000000_merge_players.sql` (merge duplicate golfers on the roster)
 20. `20261114000000_phone_book.sql` (golfers can text each other when the commissioner shares phone numbers)
 21. `20261115000000_tee_sheet.sql` (tee sheet: tee times, captains, groups, partners and matches)
+22. `20261116000000_season_tee_times.sql` (tee times set once for the season; captains optional, week by week)
 
 **B. Command line**
 

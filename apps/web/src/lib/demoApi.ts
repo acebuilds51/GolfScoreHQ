@@ -1,5 +1,5 @@
 import type { Api } from './api';
-import type { Contact, Course, JoinRequest, League, LeagueBilling, LeagueEvent, LedgerRow, PaymentHandles, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SetupRequest, SubRequest, TeeSheet, TvDisplay, User } from './types';
+import type { Contact, Course, JoinRequest, League, LeagueBilling, LeagueEvent, LedgerRow, PaymentHandles, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SetupRequest, SubRequest, TeeSheet, TeeTime, TvDisplay, User } from './types';
 import { isCommissioner } from './types';
 import type { WeeklyRecap } from '@golfscorehq/engine';
 import { buildRecapEmail } from '../../../../supabase/functions/send-recap/email';
@@ -53,12 +53,14 @@ interface Db {
   setupRequests: (SetupRequest & { requestedBy: string; staffUserId: string | null })[];
   /** eventId → the week's tee sheet. */
   teeSheets: Record<string, TeeSheet>;
+  /** seasonId → the season's tee times ("17:10", …, tee time 1 first). */
+  seasonTeeTimes: Record<string, string[]>;
 }
 
 const empty = (): Db => ({
   session: null, users: {}, leagues: [], members: [], players: [], contacts: {}, invites: [], joinRequests: [], courses: [],
   seasons: [], events: [], rounds: [], ledger: [], ctpDecisions: {}, tvDisplays: [], rsvps: {}, subRequests: [],
-  recapSends: {}, recapPrefs: {}, paymentHandles: {}, clubs: [], setupRequests: [], teeSheets: {},
+  recapSends: {}, recapPrefs: {}, paymentHandles: {}, clubs: [], setupRequests: [], teeSheets: {}, seasonTeeTimes: {},
 });
 
 /** Demo uploads live only for this page view (too big for the browser's saved demo data). */
@@ -121,15 +123,25 @@ export function demoApi(): DemoApi {
     requireMember(db, ev.leagueId);
     if (!has(db, ev.leagueId, 'lineup')) throw new Error('plan_feature: The tee sheet needs GolfScoreHQ Pro');
     if (ev.status === 'settled' || ev.status === 'rainout') throw new Error('This week is over.');
-    const sheet = (db.teeSheets[eventId] ??= { times: [], lineup: [] });
+    const sheet = (db.teeSheets[eventId] ??= { times: [], lineup: [], custom: false, seasonTimes: 0 });
     return { db, ev, sheet };
   }
-  /** Golfer themselves, the slot's captain, or a commissioner. */
+  /** Same as sync_week_tee_times(): an upcoming week follows its season's tee times (captains and groups stay put). */
+  function demoSyncWeek(db: Db, eventId: string) {
+    const ev = db.events.find((e) => e.id === eventId);
+    const sheet = (db.teeSheets[eventId] ??= { times: [], lineup: [], custom: false, seasonTimes: 0 });
+    if (!ev || sheet.custom || ev.status !== 'scheduled' || db.rounds.some((r) => r.eventId === eventId)) return;
+    const season = db.seasonTeeTimes[ev.seasonId] ?? [];
+    for (const l of sheet.lineup) if (l.slot !== null && l.slot > season.length) l.slot = null;
+    sheet.times = season.map((time, i) => ({ slot: i + 1, time, captainId: sheet.times.find((t) => t.slot === i + 1)?.captainId ?? null }));
+  }
+  /** Golfer themselves, anyone in the group (or its captain), or a commissioner. */
   function demoCanPlace(db: Db, leagueId: string, sheet: TeeSheet, playerId: string, slot: number | null) {
     const u = me(db);
     if (isCommissioner(roleIn(db, leagueId)) || db.players.find((p) => p.id === playerId)?.userId === u.id) return true;
-    const cap = sheet.times.find((t) => t.slot === slot)?.captainId;
-    return !!cap && db.players.find((p) => p.id === cap)?.userId === u.id;
+    if (slot === null) return false;
+    const mine = (id: string | null | undefined) => !!id && db.players.find((p) => p.id === id)?.userId === u.id;
+    return mine(sheet.times.find((t) => t.slot === slot)?.captainId) || sheet.lineup.some((l) => l.slot === slot && mine(l.playerId));
   }
   /** Out of any group and captaincy; a paired-up partner needs a partner again. */
   function demoClear(sheet: TeeSheet, playerId: string) {
@@ -535,6 +547,7 @@ export function demoApi(): DemoApi {
       if (db.events.some((x) => x.seasonId === seasonId && x.weekNumber === e.weekNumber)) throw new Error(`Week ${e.weekNumber} already exists.`);
       const ev = { id: id(), leagueId, seasonId, weekNumber: e.weekNumber, eventDate: e.eventDate, layoutId: e.layoutId, status: 'scheduled' as const };
       db.events.push(ev);
+      demoSyncWeek(db, ev.id);
       save(db);
       return ev.id;
     },
@@ -818,11 +831,38 @@ export function demoApi(): DemoApi {
       const db = load();
       const ev = db.events.find((e) => e.id === eventId)!;
       requireMember(db, ev.leagueId);
-      return JSON.parse(JSON.stringify(db.teeSheets[eventId] ?? { times: [], lineup: [] }));
+      const sheet: TeeSheet = JSON.parse(JSON.stringify(db.teeSheets[eventId] ?? { times: [], lineup: [] }));
+      return { ...sheet, custom: !!sheet.custom, seasonTimes: (db.seasonTeeTimes[ev.seasonId] ?? []).length };
+    },
+    async seasonTeeTimes(seasonId) {
+      const db = load();
+      const s = db.seasons.find((x) => x.id === seasonId)!;
+      requireMember(db, s.leagueId);
+      return [...(db.seasonTeeTimes[seasonId] ?? [])];
+    },
+    async setSeasonTeeTimes(seasonId, times) {
+      const db = load();
+      const s = db.seasons.find((x) => x.id === seasonId)!;
+      requireCommissioner(db, s.leagueId);
+      if (!has(db, s.leagueId, 'lineup')) throw new Error('plan_feature: The tee sheet needs GolfScoreHQ Pro');
+      if (times.length > 30) throw new Error('Up to 30 tee times.');
+      if (times.some((t) => !t)) throw new Error('Every tee time needs a time.');
+      db.seasonTeeTimes[seasonId] = [...times];
+      for (const e of db.events.filter((x) => x.seasonId === seasonId)) demoSyncWeek(db, e.id);
+      save(db);
+    },
+    async useSeasonTeeTimes(eventId) {
+      const { db, ev, sheet } = lineupDb(eventId);
+      requireCommissioner(db, ev.leagueId);
+      sheet.custom = false;
+      demoSyncWeek(db, eventId);
+      save(db);
     },
     async setTeeTimes(eventId, times) {
       const { db, ev, sheet } = lineupDb(eventId);
       requireCommissioner(db, ev.leagueId);
+      const season = db.seasonTeeTimes[ev.seasonId] ?? [];
+      sheet.custom = times.map((t) => `${t.slot}@${t.time}`).sort().join() !== season.map((t, i) => `${i + 1}@${t}`).sort().join();
       sheet.times = times.map((t) => ({ ...t }));
       for (const l of sheet.lineup) if (l.slot !== null && !times.some((t) => t.slot === l.slot)) l.slot = null;
       for (const t of times) {
@@ -837,14 +877,13 @@ export function demoApi(): DemoApi {
       const { db, ev, sheet } = lineupDb(eventId);
       const t = sheet.times.find((x) => x.slot === slot);
       if (!t) throw new Error('No such tee time.');
-      if (!demoCanPlace(db, ev.leagueId, sheet, playerId, slot)) throw new Error('You can add yourself, or golfers to a group you captain.');
+      if (!demoCanPlace(db, ev.leagueId, sheet, playerId, slot)) throw new Error('You can add yourself, or golfers to your own group.');
       const n = sheet.lineup.filter((l) => l.slot === slot && l.playerId !== playerId).length;
       if (n >= 5 || (n >= 4 && !isCommissioner(roleIn(db, ev.leagueId)))) throw new Error('That group is full.');
       if (!sheet.lineup.some((l) => l.playerId === playerId && l.slot === slot)) {
         demoClear(sheet, playerId);
         sheet.lineup.push({ playerId, slot, looking: null, partnerId: null });
       }
-      if (!t.captainId) t.captainId = playerId;
       (db.rsvps[eventId] ??= {})[playerId] = 'in';
       save(db);
     },

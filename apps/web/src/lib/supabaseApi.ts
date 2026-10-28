@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Api, CourseSummary, LookupCourse } from './api';
-import type { LeagueBilling, RecapPreview, SetupRequest, SubOffer } from './types';
+import type { LeagueBilling, RecapPreview, SetupRequest, SubOffer, TeeTime } from './types';
 import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, TvFeed, User } from './types';
 import { randomToken, sha256Hex } from './util';
 
@@ -470,17 +470,32 @@ export function supabaseApi(url: string, anonKey: string): Api {
       check(await sb.from('sub_requests').update({ closed_at: new Date().toISOString() }).eq('id', requestId));
     },
     async teeSheet(eventId) {
-      const [times, lineup] = await Promise.all([
+      const [times, lineup, ev] = await Promise.all([
         sb.from('event_tee_times').select('slot, tee_time, captain_id').eq('event_id', eventId).order('slot'),
         sb.from('event_lineup').select('player_id, slot, looking, partner_id').eq('event_id', eventId),
+        sb.from('events').select('season_id, custom_tee_times').eq('id', eventId).single(),
       ]);
+      const e = check(ev) as Row;
+      const season = await sb.from('season_tee_times').select('slot', { count: 'exact', head: true }).eq('season_id', e.season_id);
+      if (season.error) throw new Error(season.error.message);
       return {
-        times: (check(times) as Row[]).map((r) => ({ slot: r.slot, time: r.tee_time ? String(r.tee_time).slice(0, 5) : null, captainId: r.captain_id })),
+        times: (check(times) as Row[]).map(teeTimeRow),
         lineup: (check(lineup) as Row[]).map((r) => ({ playerId: r.player_id, slot: r.slot, looking: r.looking, partnerId: r.partner_id })),
+        custom: !!e.custom_tee_times,
+        seasonTimes: season.count ?? 0,
       };
     },
     async setTeeTimes(eventId, times) {
       check(await sb.rpc('set_tee_times', { p_event: eventId, p_times: times.map((t) => ({ slot: t.slot, time: t.time, captainId: t.captainId })) }));
+    },
+    async seasonTeeTimes(seasonId) {
+      return (check(await sb.from('season_tee_times').select('tee_time').eq('season_id', seasonId).order('slot')) as Row[]).map((r) => String(r.tee_time).slice(0, 5));
+    },
+    async setSeasonTeeTimes(seasonId, times) {
+      check(await sb.rpc('set_season_tee_times', { p_season: seasonId, p_times: times }));
+    },
+    async useSeasonTeeTimes(eventId) {
+      check(await sb.rpc('use_season_tee_times', { p_event: eventId }));
     },
     async lineupJoin(eventId, playerId, slot) {
       check(await sb.rpc('lineup_join', { p_event: eventId, p_player: playerId, p_slot: slot }));
@@ -616,6 +631,10 @@ const ROUND_SELECT =
 
 function toSeason(r: Row): Season {
   return { id: r.id, leagueId: r.league_id, year: r.year, name: r.name, rules: r.rules, startDate: r.start_date, leagueDay: r.league_day };
+}
+
+function teeTimeRow(r: Row): TeeTime {
+  return { slot: r.slot, time: r.tee_time ? String(r.tee_time).slice(0, 5) : null, captainId: r.captain_id };
 }
 
 function toEvent(r: Row): LeagueEvent {
