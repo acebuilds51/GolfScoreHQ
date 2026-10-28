@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 import { CopyField, EmptyState, ErrorText } from '../components/ui';
 import { api } from '../lib/backend';
-import { useAction, useAsync, useLeague } from '../lib/hooks';
+import { useAction, useAsync, useAuth, useLeague } from '../lib/hooks';
 import { isCommissioner, type Contact, type Player } from '../lib/types';
 import { checkGolferRows, parseRoster, type GolferRow } from '../lib/util';
 import { fmtIndex, leagueIndexes, loadPlayedRounds, parseIndex, type IndexInfo } from '../lib/handicaps';
 import { handicapRules } from '../lib/scoring';
 import { norm } from '../lib/importer';
-import { smsLink, telNumber } from '../lib/sms';
+import { smsBatches, smsLink, telNumber } from '../lib/sms';
 
 export function RosterPage() {
   const { league } = useLeague();
@@ -65,7 +65,7 @@ export function RosterPage() {
       )}
 
       {commish && <Duplicates players={players} onMerged={data.reload} />}
-      {commish && data.data && <TextLeague players={active} phoneOf={phoneOf} />}
+      {data.data && (commish || league.sharePhones) && <TextLeague players={active} phoneOf={phoneOf} commish={commish} />}
 
       <section className="card flush">
         <div className="row between pad">
@@ -142,44 +142,93 @@ function keeperOf(set: Player[]): Player {
   return set.find((p) => p.userId) ?? set.find((p) => p.active && !p.isSub) ?? set.find((p) => p.active) ?? set[0]!;
 }
 
+type Audience = 'pick' | 'members' | 'subs' | 'all';
+const GROUP_SIZES = [10, 20, 32];
+const SIZE_KEY = 'gshq-text-group-size';
+
 /**
- * Commissioners: one text to everyone (or just members or subs), opened in the
- * phone's own Messages app as a group text. Also where golfers are allowed to see
- * each other's numbers.
+ * Group texts through the phone's own Messages app: pick golfers, or (for
+ * commissioners) all members, subs or everyone. Lists bigger than the carrier's
+ * group-text limit are split into several group texts with the same message.
+ * Commissioners also choose here whether golfers can see each other's numbers.
  */
-function TextLeague({ players, phoneOf }: { players: Player[]; phoneOf: (p: Player) => string | null }) {
+function TextLeague({ players, phoneOf, commish }: { players: Player[]; phoneOf: (p: Player) => string | null; commish: boolean }) {
   const { league, reloadLeague } = useLeague();
-  const [audience, setAudience] = useState<'all' | 'members' | 'subs'>('members');
+  const { user } = useAuth();
+  const [audience, setAudience] = useState<Audience>(commish ? 'members' : 'pick');
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState('');
+  const [size, setSize] = useState(() => {
+    try { return Number(localStorage.getItem(SIZE_KEY)) || 20; } catch { return 20; }
+  });
   const { busy, error, run } = useAction();
-  const chosen = players.filter((p) => (audience === 'all' ? true : audience === 'subs' ? p.isSub : !p.isSub));
+
+  // You don't text yourself.
+  const others = players.filter((p) => !(user && p.userId === user.id));
+  const reachable = others.filter((p) => telNumber(phoneOf(p)));
+  const chosen = audience === 'pick' ? reachable.filter((p) => picked.has(p.id))
+    : others.filter((p) => (audience === 'all' ? true : audience === 'subs' ? p.isSub : !p.isSub));
   const withPhone = chosen.filter((p) => telNumber(phoneOf(p)));
   const missing = chosen.filter((p) => !telNumber(phoneOf(p)));
-  const link = smsLink(withPhone.map(phoneOf), message);
+  const batches = smsBatches(withPhone.map(phoneOf), message, size);
+  const toggle = (id: string) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const audiences: [Audience, string][] = commish
+    ? [['pick', 'Pick golfers'], ['members', 'Members'], ['subs', 'Subs'], ['all', 'Everyone']]
+    : [['pick', 'Pick golfers'], ['members', 'Members'], ['all', 'Everyone']];
 
   return (
     <section className="card stack">
-      <h2>Text the league</h2>
+      <h2>{commish ? 'Text the league' : 'Text golfers'}</h2>
       <div className="row wrap pills" role="group" aria-label="Who gets it">
-        {([['members', 'Members'], ['subs', 'Subs'], ['all', 'Everyone']] as const).map(([k, label]) => (
+        {audiences.map(([k, label]) => (
           <button key={k} type="button" className={`pill ${audience === k ? 'on' : ''}`} aria-pressed={audience === k} onClick={() => setAudience(k)}>{label}</button>
         ))}
       </div>
+      {audience === 'pick' && (
+        reachable.length ? (
+          <div className="stack">
+            <div className="pick-list">
+              {reachable.map((p) => (
+                <label key={p.id} className="check-row small">
+                  <input type="checkbox" checked={picked.has(p.id)} onChange={() => toggle(p.id)} />
+                  {p.displayName}{p.isSub && <span className="muted"> (sub)</span>}
+                </label>
+              ))}
+            </div>
+            {picked.size > 0 && <div><button type="button" className="btn btn-ghost btn-sm" onClick={() => setPicked(new Set())}>Clear ({picked.size})</button></div>}
+          </div>
+        ) : <p className="small muted">No golfers have a phone number on file yet.</p>
+      )}
       <textarea rows={3} maxLength={1000} value={message} placeholder="e.g. Rainout tonight, see everyone next Thursday." onChange={(e) => setMessage(e.target.value)} />
       <div className="row wrap">
-        {link ? <a className="btn btn-primary" href={link}>Open in Messages ({withPhone.length})</a> : <span className="small muted">Nobody here has a phone number yet.</span>}
+        {batches.length === 0 ? (
+          <span className="small muted">{audience === 'pick' ? 'Tick the golfers to text.' : 'Nobody here has a phone number yet.'}</span>
+        ) : batches.length === 1 ? (
+          <a className="btn btn-primary" href={batches[0]!.link}>Open in Messages ({batches[0]!.count})</a>
+        ) : batches.map((b, i) => (
+          <a key={i} className="btn btn-primary" href={b.link}>Group {i + 1} of {batches.length} ({b.count})</a>
+        ))}
       </div>
+      <label className="inline small">
+        Group texts of up to
+        <select value={size} onChange={(e) => { const n = Number(e.target.value); setSize(n); try { localStorage.setItem(SIZE_KEY, String(n)); } catch { /* not saved */ } }}>
+          {GROUP_SIZES.map((n) => <option key={n} value={n}>{n} people{n === 20 ? ' (most carriers)' : n === 32 ? ' (iPhones only, iMessage)' : ' (strict carriers)'}</option>)}
+        </select>
+      </label>
       <p className="small muted">
-        Opens your phone's Messages app with everyone's numbers and your message filled in, as one group text from your own number. Nothing is sent until you press send there.
+        Opens your phone's Messages app with the numbers and your message filled in, from your own number. Nothing is sent until you press send.
+        {batches.length > 1 && <> Your carrier limits how many people one group text can go to, so this is split into {batches.length} group texts: open and send each one. Replies stay within each group.</>}
         {missing.length > 0 && <> No number for {missing.map((p) => p.displayName).join(', ')}.</>}
       </p>
-      <label className="check-row small">
-        <input
-          type="checkbox" checked={!!league.sharePhones} disabled={busy}
-          onChange={async (e) => { const on = e.target.checked; const ok = await run(async () => { await api.updateLeague(league.id, { sharePhones: on }); return true; }); if (ok) reloadLeague(); }}
-        />
-        Golfers can see each other's phone numbers (adds a Text button on the roster for everyone). Emails stay private.
-      </label>
+      {commish && (
+        <label className="check-row small">
+          <input
+            type="checkbox" checked={!!league.sharePhones} disabled={busy}
+            onChange={async (e) => { const on = e.target.checked; const ok = await run(async () => { await api.updateLeague(league.id, { sharePhones: on }); return true; }); if (ok) reloadLeague(); }}
+          />
+          Golfers can see each other's phone numbers (gives everyone the Text buttons and this box). Emails stay private.
+        </label>
+      )}
       <ErrorText>{error}</ErrorText>
     </section>
   );
