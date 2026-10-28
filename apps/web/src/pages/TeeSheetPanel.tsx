@@ -49,6 +49,9 @@ export function TeeSheetPanel({ event, players }: { event: LeagueEvent; players:
   const act = async (fn: () => Promise<void>) => { const ok = await run(async () => { await fn(); return true; }); if (ok) data.reload(); };
   // Captain (where the commissioner picked one) or anyone in the group can add golfers to it.
   const canManage = (slot: number) => !!me && (sheet.times.find((t) => t.slot === slot)?.captainId === me.id || view.slotOf.get(me.id) === slot);
+  const myCaptainSlot = me ? sheet.times.find((t) => t.captainId === me.id)?.slot ?? null : null;
+  // Captains who gave up a tee time this week and haven't been put back.
+  const vacated = sheet.vacated.filter((v) => !sheet.times.some((t) => t.captainId === v.playerId));
 
   if (editing) {
     return <TeeTimesForm event={event} players={active} times={sheet.times} onSeason={sheet.seasonTimes > 0 && !sheet.custom}
@@ -88,19 +91,30 @@ export function TeeSheetPanel({ event, players }: { event: LeagueEvent; players:
                   <strong>T{g.slot}{g.time && <span className="muted"> · {fmtTeeTime(g.time)}</span>}</strong>
                   <span className={`small ${g.open ? '' : 'muted'}`}>{g.open ? `${g.open} open` : 'Full'}</span>
                 </div>
+                {!g.captainId && <div className="small muted">Open group: any golfers</div>}
                 <div className="small">
-                  {g.members.length === 0 ? <span className="muted">Open tee time.</span> : g.members.map((id, i) => (
-                    <span key={id} className="tee-member">
-                      {i > 0 && ', '}{name(id)}{id === g.captainId && <span className="muted"> (captain)</span>}
-                      {(commish || canManage(g.slot)) && id !== me?.id && (
-                        <button type="button" className="linkish" aria-label={`Take ${name(id)} out of T${g.slot}`} disabled={busy} onClick={() => act(() => api.lineupLeave(event.id, id))}>×</button>
-                      )}
-                    </span>
-                  ))}
+                  {g.members.length === 0 ? <span className="muted">No one yet.</span> : g.members.map((id, i) => {
+                    const isCaptain = id === g.captainId;
+                    return (
+                      <span key={id} className="tee-member">
+                        {i > 0 && ', '}{name(id)}{isCaptain && <span className="muted"> (captain)</span>}
+                        {(isCaptain ? commish : commish || canManage(g.slot)) && id !== me?.id && (
+                          <button type="button" className="linkish" aria-label={`Take ${name(id)} out of T${g.slot}`} disabled={busy}
+                            onClick={() => (!isCaptain || window.confirm(`Take ${name(id)} out as captain of T${g.slot}? Their group breaks up and the groups behind move up a tee time.`))
+                              && act(() => api.lineupLeave(event.id, id))}>×</button>
+                        )}
+                      </span>
+                    );
+                  })}
                 </div>
                 <div className="row wrap">
-                  {me && !mine && g.open > 0 && <button className="btn btn-sm" disabled={busy} onClick={() => act(() => api.lineupJoin(event.id, me.id, g.slot))}>Join T{g.slot}</button>}
-                  {mine && <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => act(() => api.lineupLeave(event.id, me!.id))}>Leave</button>}
+                  {me && !mine && g.open > 0 && (
+                    <button className="btn btn-sm" disabled={busy}
+                      onClick={() => (myCaptainSlot === null || window.confirm(giveUpWarning(myCaptainSlot, `join T${g.slot}`))) && act(() => api.lineupJoin(event.id, me.id, g.slot))}>
+                      Join T{g.slot}
+                    </button>
+                  )}
+                  {mine && g.captainId !== me!.id && <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => act(() => api.lineupLeave(event.id, me!.id))}>Leave</button>}
                   {canAdd && (
                     <select aria-label={`Add a golfer to T${g.slot}`} value="" disabled={busy} onChange={(e) => e.target.value && act(() => api.lineupJoin(event.id, e.target.value, g.slot))}>
                       <option value="">Add a golfer…</option>
@@ -119,6 +133,20 @@ export function TeeSheetPanel({ event, players }: { event: LeagueEvent; players:
         {view.teams.length > 0 && <p><strong>Need a match:</strong> {view.teams.map(([a, b]) => `${first(a)} & ${first(b)}`).join(' · ')}</p>}
         {view.playingNoGroup.length > 0 && <p><strong>Playing, no group yet:</strong> {view.playingNoGroup.map(name).join(', ')}</p>}
         {view.out.length > 0 && <p><strong>Not playing:</strong> {view.out.map(name).join(', ')}</p>}
+        {vacated.length > 0 && (
+          <div className="stack" style={{ gap: 4 }}>
+            <strong>Gave up their tee time:</strong>
+            {vacated.map((v) => (
+              <div key={v.playerId} className="row wrap">
+                <span>🚪 {name(v.playerId)} <span className="muted">(had T{v.slot} · {v.reason})</span></span>
+                {commish && sheet.times.some((t) => t.slot === v.slot) && (
+                  <button type="button" className="btn btn-ghost btn-sm" disabled={busy}
+                    onClick={() => act(() => api.lineupRestoreCaptain(event.id, v.playerId, v.slot))}>Put back at T{v.slot}</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
         {view.noReply.length > 0 && <p className="muted"><strong>Haven't said:</strong> {view.noReply.map(name).join(', ')}</p>}
       </div>
 
@@ -129,6 +157,10 @@ export function TeeSheetPanel({ event, players }: { event: LeagueEvent; players:
 }
 
 type Act = (fn: () => Promise<void>) => Promise<void>;
+
+/** What a captain is told before they give up their tee time (same as the old OCBC app). */
+const giveUpWarning = (slot: number, doing: string) =>
+  `You're the captain of T${slot}. If you ${doing}, you give up T${slot} this week: your group breaks up and the groups behind move up a tee time. Go ahead?`;
 
 /** Group texts for a list of golfers, split under the carrier limit. */
 function TextButtons({ ids, phones, message, label }: { ids: string[]; phones: Record<string, string>; message: string; label: string }) {
@@ -167,8 +199,9 @@ function MyStatus({ event, me, view, players, phones, busy, act }: {
   const myGroup = mySlot ? view.groups.find((g) => g.slot === mySlot) : undefined;
   const at = myGroup?.time ? ` at ${fmtTeeTime(myGroup.time)}` : '';
   const hasRoom = !!myGroup && myGroup.open > 0;
+  const captain = !!myGroup && myGroup.captainId === me.id;
 
-  const status = myGroup ? `You're in T${myGroup.slot}${at}${hasRoom ? ` (${myGroup.open} open)` : ''}.`
+  const status = myGroup ? `${captain ? "You're the captain of" : "You're in"} T${myGroup.slot}${at}${hasRoom ? ` (${myGroup.open} open)` : ''}.`
     : mate ? `You and ${first(mate)} need a match.`
     : looking ? 'You need a partner.'
     : out ? "You're not playing this week."
@@ -180,7 +213,12 @@ function MyStatus({ event, me, view, players, phones, busy, act }: {
       <div className="row wrap">
         {!looking && !mySlot && <button className="btn btn-sm" disabled={busy} onClick={() => act(() => api.lineupStatus(event.id, me.id, 'partner'))}>I need a partner</button>}
         {!mate && !mySlot && <button className="btn btn-sm" disabled={busy} onClick={() => setPicking(!picking)}>My partner and I need a match</button>}
-        {!out && <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => act(() => api.lineupStatus(event.id, me.id, 'out'))}>Not playing</button>}
+        {!out && (
+          <button className="btn btn-ghost btn-sm" disabled={busy}
+            onClick={() => (!captain || window.confirm(giveUpWarning(myGroup!.slot, "aren't playing"))) && act(() => api.lineupStatus(event.id, me.id, 'out'))}>
+            Not playing
+          </button>
+        )}
         {(looking || mate || out) && <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => act(() => api.lineupStatus(event.id, me.id, 'none'))}>Clear</button>}
       </div>
       {picking && !mate && (
@@ -211,6 +249,31 @@ function MyStatus({ event, me, view, players, phones, busy, act }: {
   );
 }
 
+/** Commissioner: put a captain in at a tee time; the groups from there move down one (the old app's "Restore captain"). */
+function PutCaptainIn({ event, view, players, busy, act }: { event: LeagueEvent; view: SheetView; players: Player[]; busy: boolean; act: Act }) {
+  const [open, setOpen] = useState(false);
+  const [who, setWho] = useState('');
+  const [slot, setSlot] = useState(String(view.groups[0]!.slot));
+  const captains = new Set(view.groups.map((g) => g.captainId).filter(Boolean));
+  if (!open) return <div><button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(true)}>Put a captain in</button></div>;
+  return (
+    <div className="stack" style={{ gap: 4 }}>
+      <div className="row wrap">
+        <select value={who} onChange={(e) => setWho(e.target.value)} aria-label="Captain">
+          <option value="">Captain…</option>
+          {players.filter((p) => !captains.has(p.id)).map((p) => <option key={p.id} value={p.id}>{p.displayName}{p.isSub ? ' (sub)' : ''}</option>)}
+        </select>
+        <select value={slot} onChange={(e) => setSlot(e.target.value)} aria-label="Tee time">
+          {view.groups.map((g) => <option key={g.slot} value={g.slot}>T{g.slot}{g.time ? ` · ${fmtTeeTime(g.time)}` : ''}</option>)}
+        </select>
+        <button className="btn btn-sm" disabled={busy || !who} onClick={async () => { await act(() => api.lineupRestoreCaptain(event.id, who, Number(slot))); setOpen(false); setWho(''); }}>Put in</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+      <p className="small muted">The groups from that tee time on move down one.</p>
+    </div>
+  );
+}
+
 /** Commissioner: set anyone's status, and nudge the golfers who haven't answered. */
 function CommissionerTools({ event, view, players, phones, busy, act }: {
   event: LeagueEvent; view: SheetView; players: Player[]; phones: Record<string, string>; busy: boolean; act: Act;
@@ -228,6 +291,7 @@ function CommissionerTools({ event, view, players, phones, busy, act }: {
           message={`${league.name}, ${weekWhen(event)}: are you playing? Join a group or say you're out here: ${link}`} />
       )}
       {league.features.includes('rsvp') && event.eventDate && view.noReply.length > 0 && <ReminderNow event={event} />}
+      {view.groups.length > 0 && <PutCaptainIn event={event} view={view} players={players} busy={busy} act={act} />}
       <div><button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(!open)}>{open ? 'Done' : "Set a golfer's status"}</button></div>
       {open && (
         <div className="row wrap">

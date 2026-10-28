@@ -495,10 +495,11 @@ export function supabaseApi(url: string, anonKey: string): Api {
       check(await sb.from('sub_requests').update({ closed_at: new Date().toISOString() }).eq('id', requestId));
     },
     async teeSheet(eventId) {
-      const [times, lineup, ev] = await Promise.all([
+      const [times, lineup, ev, vacated] = await Promise.all([
         sb.from('event_tee_times').select('slot, tee_time, captain_id').eq('event_id', eventId).order('slot'),
         sb.from('event_lineup').select('player_id, slot, looking, partner_id').eq('event_id', eventId),
         sb.from('events').select('season_id, custom_tee_times').eq('id', eventId).single(),
+        sb.from('event_vacated').select('player_id, original_slot, reason').eq('event_id', eventId).order('created_at'),
       ]);
       const e = check(ev) as Row;
       const season = await sb.from('season_tee_times').select('slot', { count: 'exact', head: true }).eq('season_id', e.season_id);
@@ -508,6 +509,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
         lineup: (check(lineup) as Row[]).map((r) => ({ playerId: r.player_id, slot: r.slot, looking: r.looking, partnerId: r.partner_id })),
         custom: !!e.custom_tee_times,
         seasonTimes: season.count ?? 0,
+        vacated: (check(vacated) as Row[]).map((r) => ({ playerId: r.player_id, slot: r.original_slot, reason: r.reason })),
       };
     },
     async setTeeTimes(eventId, times) {
@@ -527,6 +529,9 @@ export function supabaseApi(url: string, anonKey: string): Api {
     },
     async lineupLeave(eventId, playerId) {
       check(await sb.rpc('lineup_leave', { p_event: eventId, p_player: playerId }));
+    },
+    async lineupRestoreCaptain(eventId, playerId, slot) {
+      check(await sb.rpc('lineup_restore_captain', { p_event: eventId, p_player: playerId, p_slot: slot }));
     },
     async lineupStatus(eventId, playerId, status, partnerId) {
       check(await sb.rpc('lineup_status', { p_event: eventId, p_player: playerId, p_status: status, p_partner: partnerId ?? null }));
@@ -610,7 +615,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
     },
     watchLeague(leagueId, onChange) {
       const channel = sb.channel(`league-${leagueId}-${Math.random().toString(36).slice(2)}`);
-      for (const table of ['hole_scores', 'rounds', 'ctp_reports', 'presses', 'events', 'event_tee_times', 'event_lineup', 'event_rsvps']) {
+      for (const table of ['hole_scores', 'rounds', 'ctp_reports', 'presses', 'events', 'event_tee_times', 'event_lineup', 'event_rsvps', 'event_vacated']) {
         channel.on('postgres_changes', { event: '*', schema: 'public', table, filter: `league_id=eq.${leagueId}` }, () => onChange());
       }
       channel.subscribe();

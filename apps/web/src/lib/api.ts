@@ -149,7 +149,10 @@ export interface Api {
   useSeasonTeeTimes(eventId: string): Promise<void>;
   /** Put a golfer in a tee time's group (yourself, or anyone into a group you captain; commissioners anyone). */
   lineupJoin(eventId: string, playerId: string, slot: number): Promise<void>;
+  /** Out of their group. A captain can't (the commissioner can take one out: they give up the tee time). */
   lineupLeave(eventId: string, playerId: string): Promise<void>;
+  /** Commissioner: put a captain in at a tee time; the groups from there move down one. */
+  lineupRestoreCaptain(eventId: string, playerId: string, slot: number): Promise<void>;
   /** A golfer's own status (or the commissioner's say): needs a partner, needs a match with a partner, not playing, or clear. */
   lineupStatus(eventId: string, playerId: string, status: LineupStatus, partnerId?: string | null): Promise<void>;
 
