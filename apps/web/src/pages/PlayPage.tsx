@@ -15,7 +15,8 @@ const FORMAT_HELP: Record<FormatKey, string> = {
   stableford: 'Points on every hole: 2 for par, 3 for birdie, 1 for bogey, 0 for double or worse. Most points wins, and one bad hole never ruins the night.',
   scramble: 'Each group is a team playing the best shot every time, with one score per hole. Lowest team total wins. (For a single scramble week in another format, use the week page.)',
 };
-import { isCommissioner, type Season } from '../lib/types';
+import { isCommissioner, type LeagueEvent, type Season } from '../lib/types';
+import { addDays, nextLeagueDay, scheduleDates } from '../lib/schedule';
 import { SeasonTeeTimes } from './TeeSheetPanel';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -31,6 +32,7 @@ export function PlayPage() {
   }, [league.id]);
   const [editingRules, setEditingRules] = useState(false);
   const [nextOpen, setNextOpen] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
 
   if (data.error) return <div className="page"><ErrorText>{data.error}</ErrorText></div>;
   if (!data.data) return <PageSkeleton />;
@@ -91,10 +93,19 @@ export function PlayPage() {
       <section className="card flush">
         <div className="row between pad wrap">
           <h2>Weeks</h2>
-          {commish && <AddWeek season={season} weekNumber={nextWeek} courses={courses} onAdded={data.reload} />}
+          {commish && !scheduling && (
+            <div className="row wrap">
+              <button className="btn btn-sm" onClick={() => setScheduling(true)}>{events.length ? 'Add more weeks' : "Add the season's weeks"}</button>
+              <AddWeek season={season} weekNumber={nextWeek} courses={courses} onAdded={data.reload} />
+            </div>
+          )}
         </div>
+        {scheduling && (
+          <AddSeasonWeeks season={season} events={events} courses={courses}
+            onCancel={() => setScheduling(false)} onAdded={() => { setScheduling(false); data.reload(); }} />
+        )}
         {events.length === 0 ? (
-          <EmptyState title="No weeks yet">{commish && <p className="muted">Add week 1 to start scoring.</p>}</EmptyState>
+          !scheduling && <EmptyState title="No weeks yet">{commish && <p className="muted">Add the whole season at once, or one week at a time.</p>}</EmptyState>
         ) : (
           <ul className="list">
             {[...events].reverse().map((e) => {
@@ -117,6 +128,75 @@ export function PlayPage() {
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * Commissioner: the season's weeks in one go, every 7 days from the first
+ * date. Untick off dates (holidays, course events) and the weeks move along.
+ * Each week gets its course and the season's tee times.
+ */
+function AddSeasonWeeks({ season, events, courses, onAdded, onCancel }: {
+  season: Season; events: LeagueEvent[]; courses: Parameters<typeof layoutForWeek>[0]; onAdded: () => void; onCancel: () => void;
+}) {
+  const { league } = useLeague();
+  const last = events.at(-1);
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const [first, setFirst] = useState(
+    last?.eventDate ? addDays(last.eventDate, 7) : season.startDate ?? nextLeagueDay(todayIso, season.leagueDay ?? 4),
+  );
+  const [count, setCount] = useState(String(Math.max(1, 18 - events.length)));
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
+  const [progress, setProgress] = useState<string | null>(null);
+  const { busy, error, setError, run } = useAction();
+  const n = Math.min(40, Math.max(0, Number(count) || 0));
+  const { dates, all } = first ? scheduleDates(first, n, skipped) : { dates: [], all: [] };
+  const startWeek = (last?.weekNumber ?? 0) + 1;
+  const weekOf = new Map(dates.map((d, i) => [d, startWeek + i]));
+  const toggle = (d: string) => { const s = new Set(skipped); if (s.has(d)) s.delete(d); else s.add(d); setSkipped(s); };
+
+  return (
+    <form className="pad stack" onSubmit={async (e) => {
+      e.preventDefault();
+      if (!dates.length) return setError('Pick the first date and how many weeks.');
+      if (last?.eventDate && dates[0]! <= last.eventDate) return setError(`Start after week ${last.weekNumber} (${fmtDate(last.eventDate)}).`);
+      const ok = await run(async () => {
+        for (const [i, date] of dates.entries()) {
+          const w = startWeek + i;
+          setProgress(`Adding week ${w} of ${startWeek + dates.length - 1}…`);
+          await api.createEvent(league.id, season.id, { weekNumber: w, eventDate: date, layoutId: layoutForWeek(courses, w) });
+        }
+        return true;
+      });
+      setProgress(null);
+      if (ok) onAdded();
+    }}>
+      <div className="grid three">
+        <label>{events.length ? 'Next week' : 'First week'}<input type="date" value={first} onChange={(e) => { setFirst(e.target.value); setSkipped(new Set()); setError(null); }} /></label>
+        <label>How many weeks<input inputMode="numeric" value={count} onChange={(e) => setCount(e.target.value.replace(/\D/g, ''))} /></label>
+      </div>
+      {all.length > 0 && (
+        <>
+          <p className="small muted">Untick any night you're not playing (a holiday, a course event) and the rest move along a week.</p>
+          <div className="week-dates">
+            {all.map((d) => (
+              <label key={d} className={`check-row week-date${skipped.has(d) ? ' off' : ''}`}>
+                <input type="checkbox" checked={!skipped.has(d)} onChange={() => toggle(d)} />
+                <span>{skipped.has(d) ? 'Off' : `Week ${weekOf.get(d)}`} <span className="muted">· {fmtDate(d)}</span></span>
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+      <ErrorText>{error}</ErrorText>
+      <div className="row wrap">
+        <button className="btn btn-primary" disabled={busy || !dates.length}>
+          {progress ?? (dates.length ? `Add weeks ${startWeek}–${startWeek + dates.length - 1}` : 'Add weeks')}
+        </button>
+        <button type="button" className="btn btn-ghost" disabled={busy} onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
   );
 }
 
