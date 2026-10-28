@@ -7,6 +7,7 @@ import { useAction, useAsync, useAuth, useLeague } from '../lib/hooks';
 import { isCommissioner, type PaymentHandles, type Plan, type Role, type TvDisplay, type TvPanel, type TvSettings, type TvSponsor } from '../lib/types';
 import { randomJoinCode } from '../lib/util';
 import { PlanSection } from './PlanSection';
+import { ContactSharing } from './RosterPage';
 
 export function SettingsPage() {
   const { league, reloadLeague } = useLeague();
@@ -22,6 +23,7 @@ export function SettingsPage() {
       <JoinRequests onApproved={() => setMembersVersion((v) => v + 1)} />
       <Members version={membersVersion} />
       <PaymentLinks />
+      <GolfersSee />
       <Reminders />
       <ClubhouseTv />
       {api.mode === 'demo' && <DemoPlan onChanged={reloadLeague} />}
@@ -439,6 +441,26 @@ function Reminders() {
     </section>
   );
 }
+
+/** What golfers can see: season money, and each other's phone numbers and emails. Commissioners always see everything. */
+function GolfersSee() {
+  const { league, reloadLeague } = useLeague();
+  const { busy, error, run } = useAction();
+  return (
+    <section className="card stack" id="golfers-see">
+      <h2>What golfers see</h2>
+      <label className="check-row small">
+        <input type="checkbox" checked={league.showMoney !== false} disabled={busy}
+          onChange={async (e) => { const on = e.target.checked; const ok = await run(async () => { await api.updateLeague(league.id, { showMoney: on }); return true; }); if (ok) reloadLeague(); }} />
+        Season money (the Money column on Standings, player pages, the money leader award and the recap email's season total)
+      </label>
+      <p className="small muted">Each week's results still show that week's money. Commissioners always see everything.</p>
+      <ContactSharing />
+      <ErrorText>{error}</ErrorText>
+    </section>
+  );
+}
+
 
 const TV_PANELS:{ key: TvPanel; label: string }[] = [
   { key: 'live', label: 'Leaderboard' }, { key: 'matches', label: 'Matches' }, { key: 'skins', label: 'Skins' },

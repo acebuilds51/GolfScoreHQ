@@ -445,6 +445,32 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
     expect(await as(db, joe, () => rows(db, 'select * from player_contacts'))).toEqual([]); // emails stay private
   });
 
+  it('shares emails, and season money, only as the commissioner sets them', async () => {
+    const al = await addPlayer(tony, oak, 'Al');
+    await db.query(`insert into player_contacts (player_id, league_id, email, phone) values ($1, $2, 'al@example.com', '248-555-0100')`, [al, oak]);
+    const book = (user: string | null) => as(db, user, () => rows<{ player_id: string; email: string }>(db, 'select * from league_email_book($1)', [oak]));
+    expect(await book(tony)).toEqual([{ player_id: al, email: 'al@example.com' }]); // commissioners always
+    expect(await book(joe)).toEqual([]);
+    await as(db, tony, () => db.query('update leagues set share_phones = true where id = $1', [oak]));
+    expect(await book(joe)).toEqual([]); // phones and emails have their own switches
+    for (const col of ['share_emails', 'show_money']) {
+      await expect(as(db, joe, () => db.query(`update leagues set ${col} = not ${col} where id = $1 returning id`, [oak]))).resolves.toMatchObject({ rows: [] });
+    }
+    await as(db, tony, () => db.query('update leagues set share_emails = true, show_money = false where id = $1', [oak]));
+    expect(await book(joe)).toEqual([{ player_id: al, email: 'al@example.com' }]);
+    expect(await book(sam)).toEqual([]);
+    await expect(book(null)).rejects.toThrow(/permission denied/);
+    expect(await as(db, joe, () => rows(db, 'select show_money, share_emails from leagues where id = $1', [oak])))
+      .toEqual([{ show_money: false, share_emails: true }]);
+  });
+
+  it('never settles a week by itself: submitting every group leaves it for the commissioner', async () => {
+    const { eventId, roundId } = await weekWithRound(tony, oak);
+    await as(db, joe, () => db.query(`update rounds set status = 'submitted' where id = $1`, [roundId]));
+    expect(await rows(db, 'select status from events where id = $1', [eventId])).toEqual([{ status: 'scheduled' }]);
+    await expect(as(db, joe, () => db.query(`select settle_event($1, '[]'::jsonb)`, [eventId]))).rejects.toThrow(/commissioners only/);
+  });
+
   it('runs the tee sheet: captains, joining, full groups, partners and matches', async () => {
     const { eventId } = await weekWithRound(tony, oak);
     const joeSpot = await linkedPlayer(joe, 'Joe');

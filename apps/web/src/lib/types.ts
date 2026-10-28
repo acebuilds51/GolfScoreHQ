@@ -28,6 +28,10 @@ export interface League extends LeagueSummary {
   accentColor: string | null;
   /** Golfers can see each other's phone numbers (to text from the roster). Commissioners always can. */
   sharePhones?: boolean;
+  /** Golfers can see each other's emails on the roster. Commissioners always can. */
+  shareEmails?: boolean;
+  /** Golfers see season money (Standings, player pages, awards, the recap's season line). Commissioners always do. */
+  showMoney?: boolean;
   /** "Are you playing?" email this many days before league night (Pro); null: off. */
   rsvpReminderDays?: number | null;
 }
@@ -383,3 +387,6 @@ export interface ScoreEntry {
 
 export const COMMISSIONER_ROLES: Role[] = ['owner', 'commissioner'];
 export const isCommissioner = (role: Role | undefined) => !!role && COMMISSIONER_ROLES.includes(role);
+
+/** Season money is shown to commissioners always, and to golfers unless the league hides it. */
+export const seesSeasonMoney = (league: Pick<League, 'role' | 'showMoney'>) => isCommissioner(league.role) || league.showMoney !== false;

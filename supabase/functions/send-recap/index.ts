@@ -15,6 +15,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { recapText, weeklyRecap, withPostedResults } from '../_shared/engine.js';
 import { buildRecapEmail } from './email.ts';
 import { pushToUsers } from '../_shared/push.ts';
+import { engineRounds, ROUND_SELECT } from '../_shared/rounds.ts';
 import { senderFrom } from '../_shared/sender.ts';
 import { cleanStory, emptyStoryReason, storyFromResponse, storyRequest } from './story.ts';
 
@@ -51,11 +52,11 @@ Deno.serve(async (req) => {
 
   const [{ data: league }, { data: season }, { data: layout }, { data: players }, { data: rounds }, { data: seasonLedger }, { data: contacts }, { data: prefs }, { data: payment }, { data: sent }] =
     await Promise.all([
-      admin.from('leagues').select('name, slug, logo_url, brand_color, accent_color').eq('id', event.league_id).single(),
+      admin.from('leagues').select('name, slug, logo_url, brand_color, accent_color, show_money').eq('id', event.league_id).single(),
       admin.from('seasons').select('rules').eq('id', event.season_id).single(),
       admin.from('layouts').select('id, name, holes').eq('id', event.layout_id).maybeSingle(),
       admin.from('players').select('id, display_name, user_id, active').eq('league_id', event.league_id),
-      admin.from('rounds').select('id, tee_slot, round_players(player_id, side, position, course_handicap), hole_scores(player_id, hole_number, strokes), presses(start_hole_number, called_by, created_at), ctp_reports(hole_number, player_id, beat_player_id)').eq('event_id', event.id),
+      admin.from('rounds').select(ROUND_SELECT).eq('event_id', event.id),
       admin.from('ledger_entries').select('event_id, player_id, kind, amount_cents, hole_number, events!inner(season_id, status, week_number)').eq('events.season_id', event.season_id).eq('events.status', 'settled').lte('events.week_number', event.week_number),
       admin.from('player_contacts').select('player_id, email').eq('league_id', event.league_id),
       admin.from('notification_prefs').select('player_id, weekly_recap').eq('league_id', event.league_id),
@@ -68,29 +69,9 @@ Deno.serve(async (req) => {
   const rules = event.rules_override ?? season?.rules;
   if (!['bestBallMatch', 'strokePlay', 'stableford', 'scramble'].includes(rules?.format)) return json({ error: "Recap emails for this format aren't available yet." }, 400);
 
-  // Same shape the app gives the engine.
-  const engineRounds = (rounds ?? []).map((r: Row) => {
-    const scores: Record<string, (number | null)[]> = {};
-    for (const p of r.round_players as Row[]) {
-      scores[p.player_id] = (layout.holes as Row[]).map((h) => (r.hole_scores as Row[]).find((s) => s.player_id === p.player_id && s.hole_number === h.number)?.strokes ?? null);
-    }
-    const ctp: Record<number, unknown> = {};
-    for (const c of r.ctp_reports as Row[]) ctp[c.hole_number] = c.player_id ? { winner: c.player_id, beat: c.beat_player_id } : 'none';
-    return {
-      id: r.id, teeSlot: r.tee_slot,
-      players: (r.round_players as Row[]).sort((a, b) => a.position - b.position).map((p) => (p.side ? { id: p.player_id, side: p.side } : { id: p.player_id })),
-      // Handicaps fixed when the group started, so the recap's results match the app's (net or gross).
-      courseHandicaps: Object.fromEntries((r.round_players as Row[]).map((p) => [p.player_id, p.course_handicap ?? null])),
-      scores,
-      presses: (r.presses as Row[]).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
-        .map((p) => ({ startHoleIndex: (layout.holes as Row[]).findIndex((h) => h.number === p.start_hole_number), calledBy: p.called_by }))
-        .filter((p) => p.startHoleIndex >= 0),
-      ctp,
-    };
-  });
   const toEntry = (e: Row) => ({ playerId: e.player_id, amount: e.amount_cents, kind: e.kind, ...(e.hole_number ? { holeNumber: e.hole_number } : {}) });
   const weekLedger = (seasonLedger ?? []).filter((e: Row) => e.event_id === event.id).map(toEntry);
-  const recap = withPostedResults(weeklyRecap(event.week_number, engineRounds, layout, rules), weekLedger, (seasonLedger ?? []).map(toEntry));
+  const recap = withPostedResults(weeklyRecap(event.week_number, engineRounds(rounds ?? [], layout), layout, rules), weekLedger, (seasonLedger ?? []).map(toEntry));
   const names = new Map((players ?? []).map((p: Row) => [p.id, p.display_name]));
   const recapBody: string = recapText(recap, (id: string) => names.get(id) ?? '?', { leagueName: league!.name });
   const playsForMoney = rules.skins.enabled || rules.ctp.enabled
@@ -145,7 +126,8 @@ Deno.serve(async (req) => {
     buildRecapEmail({
       leagueName: league!.name, weekNumber: event.week_number, leagueUrl, recapBody, playerName: r.name, payment: handles, story, brand,
       weekCents: playsForMoney ? recap.weekBalances[r.playerId] ?? 0 : null,
-      seasonCents: playsForMoney ? recap.seasonBalances[r.playerId] ?? 0 : null,
+      // Season money only when the league shows it to golfers.
+      seasonCents: playsForMoney && league!.show_money !== false ? recap.seasonBalances[r.playerId] ?? 0 : null,
     });
 
   if (!body.send) {

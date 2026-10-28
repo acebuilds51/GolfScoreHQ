@@ -13,3 +13,4 @@ export * from './templates';
 export * from './stats';
 export * from './profile';
 export * from './recap';
+export * from './posting';

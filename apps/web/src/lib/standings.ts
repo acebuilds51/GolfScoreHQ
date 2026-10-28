@@ -35,7 +35,7 @@ export interface StandingRow {
   weeks: WeekScore[];
 }
 
-export type SortKey = 'money' | 'average' | 'wins' | 'weekWins' | 'points' | 'skins' | 'ctps';
+export type SortKey = 'money' | 'average' | 'hot' | 'wins' | 'weekWins' | 'points' | 'skins' | 'ctps';
 
 export interface Standings {
   rows: StandingRow[];
@@ -145,6 +145,8 @@ export function sortStandings(rows: StandingRow[], key: SortKey): StandingRow[] 
     points: (a, b) => b.points - a.points || (b.averagePoints ?? 0) - (a.averagePoints ?? 0),
     skins: (a, b) => b.skins - a.skins || b.money - a.money,
     ctps: (a, b) => b.ctps - a.ctps || b.money - a.money,
+    // Who's playing best lately: strokes over par in the last four rounds.
+    hot: (a, b) => (a.last4AverageToPar ?? Number.POSITIVE_INFINITY) - (b.last4AverageToPar ?? Number.POSITIVE_INFINITY) || byAvg(a) - byAvg(b),
   };
   return [...rows].sort((a, b) => cmp[key](a, b) || a.name.localeCompare(b.name));
 }
