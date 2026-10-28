@@ -184,7 +184,7 @@ function Row({ r, rank, open, onToggle, skins, ctp, money, individual, stablefor
     <>
       <tr className="clickable" onClick={onToggle} aria-expanded={open}>
         <td className="sticky name">
-          <span className="rank">{rank}</span> {r.name}
+          <span className={rank <= 3 ? `rank medal m${rank}` : 'rank'}>{rank}</span> {r.name}
           {r.isSub && <span className="badge badge-neutral">Sub</span>}
           {r.hot && <span title="Hot streak"> 🔥</span>}
         </td>

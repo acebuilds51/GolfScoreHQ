@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import '@fontsource/barlow-condensed/600.css';
 import '@fontsource/barlow-condensed/700.css';
 import { App } from './App';
+import { hideSplash } from './lib/splash';
 import './styles.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -13,3 +14,4 @@ createRoot(document.getElementById('root')!).render(
     </BrowserRouter>
   </StrictMode>,
 );
+hideSplash();
