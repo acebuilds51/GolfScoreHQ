@@ -3,7 +3,7 @@ import type {
   Club, LeagueBilling,
   Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, LedgerRow, Member, NewCourse, NewPlayer, Player, Role,
   PaymentHandles, RecapPreview, RoundData, RoundPlayer, RsvpStatus, ScoreEntry, Season, SubOffer, SubRequest, TvDisplay, TvFeed, TvSettings, User,
-  NewSetupRequest, SetupFile, SetupRequest, SetupStatus, StaffSetupRequest,
+  NewSetupRequest, SetupFile, SetupRequest, SetupStatus, StaffSetupRequest, LineupStatus, TeeSheet, TeeTime,
 } from './types';
 
 export type { CourseSummary, LookupCourse, LookupTee } from '../../../../supabase/functions/course-lookup/normalize';
@@ -123,6 +123,16 @@ export interface Api {
   createSubRequest(leagueId: string, eventId: string, opts: { spots: number; teeSlot: number | null }, askPlayerIds: string[]): Promise<string>;
   respondSubOffer(requestId: string, playerId: string, accept: boolean): Promise<SubOffer['status']>;
   closeSubRequest(requestId: string): Promise<void>;
+
+  /** Tee sheet (Pro): the week's tee times, captains, groups and who's looking. */
+  teeSheet(eventId: string): Promise<TeeSheet>;
+  /** Commissioner: replace the week's tee times and captains. */
+  setTeeTimes(eventId: string, times: TeeTime[]): Promise<void>;
+  /** Put a golfer in a tee time's group (yourself, or anyone into a group you captain; commissioners anyone). */
+  lineupJoin(eventId: string, playerId: string, slot: number): Promise<void>;
+  lineupLeave(eventId: string, playerId: string): Promise<void>;
+  /** A golfer's own status (or the commissioner's say): needs a partner, needs a match with a partner, not playing, or clear. */
+  lineupStatus(eventId: string, playerId: string, status: LineupStatus, partnerId?: string | null): Promise<void>;
 
   /** Clubhouse TV links (commissioners, Pro). */
   tvDisplays(leagueId: string): Promise<TvDisplay[]>;

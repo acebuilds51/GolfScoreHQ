@@ -7,7 +7,7 @@ import { checkGolferRows, parseRoster, type GolferRow } from '../lib/util';
 import { fmtIndex, leagueIndexes, loadPlayedRounds, parseIndex, type IndexInfo } from '../lib/handicaps';
 import { handicapRules } from '../lib/scoring';
 import { norm } from '../lib/importer';
-import { smsBatches, smsLink, telNumber } from '../lib/sms';
+import { saveGroupSize, savedGroupSize, smsBatches, smsLink, telNumber } from '../lib/sms';
 
 export function RosterPage() {
   const { league } = useLeague();
@@ -219,7 +219,6 @@ function TextInvites({ players, phoneOf }: { players: Player[]; phoneOf: (p: Pla
 
 type Audience = 'pick' | 'members' | 'subs' | 'all';
 const GROUP_SIZES = [10, 20, 32];
-const SIZE_KEY = 'gshq-text-group-size';
 
 /**
  * Group texts through the phone's own Messages app: pick golfers, or (for
@@ -233,9 +232,7 @@ function TextLeague({ players, phoneOf, commish }: { players: Player[]; phoneOf:
   const [audience, setAudience] = useState<Audience>(commish ? 'members' : 'pick');
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState('');
-  const [size, setSize] = useState(() => {
-    try { return Number(localStorage.getItem(SIZE_KEY)) || 20; } catch { return 20; }
-  });
+  const [size, setSize] = useState(savedGroupSize);
   const { busy, error, run } = useAction();
 
   // You don't text yourself.
@@ -286,7 +283,7 @@ function TextLeague({ players, phoneOf, commish }: { players: Player[]; phoneOf:
       </div>
       <label className="inline small">
         Group texts of up to
-        <select value={size} onChange={(e) => { const n = Number(e.target.value); setSize(n); try { localStorage.setItem(SIZE_KEY, String(n)); } catch { /* not saved */ } }}>
+        <select value={size} onChange={(e) => { const n = Number(e.target.value); setSize(n); saveGroupSize(n); }}>
           {GROUP_SIZES.map((n) => <option key={n} value={n}>{n} people{n === 20 ? ' (most carriers)' : n === 32 ? ' (iPhones only, iMessage)' : ' (strict carriers)'}</option>)}
         </select>
       </label>
