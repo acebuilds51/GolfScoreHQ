@@ -93,10 +93,13 @@ export function supabaseApi(url: string, anonKey: string): Api {
     return url;
   }
 
+  // Who's signed in, from the session saved on this phone (no trip to the server: the
+  // database checks the sign-in itself on every request, this is only for filtering).
   async function uid(): Promise<string> {
-    const { data } = await sb.auth.getUser();
-    if (!data.user) throw new Error('Sign in first.');
-    return data.user.id;
+    const { data } = await sb.auth.getSession();
+    const id = data.session?.user.id;
+    if (!id) throw new Error('Sign in first.');
+    return id;
   }
 
   return {
@@ -137,12 +140,14 @@ export function supabaseApi(url: string, anonKey: string): Api {
       const me = await uid();
       const l = check(await sb.from('leagues').select('id, name, slug, plan, join_code, timezone, logo_url, banner_url, brand_color, accent_color, share_phones, share_emails, show_money, rsvp_reminder_days').eq('slug', slug).maybeSingle()) as Row | null;
       if (!l) return null;
-      const [member, eff] = await Promise.all([
+      // All at once: the plans list is tiny, so fetch it rather than wait for the plan first.
+      const [member, eff, plans] = await Promise.all([
         sb.from('league_members').select('role').eq('league_id', l.id).eq('user_id', me).maybeSingle(),
         sb.rpc('effective_plan', { lid: l.id }),
+        sb.from('plans').select('code, features'),
       ]);
       const effectivePlan = (check(eff) as Plan) ?? 'free';
-      const plan = check(await sb.from('plans').select('features').eq('code', effectivePlan).maybeSingle()) as Row | null;
+      const plan = (check(plans) as Row[]).find((p) => p.code === effectivePlan) ?? null;
       const league: League = {
         id: l.id, name: l.name, slug: l.slug, plan: l.plan, joinCode: l.join_code, timezone: l.timezone,
         role: ((check(member) as Row | null)?.role ?? 'player') as Role,

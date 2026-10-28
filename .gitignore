@@ -12,3 +12,5 @@ supabase/.branches/
 # Never commit real league exports (names, emails, phone numbers)
 *.xlsx
 data/private/
+# TypeScript build state
+*.tsbuildinfo

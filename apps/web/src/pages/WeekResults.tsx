@@ -15,8 +15,10 @@ import { isCommissioner, type Layout, type LeagueEvent, type LedgerRow, type Rou
 const signed = (c: number) => (c > 0 ? `+${fmtMoney(c)}` : c < 0 ? `−${fmtMoney(-c)}` : '$0');
 
 /** Settlement controls for the commissioner, and the week's results for everyone. */
-export function WeekResults({ event, season, layout, rounds, names, onChanged }: {
-  event: LeagueEvent; season: Season; layout: Layout & { courseName?: string | null }; rounds: RoundData[]; names: Map<string, string>; onChanged: () => void;
+export function WeekResults({ event, season, layout, rounds, names, updating = false, onChanged }: {
+  event: LeagueEvent; season: Season; layout: Layout & { courseName?: string | null }; rounds: RoundData[]; names: Map<string, string>;
+  /** The week on screen is from last time and the latest scores are still loading: no settling yet. */
+  updating?: boolean; onChanged: () => void;
 }) {
   const { league } = useLeague();
   const commish = isCommissioner(league.role);
@@ -152,13 +154,13 @@ export function WeekResults({ event, season, layout, rounds, names, onChanged }:
         {rounds.length > 0 && (
           <button
             className="btn btn-primary"
-            disabled={busy}
+            disabled={busy || updating || extra.stale}
             onClick={async () => {
               const ok = await run(async () => { await api.settleEvent(event.id, preview.entries); return true; });
               if (ok) onChanged();
             }}
           >
-            {busy ? 'Settling…' : 'Settle and post results'}
+            {busy ? 'Settling…' : updating || extra.stale ? 'Getting the latest scores…' : 'Settle and post results'}
           </button>
         )}
         <button
@@ -202,7 +204,7 @@ function WeekRecap({ event, season, layout, rounds, names }: {
   // What the preview shows; updated when a draft arrives or the commissioner finishes editing.
   const [previewStory, setPreviewStory] = useState('');
   const drafting = useAction();
-  const preview = useAsync(async () => (commish ? api.recapPreview(event.id, previewStory || null) : null), [event.id, commish, sentMsg, previewStory]);
+  const preview = useAsync(async () => (commish ? api.recapPreview(event.id, previewStory || null) : null), [event.id, commish, sentMsg, previewStory], { fresh: true });
 
   async function draft() {
     if (story.trim() && !window.confirm('Replace your write-up with a new draft?')) return;

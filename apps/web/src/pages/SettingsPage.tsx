@@ -369,7 +369,7 @@ function Members({ version }: { version: number }) {
 function PaymentLinks() {
   const { league } = useLeague();
   const allowed = league.features.includes('payments');
-  const saved = useAsync(() => api.paymentHandles(league.id), [league.id]);
+  const saved = useAsync(() => api.paymentHandles(league.id), [league.id], { fresh: true });
   const [draft, setDraft] = useState<PaymentHandles | null>(null);
   const [done, setDone] = useState(false);
   const { busy, error, run } = useAction();

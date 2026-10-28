@@ -37,7 +37,7 @@ export function ImportPage() {
   const data = useAsync(async () => {
     const [seasons, courses, players] = await Promise.all([api.seasons(league.id), api.courses(league.id), api.players(league.id)]);
     return { seasons, layouts: allLayouts(courses), players };
-  }, [league.id]);
+  }, [league.id], { fresh: true });
 
   if (!commish) return <div className="page muted">Only commissioners can import scores.</div>;
   if (!pro) {

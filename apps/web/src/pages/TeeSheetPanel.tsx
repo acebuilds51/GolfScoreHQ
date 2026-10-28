@@ -322,7 +322,7 @@ function CommissionerTools({ event, view, players, phones, busy, act }: {
 /** Commissioner: email the "Are you playing?" reminder now, to golfers who haven't answered. */
 function ReminderNow({ event }: { event: LeagueEvent }) {
   const { league } = useLeague();
-  const preview = useAsync(() => api.reminderPreview(event.id), [event.id]);
+  const preview = useAsync(() => api.reminderPreview(event.id), [event.id], { fresh: true });
   const [sent, setSent] = useState<number | null>(null);
   const { busy, error, run } = useAction();
   if (sent !== null) return <p className="small good">Reminder emailed to {sent} golfer{sent === 1 ? '' : 's'} ✓</p>;

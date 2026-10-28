@@ -24,7 +24,7 @@ export function ScoreRoundPage() {
     if (!r) return null;
     const week = await loadWeek(league.id, r.eventId);
     return week ? { ...week, round: r } : null;
-  }, [league.id, roundId]);
+  }, [league.id, roundId], { fresh: true });
 
   if (data.error) return <div className="page"><ErrorText>{data.error}</ErrorText></div>;
   if (!data.data) return (data.loading ? <PageSkeleton cards={1} /> : <div className="page muted">Round not found.</div>);

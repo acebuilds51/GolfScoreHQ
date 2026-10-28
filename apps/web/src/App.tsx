@@ -1,31 +1,24 @@
+import { Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Header } from './components/Header';
 import { PageSkeleton } from './components/ui';
 import { SiteFooter } from './components/SiteFooter';
-import { PricingPage, PrivacyPage, RefundsPage, TermsPage } from './pages/LegalPages';
 import { AuthContext, useAuth, useAuthState } from './lib/hooks';
-import { CoursesPage } from './pages/CoursesPage';
-import { JoinInvitePage } from './pages/JoinInvitePage';
+import {
+  AwardsPage, CoursesPage, ImportPage, JoinInvitePage, PilotPage, PlayerPage, prefetchPages, PricingPage, PrivacyPage, RefundsPage,
+  RosterPage, RsvpLinkPage, SettingsPage, SetupServicePage, StaffPage, TermsPage, TvPage,
+} from './lib/lazyPages';
+// League night's pages are in the first download.
 import { LeagueLayout } from './pages/LeagueLayout';
 import { LivePage } from './pages/LivePage';
 import { MorePage } from './pages/MorePage';
 import { LeaguesPage } from './pages/LeaguesPage';
 import { OverviewPage } from './pages/OverviewPage';
-import { PilotPage } from './pages/PilotPage';
 import { PlayPage } from './pages/PlayPage';
 import { ScoreRoundPage } from './pages/ScoreRoundPage';
 import { WeekPage } from './pages/WeekPage';
-import { RosterPage } from './pages/RosterPage';
-import { RsvpLinkPage } from './pages/RsvpLinkPage';
-import { SettingsPage } from './pages/SettingsPage';
 import { StandingsPage } from './pages/StandingsPage';
-import { AwardsPage } from './pages/AwardsPage';
-import { PlayerPage } from './pages/PlayerPage';
-import { SetupServicePage } from './pages/SetupServicePage';
-import { ImportPage } from './pages/ImportPage';
-import { StaffPage } from './pages/StaffPage';
 import { SignInPage } from './pages/SignInPage';
-import { TvPage } from './pages/TvPage';
 
 function RequireUser({ children }: { children: JSX.Element }) {
   const { user, loading } = useAuth();
@@ -36,14 +29,16 @@ function RequireUser({ children }: { children: JSX.Element }) {
 
 export function App() {
   const auth = useAuthState();
+  useEffect(prefetchPages, []);
   // The clubhouse TV is a full-screen page with no app chrome and no sign-in.
   if (useLocation().pathname.startsWith('/tv/')) {
-    return <Routes><Route path="/tv/:token" element={<TvPage />} /></Routes>;
+    return <Suspense fallback={null}><Routes><Route path="/tv/:token" element={<TvPage />} /></Routes></Suspense>;
   }
   return (
     <AuthContext.Provider value={auth}>
       <Header />
       <main>
+        <Suspense fallback={<PageSkeleton />}>
         <Routes>
           <Route path="/" element={auth.loading ? <PageSkeleton /> : auth.user ? <Navigate to="/leagues" replace /> : <SignInPage />} />
           <Route path="/join/:token" element={<JoinInvitePage />} />
@@ -74,6 +69,7 @@ export function App() {
           <Route path="/refunds" element={<RefundsPage />} />
           <Route path="*" element={<div className="page"><h1>Page not found</h1></div>} />
         </Routes>
+        </Suspense>
         <SiteFooter />
       </main>
     </AuthContext.Provider>

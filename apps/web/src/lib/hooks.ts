@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { friendlyError } from './api';
 import { api } from './backend';
+import { cached, cacheKey, remember, setCacheOwner } from './cache';
 import type { League, User } from './types';
 
 export function useAuthState() {
@@ -10,11 +11,13 @@ export function useAuthState() {
     let live = true;
     api.currentUser().then((u) => {
       if (live) {
+        setCacheOwner(u?.id ?? null);
         setUser(u);
         setLoading(false);
       }
     });
     const off = api.onAuthChange((u) => {
+      setCacheOwner(u?.id ?? null);
       setUser(u);
       setLoading(false);
     });
@@ -36,16 +39,31 @@ export function useLeague() {
   return ctx;
 }
 
-/** Load data for a screen; `reload()` after a change. Errors come back as plain sentences. */
-export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
-  const [state, setState] = useState<{ data: T | undefined; error: string | null; loading: boolean }>({ data: undefined, error: null, loading: true });
+/**
+ * Load data for a screen; `reload()` after a change. Errors come back as plain sentences.
+ * What the screen loaded last time shows straight away (`loading` stays true
+ * while the fresh copy arrives), so going back to a page or reopening the app doesn't wait.
+ * `fresh`: always wait for the server (screens that set themselves up once from the first data, like scoring).
+ */
+export function useAsync<T>(fn: () => Promise<T>, deps: unknown[], opts: { fresh?: boolean } = {}) {
+  const key = opts.fresh ? null : cacheKey(fn, deps);
+  // stale: showing what was remembered from last time; the fresh copy hasn't arrived yet.
+  const [state, setState] = useState<{ data: T | undefined; error: string | null; loading: boolean; stale: boolean }>(() => {
+    const data = cached<T>(key);
+    return { data, error: null, loading: true, stale: data !== undefined };
+  });
   const seq = useRef(0);
   const run = useCallback(() => {
     const n = ++seq.current;
-    setState((s) => ({ ...s, loading: true }));
+    // New inputs (another week, another golfer): show what we had for those, if anything.
+    setState((s) => {
+      if (n === 1) return { ...s, loading: true };
+      const remembered = cached<T>(key);
+      return remembered !== undefined ? { data: remembered, error: null, loading: true, stale: true } : { ...s, error: null, loading: true };
+    });
     fn().then(
-      (data) => n === seq.current && setState({ data, error: null, loading: false }),
-      (e) => n === seq.current && setState({ data: undefined, error: friendlyError(e), loading: false }),
+      (data) => { if (n !== seq.current) return; remember(key, data); setState({ data, error: null, loading: false, stale: false }); },
+      (e) => n === seq.current && setState({ data: undefined, error: friendlyError(e), loading: false, stale: false }),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
