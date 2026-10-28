@@ -9,6 +9,7 @@ import {
 } from '../lib/importer';
 import { runImport, type ImportResult } from '../lib/importRunner';
 import { allLayouts, describeRules } from '../lib/scoring';
+import { isXlsx, xlsxSheetNames, xlsxSheetToTsv } from '../lib/sheetFile';
 import { isCommissioner, type Season } from '../lib/types';
 
 const ROLE_LABELS: { value: ColumnRole; label: string }[] = [
@@ -62,6 +63,8 @@ function Importer({ seasons, layouts, players, onDone }: {
   const [seasonId, setSeasonId] = useState(seasons[0]!.id);
   const [newYear, setNewYear] = useState(String(seasons[0]!.year - 1));
   const [text, setText] = useState('');
+  // An Excel file with more than one sheet: which one to import.
+  const [workbook, setWorkbook] = useState<{ file: File; sheets: string[]; sheet: string } | null>(null);
   const [roles, setRoles] = useState<ColumnRole[] | null>(null);
   const [layoutId, setLayoutId] = useState(layouts[0]!.id);
   const [settle, setSettle] = useState(true);
@@ -87,11 +90,30 @@ function Importer({ seasons, layouts, players, onDone }: {
 
   async function readFile(f: File) {
     setError(null);
-    if (/\.(xlsx|xls|ods|numbers)$/i.test(f.name)) {
-      setError('Excel files: open it, select the cells (including the header row), copy, and paste them in the box below. Or save it as CSV and choose that file.');
+    setWorkbook(null);
+    if (isXlsx(f)) {
+      try {
+        const sheets = await xlsxSheetNames(f);
+        if (sheets.length > 1) setWorkbook({ file: f, sheets, sheet: sheets[0]! });
+        await loadSheet(f, sheets[0]!);
+      } catch {
+        setError("That Excel file couldn't be read. Save it as CSV and choose that file, or copy the cells and paste them below.");
+      }
+      return;
+    }
+    if (/\.(xls|ods|numbers)$/i.test(f.name)) {
+      setError('Older Excel, Numbers and OpenOffice files: save it as .xlsx or CSV and choose that file, or copy the cells (including the header row) and paste them in the box below.');
       return;
     }
     setText(await f.text());
+    setRoles(null);
+    setResult(null);
+  }
+
+  async function loadSheet(f: File, sheet: string) {
+    const tsv = await xlsxSheetToTsv(f, sheet);
+    if (!tsv.trim()) setError(`The sheet "${sheet}" is empty.`);
+    setText(tsv);
     setRoles(null);
     setResult(null);
   }
@@ -142,7 +164,7 @@ function Importer({ seasons, layouts, players, onDone }: {
     <div className="page stack">
       <div>
         <h2>Import past rounds</h2>
-        <p className="muted">Bring scores in from a spreadsheet: one row per golfer per round, with the week (or date), the golfer's name and a score for each hole. The old OCBC app's export works too. Nothing is saved until you press Import.</p>
+        <p className="muted">Bring scores in from a spreadsheet (Excel, CSV or pasted cells): one row per golfer per round, with the week (or date), the golfer's name and a score for each hole. The old OCBC app's export works too. Nothing is saved until you press Import.</p>
       </div>
 
       <section className="card stack">
@@ -167,8 +189,17 @@ function Importer({ seasons, layouts, players, onDone }: {
         <h3>2. Your scores</h3>
         <label className="inline">
           Choose a file
-          <input type="file" accept=".csv,.tsv,.txt,.json,.xlsx,.xls" onChange={(e) => { const f = e.target.files?.[0]; if (f) void readFile(f); e.target.value = ''; }} />
+          <input type="file" accept=".xlsx,.csv,.tsv,.txt,.json,.xls" onChange={(e) => { const f = e.target.files?.[0]; if (f) void readFile(f); e.target.value = ''; }} />
+          <span className="small muted">Excel (.xlsx), CSV or the old OCBC app's export.</span>
         </label>
+        {workbook && (
+          <label className="inline">
+            Sheet
+            <select value={workbook.sheet} onChange={(e) => { const sheet = e.target.value; setWorkbook({ ...workbook, sheet }); setError(null); void loadSheet(workbook.file, sheet); }}>
+              {workbook.sheets.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </label>
+        )}
         <label>
           …or paste from Excel or Google Sheets (include the header row)
           <textarea rows={8} className="mono" value={text} onChange={(e) => { setText(e.target.value); setRoles(null); }} placeholder={'Week\tGolfer\t1\t2\t3\t4\t5\t6\t7\t8\t9\n1\tAl Adams\t4\t3\t5\t4\t4\t5\t3\t4\t4'} />
