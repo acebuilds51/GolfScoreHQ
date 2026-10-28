@@ -803,7 +803,7 @@ export function demoApi(): DemoApi {
       const req = { ...r, id: id(), leagueId, status: 'requested' as const, staffReply: null, createdAt: now, updatedAt: now, requestedBy: me(db).id, staffUserId: null };
       db.setupRequests.push(req);
       save(db);
-      return req.id;
+      return { id: req.id, emailError: null };
     },
     async updateSetupRequest(reqId, patch) {
       const db = load();
@@ -812,6 +812,7 @@ export function demoApi(): DemoApi {
       if (r.status === 'in_progress' || r.status === 'done') throw new Error("This request can't be changed now.");
       Object.assign(r, { notes: patch.notes, files: patch.files, status: 'requested', updatedAt: new Date().toISOString() });
       save(db);
+      return { emailError: null };
     },
     async setupFileUrl(path) {
       const url = demoFiles.get(path);

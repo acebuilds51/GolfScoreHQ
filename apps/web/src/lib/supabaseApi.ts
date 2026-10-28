@@ -72,6 +72,16 @@ export function supabaseApi(url: string, anonKey: string): Api {
     if (old.length) await sb.storage.from(LOGO_BUCKET).remove(old);
   }
 
+  /** Email GolfScoreHQ support about a setup request. The request is already saved, so a failure is reported, not thrown. */
+  async function notifySupport(requestId: string): Promise<string | null> {
+    try {
+      await invokeFn(sb, 'setup-notify', { requestId, event: 'created' }, "the email function didn't answer (is setup-notify deployed?)");
+      return null;
+    } catch (e) {
+      return (e as Error).message;
+    }
+  }
+
   async function uploadBrandFile(leagueId: string, kind: 'logo' | 'banner', blob: Blob, type: 'image/png' | 'image/jpeg') {
     // A new file name each time, so browsers and email clients never show a stale picture.
     const path = `${leagueId}/${kind}-${Date.now()}.${type === 'image/png' ? 'png' : 'jpg'}`;
@@ -499,12 +509,11 @@ export function supabaseApi(url: string, anonKey: string): Api {
         league_id: leagueId, requested_by: u.user?.id, notes: r.notes.trim() || null, wants: r.wants, files: r.files,
         contact_phone: r.contactPhone?.trim() || null, staff_access: r.staffAccess,
       }).select('id').single()) as Row;
-      await invokeFn(sb, 'setup-notify', { requestId: row.id, event: 'created' }, 'Your request was saved, but the email to GolfScoreHQ didn\'t go out. We\'ll still see it.').catch(() => {});
-      return row.id;
+      return { id: row.id, emailError: await notifySupport(row.id) };
     },
     async updateSetupRequest(id, patch) {
       check(await sb.from('setup_requests').update({ notes: patch.notes.trim() || null, files: patch.files, status: 'requested' }).eq('id', id));
-      await invokeFn(sb, 'setup-notify', { requestId: id, event: 'created' }, '').catch(() => {});
+      return { emailError: await notifySupport(id) };
     },
     async setupFileUrl(path) {
       const { data, error } = await sb.storage.from(SETUP_BUCKET).createSignedUrl(path, 3600);

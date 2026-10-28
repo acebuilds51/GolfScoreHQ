@@ -134,10 +134,10 @@ export interface Api {
   /** Upload one file for a request (before sending it). */
   uploadSetupFile(leagueId: string, file: File): Promise<SetupFile>;
   removeSetupFile(path: string): Promise<void>;
-  /** Sends the request and emails GolfScoreHQ support. */
-  createSetupRequest(leagueId: string, r: NewSetupRequest): Promise<string>;
+  /** Sends the request and emails GolfScoreHQ support. emailError: the request is saved but the email didn't go out (why). */
+  createSetupRequest(leagueId: string, r: NewSetupRequest): Promise<{ id: string; emailError: string | null }>;
   /** Add notes or files to an open request (e.g. answering staff's question); puts it back in the queue. */
-  updateSetupRequest(id: string, patch: { notes: string; files: SetupFile[] }): Promise<void>;
+  updateSetupRequest(id: string, patch: { notes: string; files: SetupFile[] }): Promise<{ emailError: string | null }>;
   /** A short-lived download link for an uploaded file. */
   setupFileUrl(path: string): Promise<string>;
 
