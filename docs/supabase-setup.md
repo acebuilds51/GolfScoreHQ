@@ -41,6 +41,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 21. `20261115000000_tee_sheet.sql` (tee sheet: tee times, captains, groups, partners and matches)
 22. `20261116000000_season_tee_times.sql` (tee times set once for the season; captains optional, week by week)
 23. `20261117000000_rsvp_reminders.sql` ("Are you playing?" reminder emails with one-tap answers, sent hourly by pg_cron; deploy `send-reminders` with `--no-verify-jwt`)
+24. `20261118000000_push_notifications.sql` (phone notifications: each person's devices; deploy `push`, and set the `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` secrets from `npx web-push generate-vapid-keys`)
 
 **B. Command line**
 

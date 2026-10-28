@@ -5,6 +5,7 @@ import { useAction, useAsync, useAuth, useLeague } from '../lib/hooks';
 import { fmtDate } from '../lib/scoring';
 import { isCommissioner, type LeagueEvent, type Player, type RsvpStatus } from '../lib/types';
 import { RsvpButtons } from './WhosPlaying';
+import { PhoneNotifications } from '../components/PhoneNotifications';
 
 export function OverviewPage() {
   const { league } = useLeague();
@@ -60,6 +61,7 @@ export function OverviewPage() {
         <p className="muted">Scoring happens on the <Link to="play">Play</Link> tab: pick the week, start your group, and enter scores hole by hole.</p>
       </section>
       {league.features.includes('weekly_recap') && <RecapPref players={players} />}
+      <PhoneNotifications />
     </div>
   );
 }

@@ -124,6 +124,13 @@ export interface Api {
   sendReminder(eventId: string): Promise<{ sent: number }>;
   /** One-tap answer from a reminder email, no sign-in: 'in', 'out', 'stop' (no more reminders), or null to look. Null for a bad link. */
   rsvpByLink(token: string, answer: 'in' | 'out' | 'stop' | null): Promise<RsvpLinkInfo | null>;
+  /** Phone notifications: the public key phones subscribe with (null: not set up). */
+  pushKey(): Promise<string | null>;
+  /** Save this phone so the signed-in person gets notifications on it. */
+  savePushDevice(device: { endpoint: string; p256dh: string; auth: string }): Promise<void>;
+  removePushDevice(endpoint: string): Promise<void>;
+  /** A test notification to the signed-in person's devices; how many got it. */
+  testPush(): Promise<number>;
   /** Sub finder (Pro). */
   subRequests(eventId: string): Promise<SubRequest[]>;
   createSubRequest(leagueId: string, eventId: string, opts: { spots: number; teeSlot: number | null }, askPlayerIds: string[]): Promise<string>;

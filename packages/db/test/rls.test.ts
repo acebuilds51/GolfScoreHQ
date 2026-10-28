@@ -575,6 +575,20 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
     expect((await rows(db, 'select length(token) as n from cron_secret'))[0]).toEqual({ n: 64 });
   });
 
+  it('keeps phone notification devices private to their owner', async () => {
+    const add = (user: string, endpoint: string) => as(db, user, () =>
+      db.query(`insert into push_subscriptions (endpoint, p256dh, auth) values ($1, 'key', 'secret')`, [endpoint]));
+    await add(joe, 'https://push.example.com/joe-phone');
+    await add(tony, 'https://push.example.com/tony-phone');
+    await expect(add(joe, 'http://insecure.example.com/x')).rejects.toThrow(/check constraint/);
+    await expect(as(db, joe, () => db.query(`insert into push_subscriptions (user_id, endpoint, p256dh, auth) values ($1, 'https://push.example.com/fake', 'k', 'a')`, [tony])))
+      .rejects.toThrow(/row-level security/);
+    expect(await as(db, joe, () => rows(db, 'select endpoint from push_subscriptions'))).toEqual([{ endpoint: 'https://push.example.com/joe-phone' }]);
+    await as(db, joe, () => db.query('delete from push_subscriptions'));
+    expect(await rows(db, 'select endpoint from push_subscriptions')).toEqual([{ endpoint: 'https://push.example.com/tony-phone' }]);
+    await expect(as(db, null, () => rows(db, 'select * from push_subscriptions'))).rejects.toThrow(/permission denied/);
+  });
+
   it('lists the new features on every paid plan', async () => {
     const feats = await rows<{ code: string; f: string[] }>(db, `select code, features as f from plans order by code`);
     for (const p of feats) {
