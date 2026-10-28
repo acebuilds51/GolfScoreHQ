@@ -26,6 +26,8 @@ export interface League extends LeagueSummary {
   bannerUrl: string | null;
   brandColor: string | null;
   accentColor: string | null;
+  /** Golfers can see each other's phone numbers (to text from the roster). Commissioners always can. */
+  sharePhones?: boolean;
 }
 
 export interface Player {

@@ -37,6 +37,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 17. `20261111000000_scramble.sql` (Clubhouse TV knows when a week is a scramble)
 18. `20261112000000_setup_service.sql` ("We set up your league": uploads, staff queue; creates the private `setup-uploads` bucket)
 19. `20261113000000_merge_players.sql` (merge duplicate golfers on the roster)
+20. `20261114000000_phone_book.sql` (golfers can text each other when the commissioner shares phone numbers)
 
 **B. Command line**
 

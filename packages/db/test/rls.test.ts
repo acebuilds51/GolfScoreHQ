@@ -431,6 +431,20 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
     await expect(as(db, tony, () => db.query('select merge_players($1, $2)', [keep, other]))).rejects.toThrow(/same group/);
   });
 
+  it('shares phone numbers with members only when the commissioner turns it on', async () => {
+    const al = await addPlayer(tony, oak, 'Al');
+    await db.query(`insert into player_contacts (player_id, league_id, email, phone) values ($1, $2, 'al@example.com', '248-555-0100')`, [al, oak]);
+    const book = (user: string | null) => as(db, user, () => rows<{ player_id: string; phone: string }>(db, 'select * from league_phone_book($1)', [oak]));
+    expect(await book(tony)).toEqual([{ player_id: al, phone: '248-555-0100' }]); // commissioners always
+    expect(await book(joe)).toEqual([]); // members: not until it's turned on
+    await expect(as(db, joe, () => db.query('update leagues set share_phones = true where id = $1 returning id', [oak]))).resolves.toMatchObject({ rows: [] });
+    await as(db, tony, () => db.query('update leagues set share_phones = true where id = $1', [oak]));
+    expect(await book(joe)).toEqual([{ player_id: al, phone: '248-555-0100' }]);
+    expect(await book(sam)).toEqual([]); // other leagues never
+    await expect(book(null)).rejects.toThrow(/permission denied/);
+    expect(await as(db, joe, () => rows(db, 'select * from player_contacts'))).toEqual([]); // emails stay private
+  });
+
   it('lists the new features on every paid plan', async () => {
     const feats = await rows<{ code: string; f: string[] }>(db, `select code, features as f from plans order by code`);
     for (const p of feats) {
