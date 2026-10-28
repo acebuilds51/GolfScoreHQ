@@ -12,8 +12,9 @@
 // the timer's secret or the commissioner itself.
 // Secrets: RESEND_API_KEY, RECAP_FROM_EMAIL, APP_URL.
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import { pushToUsers } from '../_shared/push.ts';
 import { senderFrom } from '../_shared/sender.ts';
-import { buildReminderEmail, reminderDue } from './email.ts';
+import { buildReminderEmail, leagueDay, reminderDue } from './email.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -44,9 +45,12 @@ async function recipientsFor(admin: SupabaseClient, event: Row) {
   const contactEmail = new Map((contacts ?? []).filter((c: Row) => c.email).map((c: Row) => [c.player_id, c.email as string]));
   const out: { playerId: string; name: string; email: string }[] = [];
   const missing: string[] = [];
+  // Golfers with the app also get it as a phone notification.
+  const pushUsers: string[] = [];
   const seen = new Set<string>();
   for (const p of (players ?? []) as Row[]) {
     if (!p.active || p.is_sub || answered.has(p.id) || off.has(p.id)) continue;
+    if (p.user_id) pushUsers.push(p.user_id);
     let email = contactEmail.get(p.id) ?? null;
     if (!email && p.user_id) email = (await admin.auth.admin.getUserById(p.user_id)).data.user?.email ?? null;
     if (!email) { missing.push(p.display_name); continue; }
@@ -54,12 +58,12 @@ async function recipientsFor(admin: SupabaseClient, event: Row) {
     seen.add(email.toLowerCase());
     out.push({ playerId: p.id, name: p.display_name, email });
   }
-  return { recipients: out, missing };
+  return { recipients: out, missing, pushUsers };
 }
 
-/** Email the week's reminder; returns how many went out. */
+/** Email the week's reminder (and a phone notification to golfers with the app); returns how many emails went out. */
 async function sendFor(admin: SupabaseClient, event: Row, league: Row): Promise<number> {
-  const { recipients } = await recipientsFor(admin, event);
+  const { recipients, pushUsers } = await recipientsFor(admin, event);
   const key = env('RESEND_API_KEY');
   if (!key) throw new Error("Email isn't set up yet. Add the RESEND_API_KEY secret in Supabase.");
   const appUrl = env('APP_URL') || 'https://golfscorehq.app';
@@ -92,6 +96,11 @@ async function sendFor(admin: SupabaseClient, event: Row, league: Row): Promise<
     }
     delivered += batch.length;
   }
+  const { day } = leagueDay(event.event_date);
+  await pushToUsers(admin, pushUsers, {
+    title: `Are you playing ${day}?`, body: `${league.name}, week ${event.week_number}. Tap to answer or join a group.`,
+    url: `/l/${league.slug}/week/${event.id}`, tag: `rsvp-${event.id}`,
+  }).catch((e) => console.error('reminder push', e));
   await admin.from('reminder_sends').upsert({ event_id: event.id, league_id: league.id, sent_at: new Date().toISOString(), recipients: delivered });
   return delivered;
 }

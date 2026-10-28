@@ -14,6 +14,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 // @ts-ignore generated JavaScript bundle of packages/engine (npm run build:functions)
 import { recapText, weeklyRecap, withPostedResults } from '../_shared/engine.js';
 import { buildRecapEmail } from './email.ts';
+import { pushToUsers } from '../_shared/push.ts';
 import { senderFrom } from '../_shared/sender.ts';
 import { cleanStory, emptyStoryReason, storyFromResponse, storyRequest } from './story.ts';
 
@@ -174,6 +175,11 @@ Deno.serve(async (req) => {
     }
     delivered += batch.length;
   }
+  // Golfers with the app also get a phone notification.
+  await pushToUsers(admin, (players ?? []).filter((p: Row) => p.active && !optedOut.has(p.id)).map((p: Row) => p.user_id), {
+    title: `${league!.name}: week ${event.week_number} results`, body: 'Results, skins and standings are in.',
+    url: `/l/${league!.slug}/standings`, tag: `recap-${event.id}`,
+  }).catch((e) => console.error('recap push', e));
   await admin.from('recap_sends').upsert({ event_id: event.id, league_id: event.league_id, sent_at: new Date().toISOString(), recipients: delivered });
   return json({ sent: delivered, missing });
 });

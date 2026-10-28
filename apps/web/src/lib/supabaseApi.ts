@@ -450,6 +450,20 @@ export function supabaseApi(url: string, anonKey: string): Api {
     async rsvpByLink(token, answer) {
       return (check(await sb.rpc('rsvp_by_link', { p_token: token, p_status: answer })) as RsvpLinkInfo | null) ?? null;
     },
+    async pushKey() {
+      return ((await invokeRecap(sb, { action: 'key' }, 'push', 'Phone notifications')) as { key: string | null }).key;
+    },
+    async savePushDevice(device) {
+      // Same device again (e.g. after signing in as someone else): replace it.
+      check(await sb.from('push_subscriptions').delete().eq('endpoint', device.endpoint));
+      check(await sb.from('push_subscriptions').insert({ ...device, user_agent: navigator.userAgent.slice(0, 300) }));
+    },
+    async removePushDevice(endpoint) {
+      check(await sb.from('push_subscriptions').delete().eq('endpoint', endpoint));
+    },
+    async testPush() {
+      return ((await invokeRecap(sb, { action: 'test' }, 'push', 'Phone notifications')) as { sent: number }).sent;
+    },
     async setRsvp(leagueId, eventId, playerId, status) {
       check(
         await sb.from('event_rsvps').upsert(

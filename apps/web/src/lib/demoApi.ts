@@ -803,6 +803,15 @@ export function demoApi(): DemoApi {
     async rsvpByLink() {
       return null; // the links are in real emails only
     },
+    // Phone notifications need the real server; the demo says so.
+    async pushKey() {
+      return null;
+    },
+    async savePushDevice() {},
+    async removePushDevice() {},
+    async testPush() {
+      return 0;
+    },
     async setRsvp(leagueId, eventId, playerId, status) {
       const db = load();
       const u = me(db);
