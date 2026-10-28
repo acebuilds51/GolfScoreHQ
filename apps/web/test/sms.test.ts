@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { smsLink, telNumber } from '../src/lib/sms';
+import { smsBatches, smsLink, telNumber } from '../src/lib/sms';
 
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)';
 const ANDROID = 'Mozilla/5.0 (Linux; Android 14; Pixel 8)';
@@ -21,5 +21,14 @@ describe('texting from the app', () => {
     expect(smsLink(phones, 'Rainout tonight', IPHONE)).toBe('sms://open?addresses=+12487070800,+15868791504&body=Rainout%20tonight');
     expect(smsLink(phones, 'Rainout tonight', ANDROID)).toBe('sms:+12487070800,+15868791504?body=Rainout%20tonight');
     expect(smsLink([null, ''], 'x', ANDROID)).toBeNull();
+  });
+
+  it('splits a big list into group texts under the carrier limit', () => {
+    const phones = Array.from({ length: 35 }, (_, i) => `248555${String(1000 + i)}`);
+    const batches = smsBatches([...phones, phones[0], null], 'Hi', 20, ANDROID);
+    expect(batches.map((b) => b.count)).toEqual([20, 15]);
+    expect(batches[1]!.link).toBe(`sms:${phones.slice(20).map((p) => `+1${p}`).join(',')}?body=Hi`);
+    expect(smsBatches(phones, '', 10, IPHONE).map((b) => b.count)).toEqual([10, 10, 10, 5]);
+    expect(smsBatches([], 'x', 20)).toEqual([]);
   });
 });

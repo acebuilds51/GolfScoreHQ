@@ -26,3 +26,19 @@ export function smsLink(phones: (string | null | undefined)[], body = '', ua = t
   }
   return `sms:${nums.join(',')}${msg ? `?body=${msg}` : ''}`;
 }
+
+/**
+ * Carriers cap how many people one group text (MMS) can go to (often 10 or 20;
+ * iMessage allows 32). Split a long list into group texts of at most `size`,
+ * each with the same message. Numbers are counted once.
+ */
+export function smsBatches(phones: (string | null | undefined)[], body: string, size: number, ua?: string): { link: string; count: number }[] {
+  const nums = [...new Set(phones.map(telNumber).filter((n): n is string => !!n))];
+  const per = Math.max(1, Math.floor(size));
+  const out: { link: string; count: number }[] = [];
+  for (let i = 0; i < nums.length; i += per) {
+    const chunk = nums.slice(i, i + per);
+    out.push({ link: smsLink(chunk, body, ua)!, count: chunk.length });
+  }
+  return out;
+}
