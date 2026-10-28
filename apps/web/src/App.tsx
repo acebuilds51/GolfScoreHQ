@@ -15,6 +15,7 @@ import { PlayPage } from './pages/PlayPage';
 import { ScoreRoundPage } from './pages/ScoreRoundPage';
 import { WeekPage } from './pages/WeekPage';
 import { RosterPage } from './pages/RosterPage';
+import { RsvpLinkPage } from './pages/RsvpLinkPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { StandingsPage } from './pages/StandingsPage';
 import { AwardsPage } from './pages/AwardsPage';
@@ -45,6 +46,7 @@ export function App() {
         <Routes>
           <Route path="/" element={auth.loading ? <PageSkeleton /> : auth.user ? <Navigate to="/leagues" replace /> : <SignInPage />} />
           <Route path="/join/:token" element={<JoinInvitePage />} />
+          <Route path="/rsvp/:token" element={<RsvpLinkPage />} />
           <Route path="/leagues" element={<RequireUser><LeaguesPage /></RequireUser>} />
           <Route path="/staff" element={<RequireUser><StaffPage /></RequireUser>} />
           <Route path="/l/:slug" element={<RequireUser><LeagueLayout /></RequireUser>}>

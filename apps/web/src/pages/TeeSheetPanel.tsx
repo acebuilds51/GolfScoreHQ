@@ -227,6 +227,7 @@ function CommissionerTools({ event, view, players, phones, busy, act }: {
         <TextButtons ids={view.noReply} phones={phones} label="Text golfers who haven't said"
           message={`${league.name}, ${weekWhen(event)}: are you playing? Join a group or say you're out here: ${link}`} />
       )}
+      {league.features.includes('rsvp') && event.eventDate && view.noReply.length > 0 && <ReminderNow event={event} />}
       <div><button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(!open)}>{open ? 'Done' : "Set a golfer's status"}</button></div>
       {open && (
         <div className="row wrap">
@@ -250,6 +251,34 @@ function CommissionerTools({ event, view, players, phones, busy, act }: {
             onClick={() => act(() => api.lineupStatus(event.id, who, status, status === 'match' ? partner : null))}>Save</button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Commissioner: email the "Are you playing?" reminder now, to golfers who haven't answered. */
+function ReminderNow({ event }: { event: LeagueEvent }) {
+  const { league } = useLeague();
+  const preview = useAsync(() => api.reminderPreview(event.id), [event.id]);
+  const [sent, setSent] = useState<number | null>(null);
+  const { busy, error, run } = useAction();
+  if (sent !== null) return <p className="small good">Reminder emailed to {sent} golfer{sent === 1 ? '' : 's'} ✓</p>;
+  if (preview.error) return <p className="small muted">{preview.error}</p>;
+  const p = preview.data;
+  if (!p) return null;
+  const when = league.rsvpReminderDays
+    ? `Goes out on its own at 9 AM, ${league.rsvpReminderDays === 1 ? 'the day' : `${league.rsvpReminderDays} days`} before.`
+    : 'Turn on automatic reminders in Settings.';
+  return (
+    <div className="stack" style={{ gap: 4 }}>
+      <div className="row wrap">
+        <button type="button" className="btn btn-sm" disabled={busy || p.recipients === 0}
+          onClick={async () => { const r = await run(() => api.sendReminder(event.id)); if (r) setSent(r.sent); }}>
+          {busy ? 'Sending…' : `Email "Are you playing?" now (${p.recipients})`}
+        </button>
+        <span className="small muted">{p.alreadySent ? `Sent ${fmtDate(p.alreadySent.sent_at.slice(0, 10))} to ${p.alreadySent.recipients}.` : when}</span>
+      </div>
+      {p.missing.length > 0 && <p className="small muted">No email on file: {p.missing.join(', ')}.</p>}
+      <ErrorText>{error}</ErrorText>
     </div>
   );
 }

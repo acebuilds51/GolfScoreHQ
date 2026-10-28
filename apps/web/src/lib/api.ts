@@ -3,7 +3,7 @@ import type {
   Club, LeagueBilling,
   Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, LedgerRow, Member, NewCourse, NewPlayer, Player, Role,
   PaymentHandles, RecapPreview, RoundData, RoundPlayer, RsvpStatus, ScoreEntry, Season, SubOffer, SubRequest, TvDisplay, TvFeed, TvSettings, User,
-  NewSetupRequest, SetupFile, SetupRequest, SetupStatus, StaffSetupRequest, LineupStatus, TeeSheet, TeeTime,
+  NewSetupRequest, SetupFile, SetupRequest, SetupStatus, StaffSetupRequest, LineupStatus, TeeSheet, TeeTime, ReminderPreview, RsvpLinkInfo,
 } from './types';
 
 export type { CourseSummary, LookupCourse, LookupTee } from '../../../../supabase/functions/course-lookup/normalize';
@@ -30,7 +30,7 @@ export interface Api {
   myLeagues(): Promise<LeagueSummary[]>;
   createLeague(name: string, slug: string): Promise<string>;
   league(slug: string): Promise<League | null>;
-  updateLeague(id: string, patch: { name?: string; joinCode?: string | null; timezone?: string; brandColor?: string | null; accentColor?: string | null; sharePhones?: boolean }): Promise<void>;
+  updateLeague(id: string, patch: { name?: string; joinCode?: string | null; timezone?: string; brandColor?: string | null; accentColor?: string | null; sharePhones?: boolean; rsvpReminderDays?: number | null }): Promise<void>;
   /** playerId → phone, for texting from the app: commissioners always; golfers when the league shares phone numbers. */
   phoneBook(leagueId: string): Promise<Record<string, string>>;
   /** Branding (Pro): upload an already-resized PNG as the league logo. Returns its URL. */
@@ -118,6 +118,12 @@ export interface Api {
   /** RSVP (Pro): playerId → answer for the week. */
   rsvps(eventId: string): Promise<Record<string, RsvpStatus>>;
   setRsvp(leagueId: string, eventId: string, playerId: string, status: RsvpStatus): Promise<void>;
+  /** "Are you playing?" reminder email (Pro): who'd get it for this week now. */
+  reminderPreview(eventId: string): Promise<ReminderPreview>;
+  /** Commissioner: send this week's reminder email now. */
+  sendReminder(eventId: string): Promise<{ sent: number }>;
+  /** One-tap answer from a reminder email, no sign-in: 'in', 'out', 'stop' (no more reminders), or null to look. Null for a bad link. */
+  rsvpByLink(token: string, answer: 'in' | 'out' | 'stop' | null): Promise<RsvpLinkInfo | null>;
   /** Sub finder (Pro). */
   subRequests(eventId: string): Promise<SubRequest[]>;
   createSubRequest(leagueId: string, eventId: string, opts: { spots: number; teeSlot: number | null }, askPlayerIds: string[]): Promise<string>;

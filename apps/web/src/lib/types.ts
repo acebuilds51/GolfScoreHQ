@@ -28,6 +28,30 @@ export interface League extends LeagueSummary {
   accentColor: string | null;
   /** Golfers can see each other's phone numbers (to text from the roster). Commissioners always can. */
   sharePhones?: boolean;
+  /** "Are you playing?" email this many days before league night (Pro); null: off. */
+  rsvpReminderDays?: number | null;
+}
+
+export interface ReminderPreview {
+  /** Golfers who'd get the email now (haven't answered, not on the tee sheet, have an email). */
+  recipients: number;
+  /** Golfers who'd get it but have no email on file. */
+  missing: string[];
+  alreadySent: { sent_at: string; recipients: number } | null;
+}
+
+/** What a one-tap answer link from a reminder email shows. */
+export interface RsvpLinkInfo {
+  leagueName: string;
+  leagueSlug: string;
+  eventId: string;
+  weekNumber: number;
+  eventDate: string | null;
+  playerName: string;
+  status: RsvpStatus | null;
+  /** The week hasn't started, so answers still count. */
+  open: boolean;
+  remindersOff: boolean;
 }
 
 export interface Player {
