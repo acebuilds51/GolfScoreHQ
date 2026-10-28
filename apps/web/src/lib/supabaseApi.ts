@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Api, CourseSummary, LookupCourse } from './api';
-import type { LeagueBilling, RecapPreview, SetupRequest, SubOffer, TeeTime } from './types';
+import type { LeagueBilling, RecapPreview, ReminderPreview, RsvpLinkInfo, SetupRequest, SubOffer, TeeTime } from './types';
 import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, TvFeed, User } from './types';
 import { randomToken, sha256Hex } from './util';
 
@@ -47,16 +47,16 @@ async function invokeFn(sb: SupabaseClient, name: string, body: Record<string, u
 }
 
 /** Call the send-recap server function; its { error } message becomes the thrown message. */
-async function invokeRecap(sb: SupabaseClient, body: Record<string, unknown>): Promise<unknown> {
-  const { data, error } = await sb.functions.invoke('send-recap', { body });
+async function invokeRecap(sb: SupabaseClient, body: Record<string, unknown>, fn = 'send-recap', what = 'Recap emails'): Promise<unknown> {
+  const { data, error } = await sb.functions.invoke(fn, { body });
   if (!error) return data;
   const ctx = (error as { context?: Response }).context;
   if (ctx && typeof ctx.json === 'function') {
     const detail = await ctx.json().catch(() => null);
     if (detail?.error) throw new Error(detail.error);
-    if (ctx.status === 404) throw new Error("Recap emails aren't set up yet (the send-recap function isn't deployed).");
+    if (ctx.status === 404) throw new Error(`${what} aren't set up yet (the ${fn} function isn't deployed).`);
   }
-  throw new Error("Recap emails aren't available right now. Try again in a minute.");
+  throw new Error(`${what} aren't available right now. Try again in a minute.`);
 }
 
 const toUser =(u: { id: string; email?: string | null } | null | undefined): User | null =>
@@ -135,7 +135,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
     },
     async league(slug) {
       const me = await uid();
-      const l = check(await sb.from('leagues').select('id, name, slug, plan, join_code, timezone, logo_url, banner_url, brand_color, accent_color, share_phones').eq('slug', slug).maybeSingle()) as Row | null;
+      const l = check(await sb.from('leagues').select('id, name, slug, plan, join_code, timezone, logo_url, banner_url, brand_color, accent_color, share_phones, rsvp_reminder_days').eq('slug', slug).maybeSingle()) as Row | null;
       if (!l) return null;
       const [member, eff] = await Promise.all([
         sb.from('league_members').select('role').eq('league_id', l.id).eq('user_id', me).maybeSingle(),
@@ -148,6 +148,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
         role: ((check(member) as Row | null)?.role ?? 'player') as Role,
         effectivePlan, features: plan?.features ?? [],
         logoUrl: l.logo_url, bannerUrl: l.banner_url, brandColor: l.brand_color, accentColor: l.accent_color, sharePhones: !!l.share_phones,
+        rsvpReminderDays: l.rsvp_reminder_days ?? null,
       };
       return league;
     },
@@ -159,6 +160,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
       if (patch.brandColor !== undefined) row.brand_color = patch.brandColor;
       if (patch.accentColor !== undefined) row.accent_color = patch.accentColor;
       if (patch.sharePhones !== undefined) row.share_phones = patch.sharePhones;
+      if (patch.rsvpReminderDays !== undefined) row.rsvp_reminder_days = patch.rsvpReminderDays;
       check(await sb.from('leagues').update(row).eq('id', id));
     },
     async phoneBook(leagueId) {
@@ -438,6 +440,15 @@ export function supabaseApi(url: string, anonKey: string): Api {
     async rsvps(eventId) {
       const rows = check(await sb.from('event_rsvps').select('player_id, status').eq('event_id', eventId)) as Row[];
       return Object.fromEntries(rows.map((r) => [r.player_id, r.status]));
+    },
+    async reminderPreview(eventId) {
+      return (await invokeRecap(sb, { eventId }, 'send-reminders', 'Reminder emails')) as ReminderPreview;
+    },
+    async sendReminder(eventId) {
+      return (await invokeRecap(sb, { eventId, send: true }, 'send-reminders', 'Reminder emails')) as { sent: number };
+    },
+    async rsvpByLink(token, answer) {
+      return (check(await sb.rpc('rsvp_by_link', { p_token: token, p_status: answer })) as RsvpLinkInfo | null) ?? null;
     },
     async setRsvp(leagueId, eventId, playerId, status) {
       check(

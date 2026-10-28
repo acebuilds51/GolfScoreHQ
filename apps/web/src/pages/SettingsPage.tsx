@@ -22,6 +22,7 @@ export function SettingsPage() {
       <JoinRequests onApproved={() => setMembersVersion((v) => v + 1)} />
       <Members version={membersVersion} />
       <PaymentLinks />
+      <Reminders />
       <ClubhouseTv />
       {api.mode === 'demo' && <DemoPlan onChanged={reloadLeague} />}
     </div>
@@ -404,6 +405,38 @@ function PaymentLinks() {
       </div>
       <ErrorText>{error ?? saved.error}</ErrorText>
     </form>
+  );
+}
+
+/** "Are you playing?" email (Pro): how many days before league night, or off. */
+function Reminders() {
+  const { league, reloadLeague } = useLeague();
+  const allowed = league.features.includes('rsvp');
+  const { busy, error, run } = useAction();
+  const days = league.rsvpReminderDays ?? null;
+  return (
+    <section className="card stack">
+      <div className="row between">
+        <h2>"Are you playing?" emails</h2>
+        {!allowed && <ProLock />}
+      </div>
+      <p className="small muted">
+        Golfers who haven't answered or joined a group get an email at 9 AM with one-tap "I'm in" and "I'm out" buttons (no sign-in needed) and a link to the tee sheet. Golfers can turn them off.
+      </p>
+      <label className="inline">
+        Send it
+        <select value={days ?? ''} disabled={!allowed || busy}
+          onChange={async (e) => {
+            const v = e.target.value ? Number(e.target.value) : null;
+            const ok = await run(async () => { await api.updateLeague(league.id, { rsvpReminderDays: v }); return true; });
+            if (ok) reloadLeague();
+          }}>
+          <option value="">Off</option>
+          {[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n === 1 ? 'The day before league night' : `${n} days before league night`}</option>)}
+        </select>
+      </label>
+      <ErrorText>{error}</ErrorText>
+    </section>
   );
 }
 

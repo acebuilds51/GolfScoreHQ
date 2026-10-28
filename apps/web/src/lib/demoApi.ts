@@ -28,6 +28,7 @@ interface Db {
     id: string; name: string; slug: string; ownerId: string; plan: Plan; joinCode: string | null; timezone: string;
     logoUrl?: string | null; bannerUrl?: string | null; brandColor?: string | null; accentColor?: string | null;
     planExpiresAt?: string | null; clubId?: string | null; demoSub?: LeagueBilling['subscription']; sharePhones?: boolean;
+    rsvpReminderDays?: number | null;
   }[];
   clubs: { id: string; ownerId: string; name: string; expiresAt: string | null }[];
   members: { leagueId: string; userId: string; role: Role }[];
@@ -55,12 +56,14 @@ interface Db {
   teeSheets: Record<string, TeeSheet>;
   /** seasonId → the season's tee times ("17:10", …, tee time 1 first). */
   seasonTeeTimes: Record<string, string[]>;
+  /** eventId → when its reminder email went out (demo never emails anyone). */
+  reminderSends: Record<string, { sent_at: string; recipients: number }>;
 }
 
 const empty = (): Db => ({
   session: null, users: {}, leagues: [], members: [], players: [], contacts: {}, invites: [], joinRequests: [], courses: [],
   seasons: [], events: [], rounds: [], ledger: [], ctpDecisions: {}, tvDisplays: [], rsvps: {}, subRequests: [],
-  recapSends: {}, recapPrefs: {}, paymentHandles: {}, clubs: [], setupRequests: [], teeSheets: {}, seasonTeeTimes: {},
+  recapSends: {}, recapPrefs: {}, paymentHandles: {}, clubs: [], setupRequests: [], teeSheets: {}, seasonTeeTimes: {}, reminderSends: {},
 });
 
 /** Demo uploads live only for this page view (too big for the browser's saved demo data). */
@@ -291,7 +294,8 @@ export function demoApi(): DemoApi {
       const role = roleIn(db, l.id);
       if (!role) return null;
       const league: League = { id: l.id, name: l.name, slug: l.slug, plan: l.plan, role, joinCode: l.joinCode, timezone: l.timezone, effectivePlan: l.plan, features: FEATURES[l.plan],
-        logoUrl: l.logoUrl ?? null, bannerUrl: l.bannerUrl ?? null, brandColor: l.brandColor ?? null, accentColor: l.accentColor ?? null, sharePhones: !!l.sharePhones };
+        logoUrl: l.logoUrl ?? null, bannerUrl: l.bannerUrl ?? null, brandColor: l.brandColor ?? null, accentColor: l.accentColor ?? null, sharePhones: !!l.sharePhones,
+        rsvpReminderDays: l.rsvpReminderDays ?? null };
       return league;
     },
     uploadLogo: (leagueId, png) => demoBrandFile(leagueId, 'logoUrl', png),
@@ -312,6 +316,7 @@ export function demoApi(): DemoApi {
       if (patch.brandColor !== undefined) l.brandColor = patch.brandColor;
       if (patch.accentColor !== undefined) l.accentColor = patch.accentColor;
       if (patch.sharePhones !== undefined) l.sharePhones = patch.sharePhones;
+      if (patch.rsvpReminderDays !== undefined) l.rsvpReminderDays = patch.rsvpReminderDays;
       save(db);
     },
     async phoneBook(leagueId) {
@@ -776,6 +781,27 @@ export function demoApi(): DemoApi {
     async rsvps(eventId) {
       const db = load();
       return { ...(db.rsvps[eventId] ?? {}) };
+    },
+    async reminderPreview(eventId) {
+      const db = load();
+      const ev = db.events.find((e) => e.id === eventId)!;
+      requireCommissioner(db, ev.leagueId);
+      if (!has(db, ev.leagueId, 'rsvp')) throw new Error('Reminder emails need GolfScoreHQ Pro.');
+      const answered = new Set([...Object.keys(db.rsvps[eventId] ?? {}), ...(db.teeSheets[eventId]?.lineup ?? []).map((l) => l.playerId)]);
+      const due = db.players.filter((p) => p.leagueId === ev.leagueId && p.active && !p.isSub && !answered.has(p.id));
+      const email = (p: { id: string; userId: string | null }) => db.contacts[p.id]?.email || (p.userId ? db.users[p.userId]?.email : null);
+      return { recipients: due.filter(email).length, missing: due.filter((p) => !email(p)).map((p) => p.displayName), alreadySent: db.reminderSends[eventId] ?? null };
+    },
+    async sendReminder(eventId) {
+      // Demo never emails anyone; it records the send so the screens behave the same.
+      const { recipients } = await this.reminderPreview(eventId);
+      const db = load();
+      db.reminderSends[eventId] = { sent_at: new Date().toISOString(), recipients };
+      save(db);
+      return { sent: recipients };
+    },
+    async rsvpByLink() {
+      return null; // the links are in real emails only
     },
     async setRsvp(leagueId, eventId, playerId, status) {
       const db = load();

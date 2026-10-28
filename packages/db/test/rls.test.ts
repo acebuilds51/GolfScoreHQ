@@ -544,6 +544,37 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
     await expect(call(tony, `insert into season_tee_times (season_id, league_id, slot, tee_time) values ($1, $2, 3, '18:00')`, [seasonId, oak])).rejects.toThrow(/permission denied/);
   });
 
+  it('answers from a reminder email link without signing in, and only for that golfer and week', async () => {
+    const { eventId } = await weekWithRound(tony, oak);
+    await db.query('delete from rounds where event_id = $1', [eventId]);
+    const al = await addPlayer(tony, oak, 'Al');
+    const token = 'reminder-token-0123456789abcdef';
+    await db.query('insert into rsvp_links (token_hash, event_id, player_id, league_id) values ($1, $2, $3, $4)',
+      [createHash('sha256').update(token).digest('hex'), eventId, al, oak]);
+    const answer = async (t: string, s: string | null = null) => (await as(db, null, () => rows<{ r: any }>(db, 'select rsvp_by_link($1, $2) as r', [t, s])))[0]!.r;
+
+    expect(await answer('not-a-real-token')).toBeNull();
+    expect(await answer(token)).toMatchObject({ leagueName: 'Oak Creek Men', weekNumber: 1, playerName: 'Al', status: null, open: true, remindersOff: false });
+    await expect(answer(token, 'in')).rejects.toThrow(/RSVPs are off/); // Free
+    await setPlan(oak, 'pro');
+    expect(await answer(token, 'in')).toMatchObject({ status: 'in' });
+
+    // Out takes them off the tee sheet too.
+    await as(db, tony, () => db.query(`select set_tee_times($1, $2::jsonb)`, [eventId, JSON.stringify([{ slot: 1, time: '17:10', captainId: al }])]));
+    expect(await answer(token, 'out')).toMatchObject({ status: 'out' });
+    expect(await rows(db, 'select * from event_lineup where player_id = $1', [al])).toEqual([]);
+    expect(await rows(db, 'select captain_id from event_tee_times where event_id = $1', [eventId])).toEqual([{ captain_id: null }]);
+
+    expect(await answer(token, 'stop')).toMatchObject({ remindersOff: true });
+    await db.query(`update events set status = 'settled' where id = $1`, [eventId]);
+    await expect(answer(token, 'in')).rejects.toThrow(/already started/);
+
+    // The links and the timer's secret aren't readable by anyone signed in or not.
+    await expect(as(db, tony, () => rows(db, 'select * from rsvp_links'))).rejects.toThrow(/permission denied/);
+    await expect(as(db, null, () => rows(db, 'select * from cron_secret'))).rejects.toThrow(/permission denied/);
+    expect((await rows(db, 'select length(token) as n from cron_secret'))[0]).toEqual({ n: 64 });
+  });
+
   it('lists the new features on every paid plan', async () => {
     const feats = await rows<{ code: string; f: string[] }>(db, `select code, features as f from plans order by code`);
     for (const p of feats) {
