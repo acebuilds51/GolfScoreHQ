@@ -62,13 +62,13 @@ export function WeekPage() {
       {layout && season && event.status !== 'settled' && event.status !== 'rainout' && (
         starting
           ? <StartGroup eventId={event.id} rounds={rounds} players={players} season={season} layout={layout} onCancel={() => setStarting(false)} />
-          : <div><button className="btn btn-primary" onClick={() => setStarting(true)}>Start scoring a group</button></div>
+          : <div><button className="btn btn-primary" disabled={data.stale} onClick={() => setStarting(true)}>{data.stale ? 'Updating…' : 'Start scoring a group'}</button></div>
       )}
 
       {event.status === 'scheduled' && rounds.length === 0 && <TeeSheetPanel event={event} players={players} />}
       {event.status === 'scheduled' && <WhosPlaying eventId={event.id} weekNumber={event.weekNumber} players={players} />}
 
-      {layout && season && <WeekResults event={event} season={season} layout={layout} rounds={rounds} names={names} onChanged={data.reload} />}
+      {layout && season && <WeekResults event={event} season={season} layout={layout} rounds={rounds} names={names} updating={data.stale} onChanged={data.reload} />}
 
       <section className="card flush">
         <div className="row between pad">

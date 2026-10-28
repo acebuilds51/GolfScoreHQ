@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { Link, NavLink, Outlet, useLocation, useParams } from 'react-router-dom';
 import { Icon, type IconName } from '../components/Icon';
 import { NotificationPrompt } from '../components/PhoneNotifications';
@@ -88,7 +89,8 @@ export function LeagueLayout() {
           </nav>
         </div>
         <NotificationPrompt moreLink={`/l/${l.slug}/more`} />
-        <Outlet />
+        {/* A page still downloading keeps the league header and bottom bar on screen. */}
+        <Suspense fallback={<PageSkeleton />}><Outlet /></Suspense>
         <BottomBar />
       </div>
     </LeagueContext.Provider>
