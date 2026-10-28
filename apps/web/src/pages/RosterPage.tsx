@@ -6,6 +6,7 @@ import { isCommissioner, type Contact, type Player } from '../lib/types';
 import { checkGolferRows, parseRoster, type GolferRow } from '../lib/util';
 import { fmtIndex, leagueIndexes, loadPlayedRounds, parseIndex, type IndexInfo } from '../lib/handicaps';
 import { handicapRules } from '../lib/scoring';
+import { norm } from '../lib/importer';
 
 export function RosterPage() {
   const { league } = useLeague();
@@ -27,7 +28,14 @@ export function RosterPage() {
 
   const players = data.data?.players ?? [];
   const active = players.filter((p) => p.active);
+  const members = active.filter((p) => !p.isSub);
+  const subs = active.filter((p) => p.isSub);
   const inactive = players.filter((p) => !p.active);
+  const [showSubs, setShowSubs] = useState(false);
+  const row = (p: Player) => (
+    <PlayerRow key={p.id} player={p} others={players.filter((x) => x.id !== p.id)} contact={data.data?.contacts[p.id]} index={data.data?.indexes.get(p.id)}
+      handicapsOn={!!data.data?.handicapsOn} commish={commish} onChanged={data.reload} onInvite={(link) => setInviteFor({ player: p, link })} />
+  );
 
   return (
     <div className="page stack">
@@ -45,41 +53,87 @@ export function RosterPage() {
         </div>
       )}
 
+      {commish && <Duplicates players={players} onMerged={data.reload} />}
+
       <section className="card flush">
         <div className="row between pad">
-          <h2>Roster <span className="muted">({active.length})</span></h2>
+          <h2>Roster <span className="muted">({members.length})</span></h2>
         </div>
         {data.data && active.length === 0 ? (
           <EmptyState title="No golfers yet">{commish && <p className="muted">Add your golfers above, one at a time or by pasting a list.</p>}</EmptyState>
+        ) : members.length === 0 ? (
+          <p className="pad small muted">No regular members yet; everyone is a sub.</p>
         ) : (
-          <ul className="list">
-            {active.map((p) => (
-              <PlayerRow key={p.id} player={p} contact={data.data?.contacts[p.id]} index={data.data?.indexes.get(p.id)} handicapsOn={!!data.data?.handicapsOn} commish={commish} onChanged={data.reload} onInvite={(link) => setInviteFor({ player: p, link })} />
-            ))}
-          </ul>
+          <ul className="list">{members.map(row)}</ul>
+        )}
+        {subs.length > 0 && (
+          <>
+            <button type="button" className="roster-section-toggle" aria-expanded={showSubs} onClick={() => setShowSubs(!showSubs)}>
+              <span className="grow">Subs <span className="muted">({subs.length})</span></span>
+              <span aria-hidden="true">{showSubs ? '▾' : '▸'}</span>
+            </button>
+            {showSubs && <ul className="list">{subs.map(row)}</ul>}
+          </>
         )}
         {inactive.length > 0 && (
-          <div className="pad">
-            <button className="btn btn-ghost btn-sm" onClick={() => setShowInactive(!showInactive)}>
-              {showInactive ? 'Hide' : 'Show'} inactive golfers ({inactive.length})
+          <>
+            <button type="button" className="roster-section-toggle" aria-expanded={showInactive} onClick={() => setShowInactive(!showInactive)}>
+              <span className="grow">Inactive <span className="muted">({inactive.length})</span></span>
+              <span aria-hidden="true">{showInactive ? '▾' : '▸'}</span>
             </button>
-          </div>
-        )}
-        {showInactive && (
-          <ul className="list">
-            {inactive.map((p) => (
-              <PlayerRow key={p.id} player={p} contact={data.data?.contacts[p.id]} index={data.data?.indexes.get(p.id)} handicapsOn={!!data.data?.handicapsOn} commish={commish} onChanged={data.reload} onInvite={(link) => setInviteFor({ player: p, link })} />
-            ))}
-          </ul>
+            {showInactive && <ul className="list">{inactive.map(row)}</ul>}
+          </>
         )}
       </section>
     </div>
   );
 }
 
-function PlayerRow({ player, contact, index, handicapsOn, commish, onChanged, onInvite }: {
-  player: Player; contact?: Contact; index?: IndexInfo; handicapsOn: boolean; commish: boolean; onChanged: () => void; onInvite: (link: string) => void;
+/** Golfers whose names match apart from spacing and capitals, with one tap to merge each set. */
+function Duplicates({ players, onMerged }: { players: Player[]; onMerged: () => void }) {
+  const { busy, error, run } = useAction();
+  const sets = useMemo(() => {
+    const by = new Map<string, Player[]>();
+    for (const p of players) by.set(norm(p.displayName), [...(by.get(norm(p.displayName)) ?? []), p]);
+    return [...by.values()].filter((s) => s.length > 1);
+  }, [players]);
+  if (!sets.length) return null;
+
+  async function merge(set: Player[]) {
+    const keep = keeperOf(set);
+    const drop = set.filter((p) => p !== keep);
+    if (!window.confirm(`Merge ${set.length} "${keep.displayName}" entries into one? Their rounds, money and contact details all move to one roster spot. This can't be undone.`)) return;
+    const ok = await run(async () => {
+      for (const d of drop) await api.mergePlayers(keep.id, d.id);
+      return true;
+    });
+    if (ok) onMerged();
+  }
+
+  return (
+    <section className="card stack">
+      <h2>Possible duplicates</h2>
+      <p className="small muted">These names match apart from spacing or capitals. Merging keeps one roster spot with everyone's rounds, money and contact details.</p>
+      {sets.map((s) => (
+        <div key={s[0]!.id} className="row between wrap">
+          <span><strong>{keeperOf(s).displayName}</strong> <span className="muted">× {s.length}</span></span>
+          <button className="btn btn-sm" disabled={busy} onClick={() => merge(s)}>Merge into one</button>
+        </div>
+      ))}
+      <ErrorText>{error}</ErrorText>
+    </section>
+  );
+}
+
+/** Which duplicate to keep: the one with an app account, else a regular member, else an active one, else the first. */
+function keeperOf(set: Player[]): Player {
+  return set.find((p) => p.userId) ?? set.find((p) => p.active && !p.isSub) ?? set.find((p) => p.active) ?? set[0]!;
+}
+
+function PlayerRow({ player, others, contact, index, handicapsOn, commish, onChanged, onInvite }: {
+  player: Player; others: Player[]; contact?: Contact; index?: IndexInfo; handicapsOn: boolean; commish: boolean; onChanged: () => void; onInvite: (link: string) => void;
 }) {
+  const [mergeInto, setMergeInto] = useState('');
   const { league } = useLeague();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(player.displayName);
@@ -133,6 +187,34 @@ function PlayerRow({ player, contact, index, handicapsOn, commish, onChanged, on
             Save
           </button>
           <button className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>Cancel</button>
+        </div>
+        <div className="subcard stack">
+          <label className="inline">
+            Same golfer as someone else on the roster?
+            <select value={mergeInto} onChange={(e) => setMergeInto(e.target.value)}>
+              <option value="">Merge {player.displayName.split(' ')[0]} into…</option>
+              {[...others].sort((a, b) => a.displayName.localeCompare(b.displayName)).map((o) => (
+                <option key={o.id} value={o.id}>{o.displayName}{o.isSub ? ' (sub)' : ''}{o.active ? '' : ' (inactive)'}</option>
+              ))}
+            </select>
+            <span className="small muted">For a misspelled name. Everything of {player.displayName}'s (rounds, money, contact details) moves to the golfer you pick, and this entry is removed.</span>
+          </label>
+          {mergeInto && (
+            <div>
+              <button
+                className="btn btn-sm"
+                disabled={busy}
+                onClick={async () => {
+                  const target = others.find((o) => o.id === mergeInto)!;
+                  if (!window.confirm(`Merge ${player.displayName} into ${target.displayName}? ${player.displayName} is removed from the roster and everything moves to ${target.displayName}. This can't be undone.`)) return;
+                  const ok = await run(async () => { await api.mergePlayers(target.id, player.id); return true; });
+                  if (ok) { setEditing(false); onChanged(); }
+                }}
+              >
+                Merge into {others.find((o) => o.id === mergeInto)?.displayName}
+              </button>
+            </div>
+          )}
         </div>
       </li>
     );

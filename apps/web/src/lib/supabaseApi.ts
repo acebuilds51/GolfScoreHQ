@@ -208,6 +208,9 @@ export function supabaseApi(url: string, anonKey: string): Api {
       }
       check(await sb.from('players').update(row).eq('id', id));
     },
+    async mergePlayers(keepId, dropId) {
+      check(await sb.rpc('merge_players', { p_keep: keepId, p_drop: dropId }));
+    },
     async saveContact(leagueId, playerId, c) {
       check(await sb.from('player_contacts').upsert({ player_id: playerId, league_id: leagueId, email: c.email || null, phone: c.phone || null }));
     },

@@ -318,6 +318,39 @@ export function demoApi(): DemoApi {
       if (patch.handicapIndex !== undefined) p.handicapIndexUpdatedAt = new Date().toISOString();
       save(db);
     },
+    async mergePlayers(keepId, dropId) {
+      // Same rules as merge_players() in the database.
+      const db = load();
+      if (keepId === dropId) throw new Error('Pick two different golfers.');
+      const k = db.players.find((x) => x.id === keepId)!;
+      const d = db.players.find((x) => x.id === dropId)!;
+      requireCommissioner(db, k.leagueId);
+      if (k.userId && d.userId && k.userId !== d.userId) throw new Error('Both golfers have their own app accounts, so they are different people.');
+      const both = db.rounds.find((r) => r.players.some((p) => p.playerId === keepId) && r.players.some((p) => p.playerId === dropId));
+      if (both) throw new Error('They played in the same group, so they are different golfers.');
+      for (const r of db.rounds) {
+        for (const p of r.players) if (p.playerId === dropId) p.playerId = keepId;
+        if (r.scores[dropId]) { r.scores[keepId] = r.scores[dropId]!; delete r.scores[dropId]; }
+        for (const c of Object.values(r.ctp)) {
+          if (c.playerId === dropId) c.playerId = keepId;
+          if (c.beat === dropId) c.beat = c.playerId === keepId ? null : keepId;
+        }
+      }
+      for (const e of db.ledger) if (e.playerId === dropId) e.playerId = keepId;
+      const dc = db.contacts[dropId];
+      if (dc) {
+        const kc = db.contacts[keepId];
+        db.contacts[keepId] = { ...dc, ...kc, email: kc?.email || dc.email, phone: kc?.phone || dc.phone };
+        delete db.contacts[dropId];
+      }
+      Object.assign(k, {
+        displayName: k.displayName.trim().replace(/\s+/g, ' '),
+        userId: k.userId ?? d.userId, handicapIndex: k.handicapIndex ?? d.handicapIndex ?? null,
+        ghinNumber: k.ghinNumber ?? d.ghinNumber ?? null, active: k.active || d.active,
+      });
+      db.players = db.players.filter((x) => x.id !== dropId);
+      save(db);
+    },
     async saveContact(leagueId, playerId, c) {
       const db = load();
       requireCommissioner(db, leagueId);
