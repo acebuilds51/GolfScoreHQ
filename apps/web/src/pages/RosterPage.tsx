@@ -66,6 +66,7 @@ export function RosterPage() {
 
       {commish && <Duplicates players={players} onMerged={data.reload} />}
       {data.data && (commish || league.sharePhones) && <TextLeague players={active} phoneOf={phoneOf} commish={commish} />}
+      {commish && data.data && <TextInvites players={active} phoneOf={phoneOf} />}
 
       <section className="card flush">
         <div className="row between pad">
@@ -140,6 +141,80 @@ function Duplicates({ players, onMerged }: { players: Player[]; onMerged: () => 
 /** Which duplicate to keep: the one with an app account, else a regular member, else an active one, else the first. */
 function keeperOf(set: Player[]): Player {
   return set.find((p) => p.userId) ?? set.find((p) => p.active && !p.isSub) ?? set.find((p) => p.active) ?? set[0]!;
+}
+
+/**
+ * Commissioners: text each golfer who hasn't joined the app their own invite
+ * link (it links their account to their roster spot, history and all). Each
+ * link is personal, so it's one text per golfer: prepare the links, then tap
+ * each name to open Messages with that golfer's text ready to send.
+ */
+function TextInvites({ players, phoneOf }: { players: Player[]; phoneOf: (p: Player) => string | null }) {
+  const { league } = useLeague();
+  const [open, setOpen] = useState(false);
+  const [links, setLinks] = useState<Record<string, string>>({});
+  const [sent, setSent] = useState<Set<string>>(new Set());
+  const [progress, setProgress] = useState<string | null>(null);
+  const { busy, error, run } = useAction();
+  const waiting = players.filter((p) => !p.userId && p.active);
+  const reachable = waiting.filter((p) => telNumber(phoneOf(p)));
+  const noPhone = waiting.filter((p) => !telNumber(phoneOf(p)));
+  if (!waiting.length) return null;
+
+  const message = (p: Player, link: string) =>
+    `Hi ${p.displayName.split(' ')[0]}, ${league.name} is on GolfScoreHQ this year: tee times, live scores and standings on your phone. Tap to join (it's set up for you): ${link}`;
+
+  async function prepare() {
+    const out: Record<string, string> = { ...links };
+    await run(async () => {
+      for (const [i, p] of reachable.entries()) {
+        if (out[p.id]) continue;
+        setProgress(`Making links… ${i + 1} of ${reachable.length}`);
+        out[p.id] = `${window.location.origin}/join/${await api.createInvite(league.id, { playerId: p.id })}`;
+      }
+      return true;
+    });
+    setProgress(null);
+    setLinks(out);
+  }
+
+  return (
+    <section className="card stack">
+      <div className="row between wrap">
+        <h2>Invite golfers by text</h2>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(!open)}>{open ? 'Hide' : `${waiting.length} not joined yet`}</button>
+      </div>
+      {open && (
+        <>
+          <p className="small muted">
+            Each golfer gets their own link, which signs them in to their roster spot, so these go one text at a time from your phone.
+            Links work once and last 30 days, so send them close to the season.
+          </p>
+          {reachable.length === 0 ? (
+            <p className="small muted">Nobody who hasn't joined has a phone number on file.</p>
+          ) : Object.keys(links).length === 0 ? (
+            <div className="row wrap">
+              <button className="btn btn-primary" disabled={busy} onClick={prepare}>{busy ? progress ?? 'Making links…' : `Get invite texts ready (${reachable.length})`}</button>
+            </div>
+          ) : (
+            <ul className="file-list">
+              {reachable.filter((p) => links[p.id]).map((p) => (
+                <li key={p.id} className="row between">
+                  <span>{sent.has(p.id) ? '✓ ' : ''}{p.displayName}</span>
+                  <a className={`btn btn-sm${sent.has(p.id) ? '' : ' btn-primary'}`} href={smsLink([phoneOf(p)], message(p, links[p.id]!)) ?? '#'}
+                    onClick={() => setSent((s) => new Set(s).add(p.id))}>
+                    {sent.has(p.id) ? 'Text again' : 'Text invite'}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+          {noPhone.length > 0 && <p className="small muted">No phone number for {noPhone.map((p) => p.displayName).join(', ')}: use Invite on their row to copy a link instead.</p>}
+          <ErrorText>{error}</ErrorText>
+        </>
+      )}
+    </section>
+  );
 }
 
 type Audience = 'pick' | 'members' | 'subs' | 'all';
