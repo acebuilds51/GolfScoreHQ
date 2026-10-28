@@ -4,7 +4,7 @@ import { api } from '../lib/backend';
 import { brandBanner, brandLogo, brandStyle, PALETTES, parseHex, resizeBanner, resizeLogo } from '../lib/brand';
 import type { DemoApi } from '../lib/demoApi';
 import { useAction, useAsync, useAuth, useLeague } from '../lib/hooks';
-import { isCommissioner, type PaymentHandles, type Plan, type Role, type TvDisplay, type TvPanel, type TvSettings } from '../lib/types';
+import { isCommissioner, type PaymentHandles, type Plan, type Role, type TvDisplay, type TvPanel, type TvSettings, type TvSponsor } from '../lib/types';
 import { randomJoinCode } from '../lib/util';
 import { PlanSection } from './PlanSection';
 
@@ -534,7 +534,42 @@ function TvDisplayEditor({ display, onChanged }: { display: TvDisplay; onChanged
           </label>
         ))}
       </div>
+      <TvSponsorEditor settings={s} busy={busy} save={save} />
       <ErrorText>{error}</ErrorText>
+    </div>
+  );
+}
+
+/** Club plan: a sponsor's screen in the TV rotation and a line along the bottom. */
+function TvSponsorEditor({ settings, busy, save }: { settings: TvSettings; busy: boolean; save: (s: TvSettings) => Promise<void> }) {
+  const { league } = useLeague();
+  const club = league.features.includes('multi_league');
+  const saved = settings.sponsor ?? null;
+  const [draft, setDraft] = useState<TvSponsor>(saved ?? { name: '', message: '', logoUrl: '' });
+  const [open, setOpen] = useState(false);
+  if (!club) {
+    return <p className="small muted">Club plan: add a sponsor (the pro shop, a local business) with their own screen in the rotation.</p>;
+  }
+  if (!open) {
+    return (
+      <div className="row wrap">
+        <span className="small">{saved ? <>Sponsor: <strong>{saved.name}</strong></> : 'No sponsor'}</span>
+        <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { setDraft(saved ?? { name: '', message: '', logoUrl: '' }); setOpen(true); }}>{saved ? 'Edit sponsor' : 'Add a sponsor'}</button>
+      </div>
+    );
+  }
+  const clean = (v?: string | null) => v?.trim() || null;
+  return (
+    <div className="stack">
+      <label>Sponsor name<input maxLength={60} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Joe's Pro Shop" /></label>
+      <label>Their line (optional)<input maxLength={140} value={draft.message ?? ''} onChange={(e) => setDraft({ ...draft, message: e.target.value })} placeholder="10% off for league members" /></label>
+      <label>Logo link (optional)<input value={draft.logoUrl ?? ''} onChange={(e) => setDraft({ ...draft, logoUrl: e.target.value })} placeholder="https://…/logo.png" /></label>
+      <div className="row wrap">
+        <button type="button" className="btn btn-sm" disabled={busy || !draft.name.trim()}
+          onClick={async () => { await save({ ...settings, sponsor: { name: draft.name.trim(), message: clean(draft.message), logoUrl: clean(draft.logoUrl) } }); setOpen(false); }}>Save sponsor</button>
+        {saved && <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={async () => { await save({ ...settings, sponsor: null }); setOpen(false); }}>Remove</button>}
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
     </div>
   );
 }
