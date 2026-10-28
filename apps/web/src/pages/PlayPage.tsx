@@ -30,6 +30,7 @@ export function PlayPage() {
     return { season, courses, events };
   }, [league.id]);
   const [editingRules, setEditingRules] = useState(false);
+  const [nextOpen, setNextOpen] = useState(false);
 
   if (data.error) return <div className="page"><ErrorText>{data.error}</ErrorText></div>;
   if (!data.data) return <PageSkeleton />;
@@ -69,9 +70,16 @@ export function PlayPage() {
               {season.startDate ? ` · starting ${fmtDate(season.startDate)}` : ''}
             </p>
           </div>
-          {commish && !editingRules && <button className="btn btn-ghost btn-sm" onClick={() => setEditingRules(true)}>Edit format</button>}
+          {commish && !editingRules && !nextOpen && (
+            <div className="row wrap">
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditingRules(true)}>Edit format</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setNextOpen(true)}>Start the {season.year + 1} season</button>
+            </div>
+          )}
         </div>
-        {editingRules ? (
+        {nextOpen ? (
+          <NextSeasonForm season={season} onCancel={() => setNextOpen(false)} onStarted={() => { setNextOpen(false); data.reload(); }} />
+        ) : editingRules ? (
           <SeasonForm season={season} onSaved={() => { setEditingRules(false); data.reload(); }} onCancel={() => setEditingRules(false)} />
         ) : (
           <p className="small">{describeRules(season.rules).join(' · ')}</p>
@@ -132,6 +140,54 @@ function AddWeek({ season, weekNumber, courses, onAdded }: { season: Season; wee
       </button>
       <ErrorText>{error}</ErrorText>
     </div>
+  );
+}
+
+/**
+ * Commissioner: the next season, with this season's format, side games, league
+ * night and tee times. The finished season stays in the standings and awards.
+ */
+function NextSeasonForm({ season, onStarted, onCancel }: { season: Season; onStarted: () => void; onCancel: () => void }) {
+  const { league } = useLeague();
+  const [year, setYear] = useState(String(season.year + 1));
+  const [leagueDay, setLeagueDay] = useState(String(season.leagueDay ?? 4));
+  const [startDate, setStartDate] = useState('');
+  const { busy, error, setError, run } = useAction();
+  const history = league.features.includes('history');
+  return (
+    <form className="subcard stack" onSubmit={async (e) => {
+      e.preventDefault();
+      const y = Number(year);
+      if (!(y > season.year && y <= 2100)) return setError(`Enter a year after ${season.year}.`);
+      const ok = await run(async () => {
+        const times = league.features.includes('lineup') ? await api.seasonTeeTimes(season.id) : [];
+        const id = await api.createSeason(league.id, { year: y, name: '', rules: season.rules, startDate: startDate || null, leagueDay: Number(leagueDay) });
+        if (times.length) await api.setSeasonTeeTimes(id, times);
+        return true;
+      });
+      if (ok) onStarted();
+    }}>
+      <strong>Start the next season</strong>
+      <p className="small muted">
+        Same golfers, format, side games{league.features.includes('lineup') ? ' and tee times' : ''}; you can change any of them after.{' '}
+        {history ? `The ${season.year} season stays in Standings and Awards (pick it from the season list).` : `Past seasons are kept, and Pro leagues can look back at them any time.`}
+      </p>
+      <div className="grid three">
+        <label>Year<input inputMode="numeric" value={year} onChange={(e) => { setYear(e.target.value); setError(null); }} /></label>
+        <label>
+          League night
+          <select value={leagueDay} onChange={(e) => setLeagueDay(e.target.value)}>
+            {DAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}
+          </select>
+        </label>
+        <label>First week<input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></label>
+      </div>
+      <ErrorText>{error}</ErrorText>
+      <div className="row">
+        <button className="btn btn-primary" disabled={busy}>{busy ? 'Starting…' : `Start the ${year} season`}</button>
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
   );
 }
 

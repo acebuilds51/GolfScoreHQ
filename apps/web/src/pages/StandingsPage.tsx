@@ -4,12 +4,14 @@ import { EmptyState, ErrorText, ProLock, PageSkeleton } from '../components/ui';
 import { AWARD_UNITS } from '../lib/awards';
 import { useAsync, useLeague } from '../lib/hooks';
 import { fmtMoney, individualRules, playsForMoney } from '../lib/scoring';
-import { loadSeasonData } from '../lib/seasonData';
+import { loadSeasonData, useSeasonChoice } from '../lib/seasonData';
+import { SeasonPicker, seasonLabel } from '../components/SeasonPicker';
 import { fmtToPar, sortStandings, type SortKey, type StandingRow } from '../lib/standings';
 
 export function StandingsPage() {
   const { league } = useLeague();
-  const data = useAsync(() => loadSeasonData(league.id), [league.id]);
+  const { seasonId, query } = useSeasonChoice();
+  const data = useAsync(() => loadSeasonData(league.id, seasonId), [league.id, seasonId]);
 
   const rules = data.data ? data.data.season.rules : null;
   const hasMoney = !!rules && playsForMoney(rules);
@@ -25,12 +27,17 @@ export function StandingsPage() {
   if (!data.data) {
     return <div className="page"><EmptyState title="No season yet"><p className="muted">Standings appear once the season is set up and the first week is settled.</p></EmptyState></div>;
   }
-  const { season, standings } = data.data;
+  const { season, seasons, standings } = data.data;
   if (standings.weeksCounted === 0) {
     return (
-      <div className="page">
+      <div className="page stack">
+        <div className="row between wrap">
+          <h2>{seasonLabel(season)}</h2>
+          <SeasonPicker seasons={seasons} current={season} />
+        </div>
         <EmptyState title="No settled weeks yet">
           <p className="muted">Standings fill in after the commissioner settles a week on the <Link to="../play">Play</Link> tab.</p>
+          {seasons.length > 1 && season.id === seasons[0]!.id && <p className="muted">Pick an earlier season above to see how it finished.</p>}
         </EmptyState>
       </div>
     );
@@ -51,8 +58,11 @@ export function StandingsPage() {
     <div className="page stack">
       <div className="row between wrap">
         <div>
-          <h2>{season.name || `${season.year} season`}</h2>
-          <p className="small muted">Through {standings.weeksCounted} settled week{standings.weeksCounted === 1 ? '' : 's'}. Averages count full rounds only.</p>
+          <div className="row wrap">
+            <h2>{seasonLabel(season)}</h2>
+            <SeasonPicker seasons={seasons} current={season} />
+          </div>
+          <p className="small muted">{season.id === seasons[0]?.id ? 'Through' : 'Final:'} {standings.weeksCounted} settled week{standings.weeksCounted === 1 ? '' : 's'}. Averages count full rounds only.</p>
         </div>
         <div className="row wrap pills" role="group" aria-label="Sort by">
           {sorts.filter((s) => s.show).map((s) => (
@@ -90,8 +100,8 @@ export function StandingsPage() {
 
       <section className="card stack">
         <div className="row between">
-          <h2>Season awards so far</h2>
-          {showAwards ? <Link className="small" to="../awards">Awards and course stats →</Link> : <ProLock />}
+          <h2>{season.id === seasons[0]?.id ? 'Season awards so far' : 'Season awards'}</h2>
+          {showAwards ? <Link className="small" to={`../awards${query}`}>Awards and course stats →</Link> : <ProLock />}
         </div>
         {showAwards ? (
           standings.awards.length ? (
@@ -116,6 +126,7 @@ export function StandingsPage() {
 function Row({ r, rank, open, onToggle, skins, ctp, money, individual, stableford }: {
   r: StandingRow; rank: number; open: boolean; onToggle: () => void; skins: boolean; ctp: boolean; money: boolean; individual: boolean; stableford: boolean;
 }) {
+  const { query } = useSeasonChoice();
   const cols = 6 + (individual ? 1 : 0) + (stableford ? 2 : 0) + (skins ? 1 : 0) + (ctp ? 1 : 0) + (money ? 1 : 0);
   return (
     <>
@@ -144,7 +155,7 @@ function Row({ r, rank, open, onToggle, skins, ctp, money, individual, stablefor
                 {r.weeks.map((w) => <span key={w.week} className="chip">Wk {w.week}: <strong>{w.score}</strong> <span className="muted">{fmtToPar(w.toPar)}</span></span>)}
               </div>
             ) : <span className="small muted">No full rounds yet.</span>}
-            <div><Link className="small" to={`../player/${r.playerId}`}>All of {r.name.split(' ')[0]}'s stats →</Link></div>
+            <div><Link className="small" to={`../player/${r.playerId}${query}`}>All of {r.name.split(' ')[0]}'s stats →</Link></div>
           </td>
         </tr>
       )}
