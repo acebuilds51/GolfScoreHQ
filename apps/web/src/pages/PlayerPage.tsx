@@ -6,14 +6,16 @@ import { AWARD_ICONS } from '../lib/awards';
 import { fmtIndex } from '../lib/handicaps';
 import { useAsync, useLeague } from '../lib/hooks';
 import { asBestBall, fmtMoney, individualRules, playsForMoney } from '../lib/scoring';
-import { loadSeasonData, type SeasonData } from '../lib/seasonData';
+import { loadSeasonData, useSeasonChoice, type SeasonData } from '../lib/seasonData';
+import { SeasonPicker, seasonLabel } from '../components/SeasonPicker';
 import { fmtToPar, sortStandings, type StandingRow } from '../lib/standings';
 
 /** One golfer's season: the numbers everyone sees, plus Pro's deeper stats. */
 export function PlayerPage() {
   const { playerId = '' } = useParams();
   const { league } = useLeague();
-  const data = useAsync(() => loadSeasonData(league.id), [league.id]);
+  const { seasonId } = useSeasonChoice();
+  const data = useAsync(() => loadSeasonData(league.id, seasonId), [league.id, seasonId]);
 
   if (data.error) return <div className="page"><ErrorText>{data.error}</ErrorText></div>;
   if (data.loading && !data.data) return <PageSkeleton />;
@@ -27,6 +29,7 @@ function PlayerStats({ data, playerId }: { data: SeasonData; playerId: string })
   const { league } = useLeague();
   const pro = league.features.includes('awards');
   const { season, standings, players, events, rounds } = data;
+  const { query } = useSeasonChoice();
   const player = players.find((p) => p.id === playerId)!;
   const names = useMemo(() => new Map(players.map((p) => [p.id, p.displayName])), [players]);
   const rules = season.rules;
@@ -59,10 +62,13 @@ function PlayerStats({ data, playerId }: { data: SeasonData; playerId: string })
   return (
     <div className="page stack player-page">
       <div>
-        <Link to="../standings" className="small">← Standings</Link>
-        <h2>{player.displayName}{player.isSub && <span className="badge badge-neutral"> Sub</span>}</h2>
+        <Link to={`../standings${query}`} className="small">← Standings</Link>
+        <div className="row between wrap">
+          <h2>{player.displayName}{player.isSub && <span className="badge badge-neutral"> Sub</span>}</h2>
+          <SeasonPicker seasons={data.seasons} current={season} />
+        </div>
         <p className="small muted">
-          {season.name || `${season.year} season`}{rank ? ` · ${ordinal(rank)} in the standings` : ''}
+          {seasonLabel(season)}{rank ? ` · ${ordinal(rank)} in the standings` : ''}
           {player.handicapIndex != null ? ` · Handicap Index ${fmtIndex(player.handicapIndex)}` : ''}
         </p>
         {myAwards.length > 0 && (
@@ -108,7 +114,7 @@ function PlayerStats({ data, playerId }: { data: SeasonData; playerId: string })
                       <tbody>
                         {h2h.map((h) => (
                           <tr key={h.opponent}>
-                            <td className="name"><Link to={`../player/${h.opponent}`}>{names.get(h.opponent) ?? '?'}</Link></td>
+                            <td className="name"><Link to={`../player/${h.opponent}${query}`}>{names.get(h.opponent) ?? '?'}</Link></td>
                             <td className={h.wins > h.losses ? 'good' : ''}>{h.wins}</td>
                             <td className={h.losses > h.wins ? 'warn' : ''}>{h.losses}</td>
                             <td>{h.halves}</td>

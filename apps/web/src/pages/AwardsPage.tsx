@@ -6,7 +6,8 @@ import { EmptyState, ErrorText, PageSkeleton, ProLock } from '../components/ui';
 import { AWARD_ICONS, AWARD_UNITS, MONEY_AWARDS } from '../lib/awards';
 import { brandLogo } from '../lib/brand';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
-import { loadSeasonData, type SeasonData } from '../lib/seasonData';
+import { loadSeasonData, useSeasonChoice, type SeasonData } from '../lib/seasonData';
+import { SeasonPicker, seasonLabel } from '../components/SeasonPicker';
 import { drawAwardsCard, saveImage, shareImage, type CardBrand } from '../lib/shareCards';
 import { fmtToPar } from '../lib/standings';
 
@@ -14,7 +15,8 @@ import { fmtToPar } from '../lib/standings';
 export function AwardsPage() {
   const { league } = useLeague();
   const pro = league.features.includes('awards');
-  const data = useAsync(async () => (pro ? loadSeasonData(league.id) : null), [league.id, pro]);
+  const { seasonId } = useSeasonChoice();
+  const data = useAsync(async () => (pro ? loadSeasonData(league.id, seasonId) : null), [league.id, pro, seasonId]);
 
   if (!pro) {
     return (
@@ -27,24 +29,39 @@ export function AwardsPage() {
   }
   if (data.error) return <div className="page"><ErrorText>{data.error}</ErrorText></div>;
   if (data.loading && !data.data) return <PageSkeleton />;
-  if (!data.data || data.data.standings.weeksCounted === 0) {
+  if (!data.data) {
     return <div className="page"><EmptyState title="No awards yet"><p className="muted">Awards fill in once the first week is settled.</p></EmptyState></div>;
+  }
+  if (data.data.standings.weeksCounted === 0) {
+    return (
+      <div className="page stack">
+        <div className="row between wrap">
+          <h2>{seasonLabel(data.data.season)} awards</h2>
+          <SeasonPicker seasons={data.data.seasons} current={data.data.season} />
+        </div>
+        <EmptyState title="No awards yet"><p className="muted">Awards fill in once the first week is settled.</p></EmptyState>
+      </div>
+    );
   }
   return <Awards data={data.data} />;
 }
 
 function Awards({ data }: { data: SeasonData }) {
   const { league } = useLeague();
-  const { season, standings, players } = data;
+  const { season, seasons, standings, players } = data;
+  const { query } = useSeasonChoice();
   const names = useMemo(() => new Map(players.map((p) => [p.id, p.displayName])), [players]);
-  const seasonLabel = season.name || `${season.year} season`;
+  const label = seasonLabel(season);
   const who = (a: Award) => a.winners.map((id) => names.get(id) ?? '?').join(', ');
 
   return (
     <div className="page stack">
       <div>
-        <Link to="../standings" className="small">← Standings</Link>
-        <h2>{seasonLabel} awards</h2>
+        <Link to={`../standings${query}`} className="small">← Standings</Link>
+        <div className="row between wrap">
+          <h2>{label} awards</h2>
+          <SeasonPicker seasons={seasons} current={season} />
+        </div>
         <p className="small muted">Through {standings.weeksCounted} settled week{standings.weeksCounted === 1 ? '' : 's'}. Average awards need enough full rounds to qualify; ties share an award.</p>
       </div>
 
@@ -58,7 +75,7 @@ function Awards({ data }: { data: SeasonData }) {
               <div className="grow">
                 <div className="small muted">{a.title}</div>
                 <div className="award-winners">
-                  {a.winners.map((id, i) => <span key={id}>{i > 0 && ', '}<Link to={`../player/${id}`}>{names.get(id) ?? '?'}</Link></span>)}
+                  {a.winners.map((id, i) => <span key={id}>{i > 0 && ', '}<Link to={`../player/${id}${query}`}>{names.get(id) ?? '?'}</Link></span>)}
                 </div>
                 {AWARD_UNITS[a.key](a.value) && <div className="small">{AWARD_UNITS[a.key](a.value)}</div>}
               </div>
@@ -67,7 +84,7 @@ function Awards({ data }: { data: SeasonData }) {
         </ul>
       )}
 
-      {standings.awards.length > 0 && <ShareAwards awards={standings.awards} who={who} seasonLabel={seasonLabel} />}
+      {standings.awards.length > 0 && <ShareAwards awards={standings.awards} who={who} seasonLabel={label} />}
 
       <CourseStats holes={courseHoleStats(standings.played)} />
       <p className="small muted">Scramble weeks are team scores, so they don't count toward anyone's awards for scoring. {league.features.includes('side_games') ? 'Their money and skins do.' : ''}</p>
