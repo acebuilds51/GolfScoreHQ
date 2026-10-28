@@ -135,7 +135,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
     },
     async league(slug) {
       const me = await uid();
-      const l = check(await sb.from('leagues').select('id, name, slug, plan, join_code, timezone, logo_url, banner_url, brand_color, accent_color, share_phones, rsvp_reminder_days').eq('slug', slug).maybeSingle()) as Row | null;
+      const l = check(await sb.from('leagues').select('id, name, slug, plan, join_code, timezone, logo_url, banner_url, brand_color, accent_color, share_phones, share_emails, show_money, auto_settle, rsvp_reminder_days').eq('slug', slug).maybeSingle()) as Row | null;
       if (!l) return null;
       const [member, eff] = await Promise.all([
         sb.from('league_members').select('role').eq('league_id', l.id).eq('user_id', me).maybeSingle(),
@@ -148,6 +148,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
         role: ((check(member) as Row | null)?.role ?? 'player') as Role,
         effectivePlan, features: plan?.features ?? [],
         logoUrl: l.logo_url, bannerUrl: l.banner_url, brandColor: l.brand_color, accentColor: l.accent_color, sharePhones: !!l.share_phones,
+        shareEmails: !!l.share_emails, showMoney: l.show_money !== false, autoSettle: l.auto_settle !== false,
         rsvpReminderDays: l.rsvp_reminder_days ?? null,
       };
       return league;
@@ -160,12 +161,19 @@ export function supabaseApi(url: string, anonKey: string): Api {
       if (patch.brandColor !== undefined) row.brand_color = patch.brandColor;
       if (patch.accentColor !== undefined) row.accent_color = patch.accentColor;
       if (patch.sharePhones !== undefined) row.share_phones = patch.sharePhones;
+      if (patch.shareEmails !== undefined) row.share_emails = patch.shareEmails;
+      if (patch.showMoney !== undefined) row.show_money = patch.showMoney;
+      if (patch.autoSettle !== undefined) row.auto_settle = patch.autoSettle;
       if (patch.rsvpReminderDays !== undefined) row.rsvp_reminder_days = patch.rsvpReminderDays;
       check(await sb.from('leagues').update(row).eq('id', id));
     },
     async phoneBook(leagueId) {
       const rows = check(await sb.rpc('league_phone_book', { lid: leagueId })) as Row[];
       return Object.fromEntries(rows.map((r) => [r.player_id, r.phone]));
+    },
+    async emailBook(leagueId) {
+      const rows = check(await sb.rpc('league_email_book', { lid: leagueId })) as Row[];
+      return Object.fromEntries(rows.map((r) => [r.player_id, r.email]));
     },
     uploadLogo: (leagueId, png) => uploadBrandFile(leagueId, 'logo', png, 'image/png'),
     async removeLogo(leagueId) {

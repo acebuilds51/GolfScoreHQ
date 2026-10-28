@@ -869,6 +869,29 @@ function recapText(recap, name, opts = {}) {
   }
   return lines.join("\n").trimEnd();
 }
+
+// packages/engine/src/posting.ts
+function settleAnyWeek(rounds, layout, rules) {
+  if (rules.format === "scramble") return settleScrambleWeek(rounds.map(scrambleRoundFrom), layout, rules);
+  if (isIndividual(rules)) return settleIndividualWeek(rounds, layout, rules);
+  return settleBestBallWeek(rounds, layout, rules);
+}
+function weekPosting(rounds, layout, rules, decisions = {}) {
+  const week = settleAnyWeek(rounds, layout, rules);
+  const ledger = [...week.ledger];
+  const undecided = [];
+  for (const h of week.ctp.holes) {
+    if (!h.conflict) continue;
+    const pick = decisions[h.holeNumber];
+    if (pick && h.contenders.includes(pick)) {
+      const round = rounds.find((r) => r.players.some((p) => p.id === pick));
+      if (rules.ctp.amountPerHole > 0) ledger.push({ playerId: pick, amount: rules.ctp.amountPerHole, kind: "ctp", holeNumber: h.holeNumber, ...round ? { roundId: round.id } : {} });
+    } else {
+      undecided.push(h.holeNumber);
+    }
+  }
+  return { ledger, undecided, week };
+}
 export {
   MAX_HANDICAP_INDEX,
   OCBC_BEST_BALL,
@@ -905,6 +928,7 @@ export {
   scrambleStandings,
   seasonAwards,
   seasonStats,
+  settleAnyWeek,
   settleBestBallWeek,
   settleCtp,
   settleIndividualWeek,
@@ -918,6 +942,7 @@ export {
   teamHandicap,
   teamStrokesByHole,
   totalsByPlayer,
+  weekPosting,
   weeklyRecap,
   withPostedResults
 };

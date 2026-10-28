@@ -28,6 +28,7 @@ interface Db {
     id: string; name: string; slug: string; ownerId: string; plan: Plan; joinCode: string | null; timezone: string;
     logoUrl?: string | null; bannerUrl?: string | null; brandColor?: string | null; accentColor?: string | null;
     planExpiresAt?: string | null; clubId?: string | null; demoSub?: LeagueBilling['subscription']; sharePhones?: boolean;
+    shareEmails?: boolean; showMoney?: boolean; autoSettle?: boolean;
     rsvpReminderDays?: number | null;
   }[];
   clubs: { id: string; ownerId: string; name: string; expiresAt: string | null }[];
@@ -251,7 +252,7 @@ export function demoApi(): DemoApi {
       leagueName: league.name, weekNumber: ev.weekNumber, leagueUrl: `${location.origin}/l/${league.slug}`, recapBody: text,
       playerName: first?.displayName ?? 'Golfer', payment: db.paymentHandles[league.id] ?? { venmo: null, paypalMe: null, zelle: null },
       weekCents: forMoney && first ? recap.weekBalances[first.id] ?? 0 : null,
-      seasonCents: forMoney && first ? recap.seasonBalances[first.id] ?? 0 : null,
+      seasonCents: forMoney && first && league.showMoney !== false ? recap.seasonBalances[first.id] ?? 0 : null,
       story: story ? cleanStory(story) : null,
     });
     return { recap, preview: { subject: sample.subject, text: sample.text, recipients: recipients.length, missing, alreadySent: db.recapSends[eventId] ?? null } };
@@ -321,6 +322,7 @@ export function demoApi(): DemoApi {
       if (!role) return null;
       const league: League = { id: l.id, name: l.name, slug: l.slug, plan: l.plan, role, joinCode: l.joinCode, timezone: l.timezone, effectivePlan: l.plan, features: FEATURES[l.plan],
         logoUrl: l.logoUrl ?? null, bannerUrl: l.bannerUrl ?? null, brandColor: l.brandColor ?? null, accentColor: l.accentColor ?? null, sharePhones: !!l.sharePhones,
+        shareEmails: !!l.shareEmails, showMoney: l.showMoney !== false, autoSettle: l.autoSettle !== false,
         rsvpReminderDays: l.rsvpReminderDays ?? null };
       return league;
     },
@@ -342,6 +344,9 @@ export function demoApi(): DemoApi {
       if (patch.brandColor !== undefined) l.brandColor = patch.brandColor;
       if (patch.accentColor !== undefined) l.accentColor = patch.accentColor;
       if (patch.sharePhones !== undefined) l.sharePhones = patch.sharePhones;
+      if (patch.shareEmails !== undefined) l.shareEmails = patch.shareEmails;
+      if (patch.showMoney !== undefined) l.showMoney = patch.showMoney;
+      if (patch.autoSettle !== undefined) l.autoSettle = patch.autoSettle;
       if (patch.rsvpReminderDays !== undefined) l.rsvpReminderDays = patch.rsvpReminderDays;
       save(db);
     },
@@ -352,6 +357,14 @@ export function demoApi(): DemoApi {
       if (!isCommissioner(roleIn(db, leagueId)) && !(l.sharePhones && roleIn(db, leagueId))) return {};
       const active = new Set(db.players.filter((p) => p.leagueId === leagueId && p.active).map((p) => p.id));
       return Object.fromEntries(Object.entries(db.contacts).filter(([pid, c]) => active.has(pid) && c.phone).map(([pid, c]) => [pid, c.phone!]));
+    },
+    async emailBook(leagueId) {
+      // Same rule as league_email_book().
+      const db = load();
+      const l = db.leagues.find((x) => x.id === leagueId)!;
+      if (!isCommissioner(roleIn(db, leagueId)) && !(l.shareEmails && roleIn(db, leagueId))) return {};
+      const active = new Set(db.players.filter((p) => p.leagueId === leagueId && p.active).map((p) => p.id));
+      return Object.fromEntries(Object.entries(db.contacts).filter(([pid, c]) => active.has(pid) && c.email).map(([pid, c]) => [pid, c.email!]));
     },
 
     async players(leagueId) {

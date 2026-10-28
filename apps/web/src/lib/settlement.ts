@@ -1,7 +1,5 @@
-import {
-  scrambleRoundFrom, settleBestBallWeek, settleIndividualWeek, settleScrambleWeek, type FormatRules, type PlacedLine, type ScrambleTeamLine,
-} from '@golfscorehq/engine';
-import { asBestBall, individualRules, toEngineRound } from './scoring';
+import { weekPosting, type FormatRules, type PlacedLine, type ScrambleTeamLine } from '@golfscorehq/engine';
+import { toEngineRound } from './scoring';
 import type { Layout, LedgerKind, LedgerRow, RoundData } from './types';
 
 export interface CtpOutcome {
@@ -45,23 +43,19 @@ const TOTAL_KINDS = ['match', 'press', 'place', 'scramblePot', 'skin', 'ctp'] as
 
 /** Settle a week with the engine, applying the commissioner's CTP decisions. */
 export function settleWeek(rounds: RoundData[], layout: Layout, rulesIn: FormatRules, decisions: Record<number, string> = {}): WeekSettlement {
-  const ind = individualRules(rulesIn);
   const engineRounds = rounds.map((r) => toEngineRound(r, layout));
   const engineLayout = { id: layout.id, name: layout.name, holes: layout.holes };
-  const week = rulesIn.format === 'scramble'
-    ? settleScrambleWeek(engineRounds.map(scrambleRoundFrom), engineLayout, rulesIn)
-    : ind ? settleIndividualWeek(engineRounds, engineLayout, ind) : settleBestBallWeek(engineRounds, engineLayout, asBestBall(rulesIn));
-  const ctpAmount = rulesIn.ctp.amountPerHole;
+  // The same posting the server's auto-settle makes.
+  const posting = weekPosting(engineRounds, engineLayout, rulesIn, decisions);
+  const week = posting.week;
 
-  const entries: LedgerRow[] = week.ledger.map((e) => ({
+  const entries: LedgerRow[] = posting.ledger.map((e) => ({
     playerId: e.playerId, roundId: e.roundId ?? null, kind: e.kind as LedgerKind, amountCents: e.amount, holeNumber: e.holeNumber ?? null,
   }));
 
   const ctp: CtpOutcome[] = week.ctp.holes.map((h) => {
     const pick = decisions[h.holeNumber];
     if (h.conflict && pick && h.contenders.includes(pick)) {
-      const round = rounds.find((r) => r.players.some((p) => p.playerId === pick));
-      if (ctpAmount > 0) entries.push({ playerId: pick, roundId: round?.id ?? null, kind: 'ctp', amountCents: ctpAmount, holeNumber: h.holeNumber });
       return { holeNumber: h.holeNumber, winner: pick, disputed: false, contenders: h.contenders, decided: true };
     }
     return { holeNumber: h.holeNumber, winner: h.winner, disputed: h.conflict, contenders: h.contenders, decided: false };

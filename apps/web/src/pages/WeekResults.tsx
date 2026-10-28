@@ -145,6 +145,9 @@ export function WeekResults({ event, season, layout, rounds, names, onChanged }:
             <p className="small muted">This league doesn't play for money, so settling just makes the scores final.</p>
           )}
           <p className="small muted">Settling posts these results for everyone and locks scoring. You can reopen the week to fix a score.</p>
+          {league.autoSettle !== false && api.mode !== 'demo' && (
+            <p className="small muted">This week settles by itself once every group on the tee sheet has submitted (Settings → Settling the week).</p>
+          )}
         </>
       )}
       <ErrorText>{error}</ErrorText>

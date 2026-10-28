@@ -14,16 +14,17 @@ export function RosterPage() {
   const commish = isCommissioner(league.role);
   // The roster itself loads first; it doesn't wait for handicaps.
   const data = useAsync(async () => {
-    const [players, contacts, phones, seasons] = await Promise.all([
+    const [players, contacts, phones, emails, seasons] = await Promise.all([
       api.players(league.id),
       commish ? api.contacts(league.id) : Promise.resolve({} as Record<string, Contact>),
       !commish && league.sharePhones ? api.phoneBook(league.id) : Promise.resolve({} as Record<string, string>),
+      !commish && league.shareEmails ? api.emailBook(league.id) : Promise.resolve({} as Record<string, string>),
       api.seasons(league.id),
     ]);
     const rules = seasons[0]?.rules;
     const hcp = rules ? handicapRules(rules) : undefined;
-    return { players, contacts, phones, hcp: hcp?.enabled ? hcp : null };
-  }, [league.id, commish, league.sharePhones]);
+    return { players, contacts, phones, emails, hcp: hcp?.enabled ? hcp : null };
+  }, [league.id, commish, league.sharePhones, league.shareEmails]);
   // League-calculated handicaps read every round the league has played, so only when the league plays
   // with handicaps, and after the roster is on screen. GHIN indexes show straight away.
   const leagueHcp = useAsync(async () => {
@@ -44,7 +45,8 @@ export function RosterPage() {
   const indexOf = (p: Player): IndexInfo | undefined =>
     leagueHcp.data?.get(p.id) ?? (p.handicapIndex != null ? { index: p.handicapIndex, from: 'ghin', leagueIndex: null, leagueRounds: 0 } : undefined);
   const row = (p: Player) => (
-    <PlayerRow key={p.id} player={p} others={players.filter((x) => x.id !== p.id)} contact={data.data?.contacts[p.id]} textPhone={phoneOf(p)} index={indexOf(p)}
+    <PlayerRow key={p.id} player={p} others={players.filter((x) => x.id !== p.id)} contact={data.data?.contacts[p.id]} textPhone={phoneOf(p)}
+      sharedEmail={commish ? null : data.data?.emails[p.id] ?? null} index={indexOf(p)}
       handicapsOn={!!data.data?.hcp} commish={commish} onChanged={data.reload} onInvite={(link) => setInviteFor({ player: p, link })} />
   );
 
@@ -224,16 +226,14 @@ const GROUP_SIZES = [10, 20, 32];
  * Group texts through the phone's own Messages app: pick golfers, or (for
  * commissioners) all members, subs or everyone. Lists bigger than the carrier's
  * group-text limit are split into several group texts with the same message.
- * Commissioners also choose here whether golfers can see each other's numbers.
+ * Commissioners also choose here whether golfers can see each other's numbers and emails.
  */
 function TextLeague({ players, phoneOf, commish }: { players: Player[]; phoneOf: (p: Player) => string | null; commish: boolean }) {
-  const { league, reloadLeague } = useLeague();
   const { user } = useAuth();
   const [audience, setAudience] = useState<Audience>(commish ? 'members' : 'pick');
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState('');
   const [size, setSize] = useState(savedGroupSize);
-  const { busy, error, run } = useAction();
 
   // You don't text yourself.
   const others = players.filter((p) => !(user && p.userId === user.id));
@@ -292,22 +292,36 @@ function TextLeague({ players, phoneOf, commish }: { players: Player[]; phoneOf:
         {batches.length > 1 && <> Your carrier limits how many people one group text can go to, so this is split into {batches.length} group texts: open and send each one. Replies stay within each group.</>}
         {missing.length > 0 && <> No number for {missing.map((p) => p.displayName).join(', ')}.</>}
       </p>
-      {commish && (
-        <label className="check-row small">
-          <input
-            type="checkbox" checked={!!league.sharePhones} disabled={busy}
-            onChange={async (e) => { const on = e.target.checked; const ok = await run(async () => { await api.updateLeague(league.id, { sharePhones: on }); return true; }); if (ok) reloadLeague(); }}
-          />
-          Golfers can see each other's phone numbers (gives everyone the Text buttons and this box). Emails stay private.
-        </label>
-      )}
-      <ErrorText>{error}</ErrorText>
+      {commish && <ContactSharing />}
     </section>
   );
 }
 
-function PlayerRow({ player, others, contact, textPhone, index, handicapsOn, commish, onChanged, onInvite }: {
-  player: Player; others: Player[]; contact?: Contact; textPhone: string | null; index?: IndexInfo; handicapsOn: boolean; commish: boolean; onChanged: () => void; onInvite: (link: string) => void;
+/** Commissioners: whether golfers see each other's phone numbers and emails on the roster. */
+export function ContactSharing() {
+  const { league, reloadLeague } = useLeague();
+  const { busy, error, run } = useAction();
+  const set = async (patch: { sharePhones?: boolean; shareEmails?: boolean }) => {
+    const ok = await run(async () => { await api.updateLeague(league.id, patch); return true; });
+    if (ok) reloadLeague();
+  };
+  return (
+    <div className="stack">
+      <label className="check-row small">
+        <input type="checkbox" checked={!!league.sharePhones} disabled={busy} onChange={(e) => set({ sharePhones: e.target.checked })} />
+        Golfers can see each other's phone numbers (and get the Text buttons)
+      </label>
+      <label className="check-row small">
+        <input type="checkbox" checked={!!league.shareEmails} disabled={busy} onChange={(e) => set({ shareEmails: e.target.checked })} />
+        Golfers can see each other's emails on the roster
+      </label>
+      <ErrorText>{error}</ErrorText>
+    </div>
+  );
+}
+
+function PlayerRow({ player, others, contact, textPhone, sharedEmail, index, handicapsOn, commish, onChanged, onInvite }: {
+  player: Player; others: Player[]; contact?: Contact; textPhone: string | null; sharedEmail: string | null; index?: IndexInfo; handicapsOn: boolean; commish: boolean; onChanged: () => void; onInvite: (link: string) => void;
 }) {
   const textLink = smsLink([textPhone]);
   const [mergeInto, setMergeInto] = useState('');
@@ -407,6 +421,13 @@ function PlayerRow({ player, others, contact, textPhone, index, handicapsOn, com
         </div>
         {commish && (contact?.email || contact?.phone) && (
           <div className="small muted">{[contact.email, contact.phone].filter(Boolean).join(' · ')}</div>
+        )}
+        {!commish && (sharedEmail || textPhone) && (
+          <div className="small muted">
+            {sharedEmail && <a href={`mailto:${sharedEmail}`}>{sharedEmail}</a>}
+            {sharedEmail && textPhone && ' · '}
+            {textPhone}
+          </div>
         )}
         {(handicapsOn || player.handicapIndex != null) && index && <HandicapLine info={index} />}
         <ErrorText>{error}</ErrorText>

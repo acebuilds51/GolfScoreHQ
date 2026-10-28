@@ -2,13 +2,14 @@ import { headToHead, playerProfile, type HoleAverage, type PlayerProfile, type S
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { EmptyState, ErrorText, PageSkeleton, ProLock } from '../components/ui';
-import { AWARD_ICONS } from '../lib/awards';
+import { AWARD_ICONS, MONEY_AWARDS } from '../lib/awards';
 import { fmtIndex } from '../lib/handicaps';
 import { useAsync, useLeague } from '../lib/hooks';
 import { asBestBall, fmtMoney, individualRules, playsForMoney } from '../lib/scoring';
 import { loadSeasonData, useSeasonChoice, type SeasonData } from '../lib/seasonData';
 import { SeasonPicker, seasonLabel } from '../components/SeasonPicker';
 import { fmtToPar, sortStandings, type StandingRow } from '../lib/standings';
+import { seesSeasonMoney } from '../lib/types';
 
 /** One golfer's season: the numbers everyone sees, plus Pro's deeper stats. */
 export function PlayerPage() {
@@ -34,7 +35,7 @@ function PlayerStats({ data, playerId }: { data: SeasonData; playerId: string })
   const names = useMemo(() => new Map(players.map((p) => [p.id, p.displayName])), [players]);
   const rules = season.rules;
   const individual = individualRules(rules) !== null;
-  const hasMoney = playsForMoney(rules);
+  const hasMoney = playsForMoney(rules) && seesSeasonMoney(league);
   const ranked = sortStandings(standings.rows, hasMoney ? 'money' : rules.format === 'stableford' ? 'points' : 'average');
   const rank = ranked.findIndex((r) => r.playerId === playerId) + 1;
   const row: StandingRow | undefined = standings.rows.find((r) => r.playerId === playerId);
@@ -49,7 +50,7 @@ function PlayerStats({ data, playerId }: { data: SeasonData; playerId: string })
       })
       .sort((a, b) => b.wins + b.losses + b.halves - (a.wins + a.losses + a.halves) || (names.get(a.opponent) ?? '').localeCompare(names.get(b.opponent) ?? ''));
   }, [standings.played, rules, playerId, names]);
-  const myAwards = standings.awards.filter((a) => a.winners.includes(playerId));
+  const myAwards = standings.awards.filter((a) => a.winners.includes(playerId) && (hasMoney || !MONEY_AWARDS.includes(a.key)));
 
   // Their rounds this season, newest first, with a link to each scorecard.
   const eventById = new Map(events.map((e) => [e.id, e]));

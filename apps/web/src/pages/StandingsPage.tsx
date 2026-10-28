@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EmptyState, ErrorText, ProLock, PageSkeleton } from '../components/ui';
-import { AWARD_UNITS } from '../lib/awards';
+import { AWARD_UNITS, MONEY_AWARDS } from '../lib/awards';
 import { useAsync, useLeague } from '../lib/hooks';
 import { fmtMoney, individualRules, playsForMoney } from '../lib/scoring';
-import { loadSeasonData, useSeasonChoice } from '../lib/seasonData';
+import { loadSeasonData, useSeasonChoice, type SeasonData } from '../lib/seasonData';
 import { SeasonPicker, seasonLabel } from '../components/SeasonPicker';
 import { fmtToPar, sortStandings, type SortKey, type StandingRow } from '../lib/standings';
+import { isCommissioner, seesSeasonMoney } from '../lib/types';
 
 export function StandingsPage() {
   const { league } = useLeague();
@@ -14,7 +15,8 @@ export function StandingsPage() {
   const data = useAsync(() => loadSeasonData(league.id, seasonId), [league.id, seasonId]);
 
   const rules = data.data ? data.data.season.rules : null;
-  const hasMoney = !!rules && playsForMoney(rules);
+  const commish = isCommissioner(league.role);
+  const hasMoney = !!rules && playsForMoney(rules) && seesSeasonMoney(league);
   const individual = !!rules && individualRules(rules) !== null;
   const stableford = rules?.format === 'stableford';
   const [sort, setSort] = useState<SortKey | null>(null);
@@ -47,6 +49,7 @@ export function StandingsPage() {
     { key: 'money', label: 'Money', show: hasMoney },
     { key: 'points', label: 'Points', show: stableford },
     { key: 'average', label: 'Average', show: true },
+    { key: 'hot', label: '🔥 Hot', show: true },
     { key: 'wins', label: 'Wins', show: !individual },
     { key: 'weekWins', label: 'Wins', show: individual },
     { key: 'skins', label: 'Skins', show: !!rules?.skins.enabled },
@@ -96,7 +99,11 @@ export function StandingsPage() {
           </tbody>
         </table>
       </section>
-      <p className="small muted">Avg is the average score, with strokes over par in brackets. Last 4 is strokes over par over the last four rounds; 🔥 means the last four are at least half a stroke better than the season average. Tap a golfer for their weekly scores and full stats.</p>
+      <p className="small muted">Avg is the average score, with strokes over par in brackets. Last 4 is strokes over par over the last four rounds (Hot sorts by it); 🔥 means the last four are at least half a stroke better than the season average. Tap a golfer for their weekly scores and full stats.</p>
+      {commish && (rules?.skins.enabled || rules?.ctp.enabled) && <SeasonSideGames data={data.data} />}
+      {commish && rules && playsForMoney(rules) && league.showMoney === false && (
+        <p className="small muted">Golfers don't see season money (Settings → What golfers see). You do, as commissioner.</p>
+      )}
 
       <section className="card stack">
         <div className="row between">
@@ -106,7 +113,7 @@ export function StandingsPage() {
         {showAwards ? (
           standings.awards.length ? (
             <ul className="awards">
-              {standings.awards.slice(0, 6).map((a) => (
+              {standings.awards.filter((a) => hasMoney || !MONEY_AWARDS.includes(a.key)).slice(0, 6).map((a) => (
                 <li key={a.key}>
                   <strong>{a.title}</strong>
                   <span>{a.winners.map((id) => rows.find((r) => r.playerId === id)?.name ?? '?').join(', ')}</span>
@@ -120,6 +127,51 @@ export function StandingsPage() {
         )}
       </section>
     </div>
+  );
+}
+
+/** Commissioners: every settled week's skins and closest-to-the-pin winners in one list (like the old app's Skins and CTP tabs). */
+function SeasonSideGames({ data }: { data: SeasonData }) {
+  const names = new Map(data.players.map((p) => [p.id, p.displayName]));
+  const weeks = data.events
+    .filter((e) => e.status === 'settled')
+    .sort((a, b) => a.weekNumber - b.weekNumber)
+    .map((e) => {
+      const rows = data.ledger.filter((l) => l.eventId === e.id && (l.kind === 'skin' || l.kind === 'ctp'));
+      // A scramble team's skin is one row per player: list the hole once with everyone on it.
+      const byHole = (kind: 'skin' | 'ctp') => {
+        const out = new Map<number, { hole: number; ids: string[]; cents: number }>();
+        for (const r of rows.filter((x) => x.kind === kind)) {
+          const h = out.get(r.holeNumber ?? 0) ?? { hole: r.holeNumber ?? 0, ids: [], cents: 0 };
+          h.ids.push(r.playerId);
+          h.cents += r.amountCents;
+          out.set(h.hole, h);
+        }
+        return [...out.values()].sort((a, b) => a.hole - b.hole);
+      };
+      return { id: e.id, week: e.weekNumber, skins: byHole('skin'), ctp: byHole('ctp') };
+    });
+  const line = (h: { hole: number; ids: string[]; cents: number }) =>
+    `#${h.hole} ${h.ids.map((id) => names.get(id) ?? '?').join(' & ')} (${fmtMoney(h.cents)})`;
+
+  return (
+    <details className="card stack">
+      <summary><strong>Skins and closest to the pin, every week</strong> <span className="small muted">(commissioners only)</span></summary>
+      <div className="scroll-x">
+        <table className="money">
+          <thead><tr><th>Week</th>{data.season.rules.skins.enabled && <th>Skins</th>}{data.season.rules.ctp.enabled && <th>Closest to the pin</th>}</tr></thead>
+          <tbody>
+            {weeks.map((w) => (
+              <tr key={w.id}>
+                <td><Link to={`../week/${w.id}`}>Wk {w.week}</Link></td>
+                {data.season.rules.skins.enabled && <td className="small">{w.skins.length ? w.skins.map(line).join(' · ') : <span className="muted">none</span>}</td>}
+                {data.season.rules.ctp.enabled && <td className="small">{w.ctp.length ? w.ctp.map(line).join(' · ') : <span className="muted">none</span>}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
   );
 }
 

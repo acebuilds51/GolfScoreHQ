@@ -14,16 +14,16 @@ Plans and features live in the `plans` table, so prices and feature lists can ch
 
 ## Built
 
-- **Scoring:** season setup, weeks, groups, hole-by-hole entry that works offline, live leaderboard, settlement and rainouts.
+- **Scoring:** season setup, weeks, groups, hole-by-hole entry that works offline, live leaderboard, settlement and rainouts. The week settles itself once every group on the tee sheet has submitted (like the old OCBC app).
 - **Formats:** 2-vs-2 best ball match (presses), stroke play, Stableford, scramble seasons and scramble weeks.
 - **Handicaps:** GHIN index or calculated from league rounds; net matches and skins.
 - **Money:** skins, closest to the pin, prize money, ledger, Venmo/PayPal/Zelle links.
-- **Standings, awards and player stats:** with a shareable awards picture and hardest/easiest holes. Past seasons (Pro) from a season picker.
+- **Standings, awards and player stats:** with a shareable awards picture and hardest/easiest holes, a Hot sort (last 4 rounds), and every week's skins and CTP winners for commissioners. Past seasons (Pro) from a season picker. Commissioners choose whether golfers see season money.
 - **Seasons:** start the next season with the same format, league night and tee times; add the whole season's weeks at once, skipping off nights.
 - **Weekly recap email (Pro):** each golfer's own balance, pay links, optional AI write-up the commissioner reviews.
 - **Tee sheet (Pro):** tee times set once for the season (a week can differ), optional weekly captains, golfers join groups, need-a-partner / need-a-match lists, one-tap group texts to the right golfers (split under carrier limits).
 - **RSVP and sub finder (Pro):** plus "Are you playing?" reminder emails at 9 AM league time with one-tap answers (no sign-in) and send-now.
-- **Roster:** paste or add golfers, contact details, merge duplicates, subs section, text one golfer or many from the phone's Messages, invite by text with personal join links.
+- **Roster:** paste or add golfers, contact details (phones and emails shared with golfers only if the commissioner turns each on), merge duplicates, subs section, text one golfer or many from the phone's Messages, invite by text with personal join links.
 - **Phone notifications:** free web push for reminders and "results are in" (iPhone: from the home-screen app).
 - **Clubhouse TV (Pro):** rotating panels on any screen from a private link. Club plan adds a sponsor screen.
 - **Club plan:** up to 5 leagues, with this week across all of them on the Leagues page.

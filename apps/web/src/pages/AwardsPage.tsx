@@ -10,6 +10,7 @@ import { loadSeasonData, useSeasonChoice, type SeasonData } from '../lib/seasonD
 import { SeasonPicker, seasonLabel } from '../components/SeasonPicker';
 import { drawAwardsCard, saveImage, shareImage, type CardBrand } from '../lib/shareCards';
 import { fmtToPar } from '../lib/standings';
+import { seesSeasonMoney } from '../lib/types';
 
 /** Pro: the season's awards, a picture to share, and which holes played hardest. */
 export function AwardsPage() {
@@ -53,6 +54,8 @@ function Awards({ data }: { data: SeasonData }) {
   const names = useMemo(() => new Map(players.map((p) => [p.id, p.displayName])), [players]);
   const label = seasonLabel(season);
   const who = (a: Award) => a.winners.map((id) => names.get(id) ?? '?').join(', ');
+  // The money leader is left out when the league keeps season money from golfers.
+  const awards = seesSeasonMoney(league) ? standings.awards : standings.awards.filter((a) => !MONEY_AWARDS.includes(a.key));
 
   return (
     <div className="page stack">
@@ -65,11 +68,11 @@ function Awards({ data }: { data: SeasonData }) {
         <p className="small muted">Through {standings.weeksCounted} settled week{standings.weeksCounted === 1 ? '' : 's'}. Average awards need enough full rounds to qualify; ties share an award.</p>
       </div>
 
-      {standings.awards.length === 0 ? (
+      {awards.length === 0 ? (
         <p className="muted">Awards appear as golfers play enough rounds.</p>
       ) : (
         <ul className="award-cards">
-          {standings.awards.map((a) => (
+          {awards.map((a) => (
             <li key={a.key} className="award-card">
               <span className="award-icon" aria-hidden="true">{AWARD_ICONS[a.key]}</span>
               <div className="grow">
@@ -84,7 +87,7 @@ function Awards({ data }: { data: SeasonData }) {
         </ul>
       )}
 
-      {standings.awards.length > 0 && <ShareAwards awards={standings.awards} who={who} seasonLabel={label} />}
+      {awards.length > 0 && <ShareAwards awards={awards} who={who} seasonLabel={label} />}
 
       <CourseStats holes={courseHoleStats(standings.played)} />
       <p className="small muted">Scramble weeks are team scores, so they don't count toward anyone's awards for scoring. {league.features.includes('side_games') ? 'Their money and skins do.' : ''}</p>
@@ -126,10 +129,12 @@ function ShareAwards({ awards, who, seasonLabel }: { awards: Award[]; who: (a: A
       <div className="row wrap">
         <button className="btn btn-primary" disabled={busy} onClick={make}><Icon name="trophy" size={18} /> Make the awards picture</button>
       </div>
-      <label className="check-row small">
-        <input type="checkbox" checked={withMoney} onChange={(e) => setWithMoney(e.target.checked)} />
-        Include the money leader
-      </label>
+      {awards.some((a) => MONEY_AWARDS.includes(a.key)) && (
+        <label className="check-row small">
+          <input type="checkbox" checked={withMoney} onChange={(e) => setWithMoney(e.target.checked)} />
+          Include the money leader
+        </label>
+      )}
       <ErrorText>{error}</ErrorText>
       {picture && (
         <div className="share-preview stack">
