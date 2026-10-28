@@ -1,5 +1,6 @@
 import { Link, NavLink, Outlet, useLocation, useParams } from 'react-router-dom';
 import { Icon, type IconName } from '../components/Icon';
+import { NotificationPrompt } from '../components/PhoneNotifications';
 import { ErrorText, PlanBadge, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { brandBanner, brandLogo, brandStyle } from '../lib/brand';
@@ -84,6 +85,7 @@ export function LeagueLayout() {
             <NavLink to="more" className={({ isActive }) => (isActive || /\/(import|setup|player)\b/.test(window.location.pathname) ? 'active' : '')}>More</NavLink>
           </nav>
         </div>
+        <NotificationPrompt moreLink={`/l/${l.slug}/more`} />
         <Outlet />
         <BottomBar />
       </div>

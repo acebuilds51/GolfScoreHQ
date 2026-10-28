@@ -90,6 +90,8 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .pad { padding: 14px 16px; }
 
 .demo-bar { background: var(--pro-bg); color: var(--pro-text); text-align: center; font-size: 0.8rem; padding: 6px 12px; }
+.notify-prompt { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; margin-bottom: -4px; padding-top: 10px; padding-bottom: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.notify-error { flex-basis: 100%; }
 .topbar { display: flex; align-items: center; justify-content: space-between; padding: calc(10px + env(safe-area-inset-top)) 16px 10px; background: var(--surface); border-bottom: 1px solid var(--border); }
 .brand { display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text); font-weight: 700; font-size: 1.05rem; }
 .brand-icon { border-radius: 9px; display: block; }
