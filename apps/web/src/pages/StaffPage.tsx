@@ -4,6 +4,8 @@ import { CopyField, ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync } from '../lib/hooks';
 import type { SetupStatus, StaffSetupRequest } from '../lib/types';
+import type { ErrorGroup } from '../lib/api';
+import { capacityLines, WARN_AT } from '../../../../supabase/functions/health-report/report';
 import { FileLinks, NoRequests, SETUP_STATUS, SETUP_WANTS } from './SetupServicePage';
 
 /** GolfScoreHQ staff: every "We set up your league" request. */
@@ -20,6 +22,7 @@ export function StaffPage() {
 
   return (
     <div className="page stack">
+      <Health />
       <PilotCodes />
       <div className="row between wrap">
         <div>
@@ -30,6 +33,111 @@ export function StaffPage() {
         <label className="check-row small"><input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> Show done</label>
       </div>
       {shown.length === 0 ? <NoRequests /> : shown.map((r) => <StaffRequest key={r.id} request={r} onChanged={queue.reload} />)}
+    </div>
+  );
+}
+
+const KIND_LABEL: Record<ErrorGroup['kind'], string> = { error: 'Crash', failed_action: 'Failed action', report: 'Golfer report' };
+const ago = (iso: string) => {
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  return m < 60 ? `${m} min ago` : m < 48 * 60 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
+};
+
+/** App health: problems the app reported, failed timers and calls, and capacity against the plan limits. */
+function Health() {
+  const [days, setDays] = useState(7);
+  const [showFixed, setShowFixed] = useState(false);
+  const health = useAsync(() => api.staffHealth(days), [days], { fresh: true });
+  const { busy, error, run } = useAction();
+  const h = health.data;
+  const errors = (h?.errors ?? []).filter((e) => showFixed || !e.resolved);
+  const capacity = h ? capacityLines(h) : [];
+
+  return (
+    <section className="card stack">
+      <div className="row between wrap">
+        <h2>App health</h2>
+        <div className="row wrap">
+          <select value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="How far back">
+            <option value={1}>Last day</option><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option>
+          </select>
+          <button className="btn btn-ghost btn-sm" disabled={health.loading} onClick={health.reload}>Refresh</button>
+        </div>
+      </div>
+      <ErrorText>{health.error ?? error}</ErrorText>
+      {!h ? <p className="small muted">Checking…</p> : (
+        <>
+          <div className="stack">
+            <h3>Capacity</h3>
+            {capacity.map((c) => <LimitRow key={c.key} line={c} busy={busy} onSave={async (v) => { await run(() => api.staffSetLimit(c.key, v)); health.reload(); }} />)}
+            <p className="small muted">
+              Online now: {h.usage.online_now ?? 0} · busiest this week: {h.usage.online_peak_week ?? 0} · groups scoring at once (week): {h.usage.live_rounds_peak_week ?? 0}<br />
+              Leagues: {h.usage.leagues ?? 0} ({h.usage.active_leagues ?? 0} played in the last 2 weeks) · golfers: {h.usage.golfers ?? 0} · on the app: {h.usage.app_users ?? 0} · phones with notifications: {h.usage.devices_with_notifications ?? 0}
+            </p>
+            <p className="small muted">Amber at {Math.round(WARN_AT * 100)}%: upgrade that plan, then raise the limit here. Emails count reminders and recaps (not sign-in emails).</p>
+          </div>
+
+          {(h.failed_jobs.length > 0 || h.failed_calls.length > 0) && (
+            <div className="stack">
+              <h3 className="warn">Failed in the last day</h3>
+              {h.failed_jobs.map((j, i) => <p key={`j${i}`} className="small"><strong>Timer {j.job}</strong> · {ago(j.at)} · {j.message}</p>)}
+              {h.failed_calls.map((c, i) => <p key={`c${i}`} className="small"><strong>Server call {c.status ?? 'no answer'}</strong> · {ago(c.at)} · {c.message}</p>)}
+            </div>
+          )}
+
+          <div className="stack">
+            <div className="row between wrap">
+              <h3>Problems ({errors.length})</h3>
+              <label className="check-row small"><input type="checkbox" checked={showFixed} onChange={(e) => setShowFixed(e.target.checked)} /> Show fixed</label>
+            </div>
+            {errors.length === 0 ? <p className="small good">Nothing reported{showFixed ? '' : ' that is still open'}.</p> : (
+              <ul className="list health-list">
+                {errors.map((e) => (
+                  <li key={e.fingerprint} className={`list-row stack${e.resolved ? ' muted' : ''}`}>
+                    <div className="row between wrap">
+                      <span><span className={`badge ${e.kind === 'report' ? 'badge-pro' : e.kind === 'error' ? 'badge-live' : 'badge-neutral'}`}>{KIND_LABEL[e.kind]}</span> <strong>{e.message}</strong></span>
+                      {!e.resolved && <button className="btn btn-sm" disabled={busy} onClick={async () => { await run(() => api.staffResolveError(e.fingerprint)); health.reload(); }}>Mark fixed</button>}
+                    </div>
+                    <div className="small muted">
+                      {e.count}× · {e.people} {e.people === 1 ? 'person' : 'people'} · last {ago(e.last_seen)} · first {ago(e.first_seen)}
+                      {e.league && <> · {e.league}</>}{e.path && <> · {e.path}</>}{e.app_version && <> · version {e.app_version}</>}{e.reported_by && <> · {e.reported_by}</>}
+                    </div>
+                    {(e.detail || e.user_agent) && (
+                      <details className="small">
+                        <summary>Details</summary>
+                        {e.detail && <pre className="recap-text">{e.detail}</pre>}
+                        {e.user_agent && <p className="muted">{e.user_agent}</p>}
+                      </details>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function LimitRow({ line, busy, onSave }: { line: ReturnType<typeof capacityLines>[number]; busy: boolean; onSave: (v: number) => void }) {
+  const [editing, setEditing] = useState<string | null>(null);
+  return (
+    <div className="stack" style={{ gap: 4 }}>
+      <div className="row between wrap small">
+        <span>{line.label}</span>
+        <span className={line.warn ? 'warn' : ''}><strong>{line.used}</strong> of {line.limit} ({Math.round(line.share * 100)}%)
+          {editing === null
+            ? <button type="button" className="linkish" onClick={() => setEditing(String(line.limit))}>Change limit</button>
+            : <>
+                <input className="limit-input" inputMode="numeric" value={editing} onChange={(e) => setEditing(e.target.value.replace(/[^\d.]/g, ''))} aria-label="New limit" />
+                <button type="button" className="btn btn-sm" disabled={busy || !(Number(editing) > 0)} onClick={() => { onSave(Number(editing)); setEditing(null); }}>Save</button>
+              </>}
+        </span>
+      </div>
+      <div className="meter" role="meter" aria-valuenow={Math.round(line.share * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={line.label}>
+        <span className={line.warn ? 'warn' : ''} style={{ width: `${Math.min(100, line.share * 100)}%` }} />
+      </div>
     </div>
   );
 }

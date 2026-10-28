@@ -1,5 +1,6 @@
 import { Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Header } from './components/Header';
 import { PageSkeleton } from './components/ui';
 import { SiteFooter } from './components/SiteFooter';
@@ -30,14 +31,16 @@ function RequireUser({ children }: { children: JSX.Element }) {
 export function App() {
   const auth = useAuthState();
   useEffect(prefetchPages, []);
+  const path = useLocation().pathname;
   // The clubhouse TV is a full-screen page with no app chrome and no sign-in.
-  if (useLocation().pathname.startsWith('/tv/')) {
-    return <Suspense fallback={null}><Routes><Route path="/tv/:token" element={<TvPage />} /></Routes></Suspense>;
+  if (path.startsWith('/tv/')) {
+    return <ErrorBoundary resetKey={path}><Suspense fallback={null}><Routes><Route path="/tv/:token" element={<TvPage />} /></Routes></Suspense></ErrorBoundary>;
   }
   return (
     <AuthContext.Provider value={auth}>
       <Header />
       <main>
+        <ErrorBoundary resetKey={path}>
         <Suspense fallback={<PageSkeleton />}>
         <Routes>
           <Route path="/" element={auth.loading ? <PageSkeleton /> : auth.user ? <Navigate to="/leagues" replace /> : <SignInPage />} />
@@ -70,6 +73,7 @@ export function App() {
           <Route path="*" element={<div className="page"><h1>Page not found</h1></div>} />
         </Routes>
         </Suspense>
+        </ErrorBoundary>
         <SiteFooter />
       </main>
     </AuthContext.Provider>

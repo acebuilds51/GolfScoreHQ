@@ -1,4 +1,5 @@
-import type { Api } from './api';
+import type { Api, ErrorGroup, HealthSnapshot } from './api';
+import type { AppErrorReport } from './types';
 import type { Contact, Course, JoinRequest, League, LeagueBilling, LeagueEvent, LedgerRow, PaymentHandles, PilotCode, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SetupRequest, SubRequest, TeeSheet, TeeTime, TvDisplay, User } from './types';
 import { isCommissioner } from './types';
 import type { WeeklyRecap } from '@golfscorehq/engine';
@@ -71,6 +72,18 @@ const empty = (): Db => ({
 
 /** Demo uploads live only for this page view (too big for the browser's saved demo data). */
 const demoFiles = new Map<string, string>();
+
+/** Demo diagnostics: problems reported during this page view, and the free plans' limits. */
+const demoErrors: (AppErrorReport & { at: string; resolved: boolean })[] = [];
+const demoLimits: HealthSnapshot['limits'] = {
+  online: { label: 'People with the app open at once (Supabase live connections)', value: 200 },
+  emails_day: { label: 'Emails a day (Resend)', value: 100 },
+  emails_month: { label: 'Emails a month (Resend)', value: 3000 },
+  db_mb: { label: 'Database size, MB (Supabase)', value: 500 },
+};
+/** Same grouping as the database's error_fingerprint(). */
+const demoFingerprint = (kind: string, message: string) =>
+  `${kind}:${message.toLowerCase().replace(/[0-9a-f]{8}-[0-9a-f-]{27}|[0-9]+/g, '#')}`;
 
 /** Mirrors the database's plan check on season rules. */
 function usesSideGames(r: Season['rules']): boolean {
@@ -1277,6 +1290,50 @@ export function demoApi(): DemoApi {
       if (playerId) d[holeNumber] = playerId;
       else delete d[holeNumber];
       save(db);
+    },
+
+    async logAppError(r) {
+      if (!r.message.trim()) return;
+      demoErrors.push({ ...r, message: r.message.trim().slice(0, 500), at: new Date().toISOString(), resolved: false });
+    },
+    async heartbeat() {},
+    async staffHealth(days) {
+      const db = load();
+      me(db);
+      const since = Date.now() - days * 24 * 3600 * 1000;
+      const groups = new Map<string, ErrorGroup>();
+      for (const e of demoErrors.filter((x) => new Date(x.at).getTime() > since)) {
+        const fp = demoFingerprint(e.kind, e.message);
+        const g: ErrorGroup = groups.get(fp) ?? {
+          fingerprint: fp, kind: e.kind, count: 0, people: 1, first_seen: e.at, last_seen: e.at, resolved: true,
+          message: e.message, path: null, league: null, reported_by: e.kind === 'report' && db.session ? db.users[db.session]?.email ?? null : null,
+        };
+        g.count++;
+        g.last_seen = e.at;
+        g.message = e.message;
+        g.path = e.path ?? null;
+        g.league = db.leagues.find((l) => l.slug === e.leagueSlug)?.name ?? g.league;
+        g.resolved = g.resolved && e.resolved;
+        g.detail = e.detail ?? null;
+        g.app_version = e.appVersion ?? null;
+        g.user_agent = e.userAgent ?? null;
+        groups.set(fp, g);
+      }
+      return {
+        errors: [...groups.values()].reverse(), failed_jobs: [], failed_calls: [], limits: demoLimits,
+        usage: {
+          online_now: 1, online_peak_day: 1, online_peak_week: 1, online_peak_month: 1, live_rounds_peak_week: 0, emails_day: 0, emails_month: 0, db_mb: 1,
+          leagues: db.leagues.length, active_leagues: db.leagues.length, golfers: db.players.filter((p) => p.active).length,
+          app_users: db.players.filter((p) => p.userId).length, devices_with_notifications: 0,
+        },
+      };
+    },
+    async staffResolveError(fingerprint) {
+      for (const e of demoErrors) if (demoFingerprint(e.kind, e.message) === fingerprint) e.resolved = true;
+    },
+    async staffSetLimit(key, value) {
+      if (!(value > 0)) throw new Error('Enter a number above 0.');
+      if (demoLimits[key]) demoLimits[key]!.value = value;
     },
 
     async setPlan(leagueId, plan) {

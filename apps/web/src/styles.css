@@ -575,5 +575,11 @@ label.dispute { color: var(--warn); }
   .bottom-bar a.on { color: var(--league); background: color-mix(in srgb, var(--league) 11%, transparent); }
   main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 }
+/* Staff health */
+.meter { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.meter span { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.meter span.warn { background: #e0a526; }
+input.limit-input { width: 90px; padding: 2px 6px; margin: 0 4px 0 8px; font-size: 0.85rem; }
+.health-list .list-row { padding-left: 0; padding-right: 0; }
 .more-list a { display: flex; align-items: center; gap: 12px; padding: 16px; color: var(--text); text-decoration: none; font-weight: 600; }
 .more-list li + li { border-top: 1px solid var(--border); }
