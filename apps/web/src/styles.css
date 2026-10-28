@@ -435,6 +435,9 @@ table.live-table td.under { color: #a32d2d; }
 .tee-lists p { margin: 0; }
 label.tee-captain-row { flex-direction: row; align-items: center; gap: 8px; }
 label.tee-captain-row select { flex: 1; min-width: 160px; }
+.tee-time-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; }
+label.tee-time-edit { flex-direction: row; align-items: center; gap: 6px; }
+label.tee-time-edit input { flex: 1; min-width: 0; }
 .pill.rsvp-in.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .pill.rsvp-out.on { background: #a32d2d; border-color: #a32d2d; color: #fff; }
 .pill.rsvp-maybe.on { background: #ba7517; border-color: #ba7517; color: #fff; }

@@ -18,6 +18,8 @@ const sheet: TeeSheet = {
     { playerId: 'pair1', slot: null, looking: 'match', partnerId: 'pair2' },
     { playerId: 'pair2', slot: null, looking: 'match', partnerId: 'pair1' },
   ],
+  custom: false,
+  seasonTimes: 2,
 };
 const view = sheetView(sheet, players, { gone: 'out', maybe: 'maybe', me: 'in' });
 

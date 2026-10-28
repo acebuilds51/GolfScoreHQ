@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ErrorText, ProLock } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useAuth, useLeague, useLiveRefresh } from '../lib/hooks';
 import { fmtDate } from '../lib/scoring';
 import { savedGroupSize, smsBatches, telNumber } from '../lib/sms';
 import { fmtTeeTime, GROUP_SIZE, matchRecipients, openSpotRecipients, partnerRecipients, sheetView, teeTimesFrom, type SheetView } from '../lib/teeSheet';
-import { isCommissioner, type LeagueEvent, type LineupStatus, type Player, type TeeTime } from '../lib/types';
+import { isCommissioner, type LeagueEvent, type LineupStatus, type Player, type Season, type TeeTime } from '../lib/types';
 
 /**
  * The week's tee sheet: tee times and captains, groups filling up, who needs a
@@ -46,19 +47,32 @@ export function TeeSheetPanel({ event, players }: { event: LeagueEvent; players:
   const me = active.find((p) => user && p.userId === user.id) ?? null;
   const view = sheetView(sheet, active, rsvps);
   const act = async (fn: () => Promise<void>) => { const ok = await run(async () => { await fn(); return true; }); if (ok) data.reload(); };
-  const isCaptain = (slot: number) => !!me && sheet.times.find((t) => t.slot === slot)?.captainId === me.id;
+  // Captain (where the commissioner picked one) or anyone in the group can add golfers to it.
+  const canManage = (slot: number) => !!me && (sheet.times.find((t) => t.slot === slot)?.captainId === me.id || view.slotOf.get(me.id) === slot);
 
-  if (editing || (commish && sheet.times.length === 0)) {
-    return <TeeTimesForm event={event} players={active} times={sheet.times} onCancel={sheet.times.length ? () => setEditing(false) : undefined} onSaved={() => { setEditing(false); data.reload(); }} />;
+  if (editing) {
+    return <TeeTimesForm event={event} players={active} times={sheet.times} onSeason={sheet.seasonTimes > 0 && !sheet.custom}
+      onCancel={() => setEditing(false)} onSaved={() => { setEditing(false); data.reload(); }} />;
   }
 
   return (
     <section className="card stack tee-sheet">
       <div className="row between wrap">
         <h2>Tee sheet</h2>
-        {commish && <button className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}>Edit tee times</button>}
+        {commish && sheet.times.length > 0 && <button className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}>Captains or times this week</button>}
       </div>
-      {sheet.times.length === 0 && <p className="small muted">The commissioner hasn't posted tee times yet. You can still say if you need a partner or a match.</p>}
+      {sheet.times.length === 0 && (commish ? (
+        <div className="subcard stack">
+          <p className="small">Set the season's tee times once on the <Link to={`/l/${league.slug}/play`}>Play page</Link> and every week gets them.</p>
+          <div><button className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}>Tee times for this week only</button></div>
+        </div>
+      ) : <p className="small muted">The commissioner hasn't posted tee times yet. You can still say if you need a partner or a match.</p>)}
+      {commish && sheet.custom && sheet.seasonTimes > 0 && (
+        <div className="row wrap">
+          <span className="small muted">This week has its own tee times.</span>
+          <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => act(() => api.useSeasonTeeTimes(event.id))}>Use the season's tee times</button>
+        </div>
+      )}
 
       {me && <MyStatus event={event} me={me} view={view} players={active} phones={phones} busy={busy} act={act} />}
 
@@ -66,7 +80,7 @@ export function TeeSheetPanel({ event, players }: { event: LeagueEvent; players:
         <ol className="tee-groups">
           {view.groups.map((g) => {
             const mine = !!me && g.members.includes(me.id);
-            const canAdd = (commish || isCaptain(g.slot)) && g.members.length < (commish ? GROUP_SIZE + 1 : GROUP_SIZE);
+            const canAdd = (commish || canManage(g.slot)) && g.members.length < (commish ? GROUP_SIZE + 1 : GROUP_SIZE);
             const addable = active.filter((p) => !g.members.includes(p.id) && !view.out.includes(p.id));
             return (
               <li key={g.slot} className="tee-group">
@@ -75,10 +89,10 @@ export function TeeSheetPanel({ event, players }: { event: LeagueEvent; players:
                   <span className={`small ${g.open ? '' : 'muted'}`}>{g.open ? `${g.open} open` : 'Full'}</span>
                 </div>
                 <div className="small">
-                  {g.members.length === 0 ? <span className="muted">Open tee time: first to join runs it.</span> : g.members.map((id, i) => (
+                  {g.members.length === 0 ? <span className="muted">Open tee time.</span> : g.members.map((id, i) => (
                     <span key={id} className="tee-member">
                       {i > 0 && ', '}{name(id)}{id === g.captainId && <span className="muted"> (captain)</span>}
-                      {(commish || isCaptain(g.slot)) && id !== me?.id && (
+                      {(commish || canManage(g.slot)) && id !== me?.id && (
                         <button type="button" className="linkish" aria-label={`Take ${name(id)} out of T${g.slot}`} disabled={busy} onClick={() => act(() => api.lineupLeave(event.id, id))}>×</button>
                       )}
                     </span>
@@ -240,57 +254,144 @@ function CommissionerTools({ event, view, players, phones, busy, act }: {
   );
 }
 
-/** Commissioner: tee times from a first time every few minutes, with a captain for each. */
-function TeeTimesForm({ event, players, times, onSaved, onCancel }: {
-  event: LeagueEvent; players: Player[]; times: TeeTime[]; onSaved: () => void; onCancel?: () => void;
+/** Commissioner: this week's captains (optional), and its tee times if they differ from the season's. */
+function TeeTimesForm({ event, players, times, onSeason, onSaved, onCancel }: {
+  event: LeagueEvent; players: Player[]; times: TeeTime[]; onSeason: boolean; onSaved: () => void; onCancel: () => void;
 }) {
-  const [firstTee, setFirstTee] = useState(times[0]?.time ?? '17:10');
-  const [every, setEvery] = useState(String(times.length > 1 && times[0]!.time && times[1]!.time ? minutesBetween(times[0]!.time, times[1]!.time) : 7));
-  const [count, setCount] = useState(String(times.length || 9));
+  const [changeTimes, setChangeTimes] = useState(times.length === 0);
+  const [clock, setClock] = useState<string[]>(() => (times.length ? times.map((t) => t.time ?? '') : teeTimesFrom('17:10', 7, 9)));
   const [captains, setCaptains] = useState<Record<number, string>>(() => Object.fromEntries(times.map((t) => [t.slot, t.captainId ?? ''])));
   const { busy, error, setError, run } = useAction();
-  const n = Math.min(30, Math.max(1, Number(count) || 1));
-  const clock = teeTimesFrom(firstTee || '17:10', Number(every) || 0, n);
+  const rows = changeTimes ? clock.map((time, i) => ({ slot: i + 1, time })) : times;
   const regulars = players.filter((p) => !p.isSub);
   const subs = players.filter((p) => p.isSub);
 
   return (
     <form className="card stack" onSubmit={async (e) => {
       e.preventDefault();
-      const chosen = Object.entries(captains).filter(([s, id]) => id && Number(s) <= n).map(([, id]) => id);
+      const chosen = rows.map((r) => captains[r.slot]).filter(Boolean);
       if (new Set(chosen).size !== chosen.length) return setError('Each golfer can captain one tee time.');
+      if (changeTimes && clock.some((t) => !t)) return setError('Every tee time needs a time.');
       const ok = await run(async () => {
-        await api.setTeeTimes(event.id, clock.map((t, i) => ({ slot: i + 1, time: t, captainId: captains[i + 1] || null })));
+        await api.setTeeTimes(event.id, rows.map((r) => ({ slot: r.slot, time: r.time || null, captainId: captains[r.slot] || null })));
         return true;
       });
       if (ok) onSaved();
     }}>
-      <h2>Tee times for week {event.weekNumber}</h2>
-      <div className="grid three">
-        <label>First tee<input type="time" value={firstTee} onChange={(e) => setFirstTee(e.target.value)} /></label>
-        <label>Minutes apart<input inputMode="numeric" value={every} onChange={(e) => setEvery(e.target.value.replace(/\D/g, ''))} /></label>
-        <label>Tee times<input inputMode="numeric" value={count} onChange={(e) => setCount(e.target.value.replace(/\D/g, ''))} /></label>
-      </div>
+      <h2>Week {event.weekNumber} tee times</h2>
+      {changeTimes ? (
+        <>
+          <p className="small muted">Different times for this week only. {onSeason ? 'Season changes will leave this week alone.' : ''}</p>
+          <TimesEditor value={clock} onChange={setClock} />
+        </>
+      ) : (
+        <p className="small muted">
+          {onSeason ? "The season's tee times." : "This week's tee times."}{' '}
+          <button type="button" className="linkish" onClick={() => setChangeTimes(true)}>Different times this week</button>
+        </p>
+      )}
       <div className="stack">
-        {clock.map((t, i) => (
-          <label key={i} className="row wrap tee-captain-row">
-            <span className="tee-badge">{i + 1}</span>
-            <span className="small" style={{ minWidth: 70 }}>{fmtTeeTime(t)}</span>
-            <select value={captains[i + 1] ?? ''} onChange={(e) => { setCaptains({ ...captains, [i + 1]: e.target.value }); setError(null); }} aria-label={`Captain for tee time ${i + 1}`}>
-              <option value="">No captain yet</option>
+        <strong>Captains <span className="muted small">(optional)</span></strong>
+        {rows.map((r) => (
+          <label key={r.slot} className="row wrap tee-captain-row">
+            <span className="tee-badge">{r.slot}</span>
+            <span className="small" style={{ minWidth: 70 }}>{fmtTeeTime(r.time)}</span>
+            <select value={captains[r.slot] ?? ''} onChange={(e) => { setCaptains({ ...captains, [r.slot]: e.target.value }); setError(null); }} aria-label={`Captain for tee time ${r.slot}`}>
+              <option value="">No captain</option>
               {regulars.map((p) => <option key={p.id} value={p.id}>{p.displayName}</option>)}
               {subs.length > 0 && <optgroup label="Subs">{subs.map((p) => <option key={p.id} value={p.id}>{p.displayName}</option>)}</optgroup>}
             </select>
           </label>
         ))}
       </div>
-      <p className="small muted">Captains are put in their own group. Everyone else joins a group, or says they need a partner or a match. Changing tee times keeps the groups that still have a tee time.</p>
+      <p className="small muted">Only if your league uses captains: a captain is put in their own group and fills it. Without captains, golfers join a group themselves, and anyone in a group can add golfers to it.</p>
       <ErrorText>{error}</ErrorText>
       <div className="row">
-        <button className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Post tee times'}</button>
-        {onCancel && <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancel</button>}
+        <button className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancel</button>
       </div>
     </form>
+  );
+}
+
+/** First tee, minutes apart and how many, with each time editable for uneven gaps. */
+function TimesEditor({ value, onChange }: { value: string[]; onChange: (times: string[]) => void }) {
+  const [firstTee, setFirstTee] = useState(value[0] || '17:10');
+  const [every, setEvery] = useState(String(value.length > 1 && value[0] && value[1] ? minutesBetween(value[0], value[1]) : 7));
+  const [count, setCount] = useState(String(value.length || 9));
+  const regen = (f: string, e: string, c: string) => onChange(teeTimesFrom(f || '17:10', Number(e) || 0, Math.min(30, Math.max(1, Number(c) || 1))));
+  return (
+    <div className="stack">
+      <div className="grid three">
+        <label>First tee<input type="time" value={firstTee} onChange={(e) => { setFirstTee(e.target.value); regen(e.target.value, every, count); }} /></label>
+        <label>Minutes apart<input inputMode="numeric" value={every} onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); setEvery(v); regen(firstTee, v, count); }} /></label>
+        <label>Tee times<input inputMode="numeric" value={count} onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); setCount(v); regen(firstTee, every, v); }} /></label>
+      </div>
+      <div className="tee-time-list">
+        {value.map((t, i) => (
+          <label key={i} className="tee-time-edit">
+            <span className="tee-badge">{i + 1}</span>
+            <input type="time" value={t} aria-label={`Tee time ${i + 1}`} onChange={(e) => onChange(value.map((x, j) => (j === i ? e.target.value : x)))} />
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The season's tee times (Pro): set once during setup; every week gets them. */
+export function SeasonTeeTimes({ season }: { season: Season }) {
+  const { league } = useLeague();
+  const commish = isCommissioner(league.role);
+  const allowed = league.features.includes('lineup');
+  const data = useAsync(async () => (allowed ? api.seasonTeeTimes(season.id) : []), [season.id, allowed]);
+  const [clock, setClock] = useState<string[] | null>(null);
+  const { busy, error, setError, run } = useAction();
+
+  if (!allowed) {
+    return commish ? (
+      <section className="card stack">
+        <div className="row between"><h2>Tee times</h2><ProLock /></div>
+        <p className="small muted">Pro leagues set tee times once for the season. Every week gets them, golfers fill their own groups, and everyone sees who needs a partner or a match.</p>
+      </section>
+    ) : null;
+  }
+  if (!data.data) return null;
+  const times = data.data;
+  if (!times.length && !commish) return null;
+
+  if (clock) {
+    return (
+      <form className="card stack" onSubmit={async (e) => {
+        e.preventDefault();
+        if (clock.some((t) => !t)) return setError('Every tee time needs a time.');
+        const ok = await run(async () => { await api.setSeasonTeeTimes(season.id, clock); return true; });
+        if (ok) { setClock(null); data.reload(); }
+      }}>
+        <h2>Tee times for the season</h2>
+        <TimesEditor value={clock} onChange={(v) => { setClock(v); setError(null); }} />
+        <p className="small muted">Every week gets these, including weeks you add later. Changing them updates the upcoming weeks; golfers stay with their tee time. A week can still have its own times (on the week's page).</p>
+        <ErrorText>{error}</ErrorText>
+        <div className="row">
+          <button className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save tee times'}</button>
+          <button type="button" className="btn btn-ghost" onClick={() => setClock(null)}>Cancel</button>
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <section className="card stack">
+      <div className="row between wrap">
+        <h2>Tee times</h2>
+        {commish && <button className="btn btn-ghost btn-sm" onClick={() => setClock(times.length ? [...times] : teeTimesFrom('17:10', 7, 9))}>{times.length ? 'Edit' : 'Set tee times'}</button>}
+      </div>
+      {times.length ? (
+        <p className="small">{times.map((t, i) => `${i + 1}: ${fmtTeeTime(t)}`).join(' · ')}</p>
+      ) : (
+        <p className="small muted">Set them once and every week gets them. Golfers then join a group, or say they need a partner or a match.</p>
+      )}
+    </section>
   );
 }
 

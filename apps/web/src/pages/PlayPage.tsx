@@ -16,6 +16,7 @@ const FORMAT_HELP: Record<FormatKey, string> = {
   scramble: 'Each group is a team playing the best shot every time, with one score per hole. Lowest team total wins. (For a single scramble week in another format, use the week page.)',
 };
 import { isCommissioner, type Season } from '../lib/types';
+import { SeasonTeeTimes } from './TeeSheetPanel';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -76,6 +77,8 @@ export function PlayPage() {
           <p className="small">{describeRules(season.rules).join(' · ')}</p>
         )}
       </section>
+
+      <SeasonTeeTimes season={season} />
 
       <section className="card flush">
         <div className="row between pad wrap">

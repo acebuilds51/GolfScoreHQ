@@ -128,6 +128,12 @@ export interface Api {
   teeSheet(eventId: string): Promise<TeeSheet>;
   /** Commissioner: replace the week's tee times and captains. */
   setTeeTimes(eventId: string, times: TeeTime[]): Promise<void>;
+  /** The season's tee times ("17:10", …, tee time 1 first); every upcoming week gets them. */
+  seasonTeeTimes(seasonId: string): Promise<string[]>;
+  /** Commissioner: set the season's tee times (updates the upcoming weeks not changed on their own). */
+  setSeasonTeeTimes(seasonId: string, times: string[]): Promise<void>;
+  /** Commissioner: put a week changed on its own back on the season's tee times. */
+  useSeasonTeeTimes(eventId: string): Promise<void>;
   /** Put a golfer in a tee time's group (yourself, or anyone into a group you captain; commissioners anyone). */
   lineupJoin(eventId: string, playerId: string, slot: number): Promise<void>;
   lineupLeave(eventId: string, playerId: string): Promise<void>;

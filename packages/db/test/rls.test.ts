@@ -463,7 +463,7 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
 
     // A captain fills their own group, but can't place golfers elsewhere or change their status.
     await call(joe, 'select lineup_join($1, $2, 1::smallint)', [eventId, bob]);
-    await expect(call(joe, 'select lineup_join($1, $2, 2::smallint)', [eventId, cy])).rejects.toThrow(/group you captain/);
+    await expect(call(joe, 'select lineup_join($1, $2, 2::smallint)', [eventId, cy])).rejects.toThrow(/your own group/);
     await expect(call(joe, `select lineup_status($1, $2, 'out')`, [eventId, bob])).rejects.toThrow(/your own status/);
 
     // Full at four (a commissioner can add a fifth).
@@ -482,13 +482,66 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
     expect((await lineup()).find((r) => r.player_id === dee)).toMatchObject({ looking: 'partner', partner_id: null });
     expect(await rows(db, 'select status from event_rsvps where player_id = $1', [cy])).toEqual([{ status: 'out' }]);
 
-    // The captain going to another tee time leaves tee time 1 without a captain; the first to join tee time 2 runs it.
+    // The captain going to another tee time leaves tee time 1 without a captain; joining doesn't make anyone captain.
     await call(joe, 'select lineup_join($1, $2, 2::smallint)', [eventId, joeSpot]);
-    expect(await rows(db, 'select slot, captain_id from event_tee_times where event_id = $1 order by slot', [eventId])).toEqual([{ slot: 1, captain_id: null }, { slot: 2, captain_id: joeSpot }]);
+    expect(await rows(db, 'select slot, captain_id from event_tee_times where event_id = $1 order by slot', [eventId])).toEqual([{ slot: 1, captain_id: null }, { slot: 2, captain_id: null }]);
+    // No captain needed: anyone in a group can add golfers to it.
+    await call(joe, 'select lineup_join($1, $2, 2::smallint)', [eventId, cy]);
+    expect((await lineup()).find((r) => r.player_id === cy)).toMatchObject({ slot: 2 });
 
     // Other leagues can't see it; nobody writes to it directly.
     expect(await as(db, sam, () => rows(db, 'select * from event_lineup'))).toEqual([]);
     await expect(call(joe, 'insert into event_lineup (event_id, player_id, league_id, slot) values ($1, $2, $3, 1)', [eventId, ed, oak])).rejects.toThrow(/permission denied/);
+  });
+
+  it('gives every week the season tee times, unless a week was changed on its own', async () => {
+    const { eventId: playedWeek } = await weekWithRound(tony, oak);
+    const seasonId = (await rows<{ season_id: string }>(db, 'select season_id from events where id = $1', [playedWeek]))[0]!.season_id;
+    const joeSpot = await linkedPlayer(joe, 'Joe');
+    const bob = await addPlayer(tony, oak, 'Bob');
+    const call = (user: string, sql: string, params: unknown[]) => as(db, user, () => db.query(sql, params));
+    const addWeek = (n: number) => as(db, tony, async () =>
+      (await rows<{ id: string }>(db, 'insert into events (league_id, season_id, week_number) values ($1, $2, $3) returning id', [oak, seasonId, n]))[0]!.id);
+    const sheet = (ev: string) => rows(db, `select slot, to_char(tee_time, 'HH24:MI') as time, captain_id from event_tee_times where event_id = $1 order by slot`, [ev]);
+    const slotOf = async (ev: string, p: string) => (await rows<{ slot: number | null }>(db, 'select slot from event_lineup where event_id = $1 and player_id = $2', [ev, p]))[0]?.slot ?? null;
+    const setSeason = (times: string[]) => call(tony, 'select set_season_tee_times($1, $2::jsonb)', [seasonId, JSON.stringify(times)]);
+    const t = (slot: number, time: string, captain_id: string | null = null) => ({ slot, time, captain_id });
+
+    const week2 = await addWeek(2);
+    await expect(setSeason(['17:10'])).rejects.toThrow(/plan_feature/); // Free
+    await setPlan(oak, 'pro');
+    await expect(call(joe, 'select set_season_tee_times($1, $2::jsonb)', [seasonId, '[]'])).rejects.toThrow(/commissioners only/);
+    await setSeason(['17:10', '17:17', '17:24']);
+
+    // Weeks already there and weeks added later get them; a week already being played doesn't.
+    const week3 = await addWeek(3);
+    for (const ev of [week2, week3]) expect(await sheet(ev)).toEqual([t(1, '17:10'), t(2, '17:17'), t(3, '17:24')]);
+    expect(await sheet(playedWeek)).toEqual([]);
+
+    // Captains are picked week by week; that doesn't take the week off the season's times.
+    await call(tony, 'select set_tee_times($1, $2::jsonb)', [week2, JSON.stringify([
+      { slot: 1, time: '17:10', captainId: joeSpot }, { slot: 2, time: '17:17', captainId: null }, { slot: 3, time: '17:24', captainId: bob }])]);
+    expect((await rows(db, 'select custom_tee_times as c from events where id = $1', [week2]))[0]).toEqual({ c: false });
+
+    // The season's times change: captains and groups stay with their tee time; a dropped tee time's golfers are unplaced.
+    await setSeason(['17:00', '17:08']);
+    expect(await sheet(week2)).toEqual([t(1, '17:00', joeSpot), t(2, '17:08')]);
+    expect([await slotOf(week2, joeSpot), await slotOf(week2, bob)]).toEqual([1, null]);
+    expect(await sheet(week3)).toEqual([t(1, '17:00'), t(2, '17:08')]);
+
+    // Different times for week 3 only: season changes leave it alone, until it's put back.
+    await call(tony, 'select set_tee_times($1, $2::jsonb)', [week3, JSON.stringify([{ slot: 1, time: '16:30', captainId: null }])]);
+    await setSeason(['17:05', '17:12']);
+    expect(await sheet(week3)).toEqual([t(1, '16:30')]);
+    expect(await sheet(week2)).toEqual([t(1, '17:05', joeSpot), t(2, '17:12')]);
+    await expect(call(joe, 'select use_season_tee_times($1)', [week3])).rejects.toThrow(/commissioners only/);
+    await call(tony, 'select use_season_tee_times($1)', [week3]);
+    expect(await sheet(week3)).toEqual([t(1, '17:05'), t(2, '17:12')]);
+
+    // Members read the season's tee times; nobody writes them directly.
+    expect(await as(db, joe, () => rows(db, 'select slot from season_tee_times order by slot'))).toEqual([{ slot: 1 }, { slot: 2 }]);
+    expect(await as(db, sam, () => rows(db, 'select * from season_tee_times'))).toEqual([]);
+    await expect(call(tony, `insert into season_tee_times (season_id, league_id, slot, tee_time) values ($1, $2, 3, '18:00')`, [seasonId, oak])).rejects.toThrow(/permission denied/);
   });
 
   it('lists the new features on every paid plan', async () => {

@@ -255,6 +255,10 @@ export interface LineupEntry {
 export interface TeeSheet {
   times: TeeTime[];
   lineup: LineupEntry[];
+  /** The week's tee times were changed on their own (season changes leave it alone). */
+  custom: boolean;
+  /** How many tee times the season has (0: none set for the season). */
+  seasonTimes: number;
 }
 
 export type LineupStatus = 'partner' | 'match' | 'out' | 'none';
