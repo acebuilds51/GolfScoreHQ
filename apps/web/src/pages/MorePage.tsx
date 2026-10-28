@@ -9,7 +9,6 @@ export function MorePage() {
   const { league } = useLeague();
   const install = useInstallPrompt();
   const items: { to: string; label: string; icon: IconName }[] = [
-    { to: '../standings', label: 'Season standings', icon: 'trophy' },
     { to: '../awards', label: 'Season awards and stats', icon: 'trophy' },
     { to: '../roster', label: 'Roster', icon: 'users' },
     { to: '../courses', label: 'Courses', icon: 'map' },

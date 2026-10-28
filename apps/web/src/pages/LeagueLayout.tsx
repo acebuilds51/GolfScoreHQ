@@ -7,24 +7,27 @@ import { brandBanner, brandLogo, brandStyle } from '../lib/brand';
 import { LeagueContext, useAsync } from '../lib/hooks';
 import { isCommissioner } from '../lib/types';
 
-/** Phones: four big targets at the bottom, where a thumb can reach with a glove on. */
+/** Phones: five big labeled targets at the bottom, where a thumb can reach with a glove on. */
 function BottomBar() {
   const path = useLocation().pathname;
   const section = /\/(play|week|round)(\/|$)/.test(path) ? 'play'
-    : /\/(live|standings)(\/|$)/.test(path) ? 'board'
-    : /\/(more|roster|courses|settings)(\/|$)/.test(path) ? 'more'
+    : /\/live(\/|$)/.test(path) ? 'live'
+    : /\/(standings|awards|player)(\/|$)/.test(path) ? 'standings'
+    : /\/(more|roster|courses|settings|import|setup)(\/|$)/.test(path) ? 'more'
     : 'home';
   const tabs: { key: string; to: string; label: string; icon: IconName }[] = [
     { key: 'home', to: '', label: 'Home', icon: 'home' },
     { key: 'play', to: 'play', label: 'Play', icon: 'flag' },
-    { key: 'board', to: 'live', label: 'Leaderboard', icon: 'podium' },
+    { key: 'live', to: 'live', label: 'Live', icon: 'podium' },
+    { key: 'standings', to: 'standings', label: 'Standings', icon: 'trophy' },
     { key: 'more', to: 'more', label: 'More', icon: 'dots' },
   ];
   return (
     <nav className="bottom-bar" aria-label="League">
       {tabs.map((t) => (
-        <Link key={t.key} to={t.to} aria-label={t.label} title={t.label} className={section === t.key ? 'on' : undefined} aria-current={section === t.key ? 'page' : undefined}>
-          <Icon name={t.icon} size={26} />
+        <Link key={t.key} to={t.to} className={section === t.key ? 'on' : undefined} aria-current={section === t.key ? 'page' : undefined}>
+          <Icon name={t.icon} size={24} />
+          <span>{t.label}</span>
         </Link>
       ))}
     </nav>
@@ -49,14 +52,13 @@ export function LeagueLayout() {
   const commish = isCommissioner(l.role);
   const logo = brandLogo(l);
   const banner = brandBanner(l);
-  const banded = (!!brandStyle(l) && !!l.brandColor) || !!banner;
   return (
     <LeagueContext.Provider value={{ league: l, reloadLeague: league.reload }}>
       {/* The league's colors (Pro) apply to everything inside its pages. */}
       <div style={brandStyle(l)}>
         <div className="league-head">
           <div
-            className={banded ? `league-band${banner ? ' has-banner' : ''}` : undefined}
+            className={`league-band${banner ? ' has-banner' : ''}`}
             style={banner ? { backgroundImage: `linear-gradient(rgba(0,0,0,0.12), rgba(0,0,0,0.6)), url("${banner}")` } : undefined}
           >
             <div className="page row between wrap">
