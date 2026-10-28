@@ -24,7 +24,6 @@ export function SettingsPage() {
       <Members version={membersVersion} />
       <PaymentLinks />
       <GolfersSee />
-      <AutoSettle />
       <Reminders />
       <ClubhouseTv />
       {api.mode === 'demo' && <DemoPlan onChanged={reloadLeague} />}
@@ -462,26 +461,6 @@ function GolfersSee() {
   );
 }
 
-/** The week settles itself once every group on the tee sheet has submitted. */
-function AutoSettle() {
-  const { league, reloadLeague } = useLeague();
-  const { busy, error, run } = useAction();
-  return (
-    <section className="card stack">
-      <h2>Settling the week</h2>
-      <label className="check-row small">
-        <input type="checkbox" checked={league.autoSettle !== false} disabled={busy}
-          onChange={async (e) => { const on = e.target.checked; const ok = await run(async () => { await api.updateLeague(league.id, { autoSettle: on }); return true; }); if (ok) reloadLeague(); }} />
-        Settle the week by itself when every group on the tee sheet has submitted
-      </label>
-      <p className="small muted">
-        Results and money are posted and commissioners get a phone notification. If two groups claimed closest to the pin on the same hole, it waits for you to pick the winner and settle.
-        Weeks without a tee sheet are settled by you. You can always reopen a week to fix a score.
-      </p>
-      <ErrorText>{error}</ErrorText>
-    </section>
-  );
-}
 
 const TV_PANELS:{ key: TvPanel; label: string }[] = [
   { key: 'live', label: 'Leaderboard' }, { key: 'matches', label: 'Matches' }, { key: 'skins', label: 'Skins' },

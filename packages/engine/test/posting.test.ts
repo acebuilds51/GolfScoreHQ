@@ -11,7 +11,7 @@ const disputed = () => [
   round('r2', 2, { A: ['cy', 'cal'], B: ['dee', 'dan'] }, players2, { ctp: { 2: { winner: 'dee', beat: null }, 5: 'none' } }),
 ];
 
-describe('weekPosting (what the Settle button and auto-settle post)', () => {
+describe('weekPosting (what the Settle button posts)', () => {
   it('is the engine week ledger when nothing is disputed', () => {
     const rounds = [round('r1', 1, { A: ['al', 'ann'], B: ['bob', 'bea'] }, players, { ctp: { 2: { winner: 'al', beat: null }, 5: 'none' } })];
     const p = weekPosting(rounds, FRONT, rules);

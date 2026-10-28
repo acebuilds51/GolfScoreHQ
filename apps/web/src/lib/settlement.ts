@@ -45,7 +45,6 @@ const TOTAL_KINDS = ['match', 'press', 'place', 'scramblePot', 'skin', 'ctp'] as
 export function settleWeek(rounds: RoundData[], layout: Layout, rulesIn: FormatRules, decisions: Record<number, string> = {}): WeekSettlement {
   const engineRounds = rounds.map((r) => toEngineRound(r, layout));
   const engineLayout = { id: layout.id, name: layout.name, holes: layout.holes };
-  // The same posting the server's auto-settle makes.
   const posting = weekPosting(engineRounds, engineLayout, rulesIn, decisions);
   const week = posting.week;
 

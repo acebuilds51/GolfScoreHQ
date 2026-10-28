@@ -14,7 +14,7 @@ Plans and features live in the `plans` table, so prices and feature lists can ch
 
 ## Built
 
-- **Scoring:** season setup, weeks, groups, hole-by-hole entry that works offline, live leaderboard, settlement and rainouts. The week settles itself once every group on the tee sheet has submitted (like the old OCBC app).
+- **Scoring:** season setup, weeks, groups, hole-by-hole entry that works offline, live leaderboard, settlement (commissioner only, by hand, so scores can be checked first) and rainouts.
 - **Formats:** 2-vs-2 best ball match (presses), stroke play, Stableford, scramble seasons and scramble weeks.
 - **Handicaps:** GHIN index or calculated from league rounds; net matches and skins.
 - **Money:** skins, closest to the pin, prize money, ledger, Venmo/PayPal/Zelle links.

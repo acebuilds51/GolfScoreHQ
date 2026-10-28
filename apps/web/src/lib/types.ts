@@ -32,8 +32,6 @@ export interface League extends LeagueSummary {
   shareEmails?: boolean;
   /** Golfers see season money (Standings, player pages, awards, the recap's season line). Commissioners always do. */
   showMoney?: boolean;
-  /** Settle the week by itself once every group on the tee sheet has submitted. */
-  autoSettle?: boolean;
   /** "Are you playing?" email this many days before league night (Pro); null: off. */
   rsvpReminderDays?: number | null;
 }

@@ -21,8 +21,7 @@ export interface WeekPosting {
 }
 
 /**
- * What settling the week posts. Used by the commissioner's Settle button and by
- * the server's auto-settle, so both give the same money.
+ * What settling the week posts (the commissioner's Settle button).
  * decisions: the commissioner's pick for each disputed CTP hole.
  */
 export function weekPosting(rounds: MatchRoundInput[], layout: Layout, rules: FormatRules, decisions: Record<number, PlayerId> = {}): WeekPosting {

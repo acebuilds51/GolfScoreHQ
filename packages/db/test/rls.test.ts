@@ -453,63 +453,22 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
     expect(await book(joe)).toEqual([]);
     await as(db, tony, () => db.query('update leagues set share_phones = true where id = $1', [oak]));
     expect(await book(joe)).toEqual([]); // phones and emails have their own switches
-    for (const col of ['share_emails', 'show_money', 'auto_settle']) {
+    for (const col of ['share_emails', 'show_money']) {
       await expect(as(db, joe, () => db.query(`update leagues set ${col} = not ${col} where id = $1 returning id`, [oak]))).resolves.toMatchObject({ rows: [] });
     }
     await as(db, tony, () => db.query('update leagues set share_emails = true, show_money = false where id = $1', [oak]));
     expect(await book(joe)).toEqual([{ player_id: al, email: 'al@example.com' }]);
     expect(await book(sam)).toEqual([]);
     await expect(book(null)).rejects.toThrow(/permission denied/);
-    expect(await as(db, joe, () => rows(db, 'select show_money, share_emails, auto_settle from leagues where id = $1', [oak])))
-      .toEqual([{ show_money: false, share_emails: true, auto_settle: true }]);
+    expect(await as(db, joe, () => rows(db, 'select show_money, share_emails from leagues where id = $1', [oak])))
+      .toEqual([{ show_money: false, share_emails: true }]);
   });
 
-  it('queues the week to settle itself once every group on the tee sheet has submitted', async () => {
+  it('never settles a week by itself: submitting every group leaves it for the commissioner', async () => {
     const { eventId, roundId } = await weekWithRound(tony, oak);
-    await setPlan(oak, 'pro');
-    const [al, bob] = await Promise.all(['Al', 'Bob'].map((n) => addPlayer(tony, oak, n)));
-    const call = (user: string, sql: string, params: unknown[]) => as(db, user, () => db.query(sql, params));
-    const queued = async () => (await rows<{ event_id: string }>(db, 'select event_id from settle_queue')).map((r) => r.event_id);
-    const ready = async () => (await rows<{ ok: boolean }>(db, 'select event_ready_to_settle($1) as ok', [eventId]))[0]!.ok;
-    const submit = (id: string) => call(joe, `update rounds set status = 'submitted' where id = $1`, [id]);
-
-    // No tee sheet: the commissioner settles.
-    await submit(roundId);
-    expect(await queued()).toEqual([]);
-    await db.query(`update rounds set status = 'live' where id = $1`, [roundId]);
-
-    // Two groups on the tee sheet; the first group's submit isn't enough.
-    await call(tony, 'select set_tee_times($1, $2::jsonb)', [eventId, JSON.stringify([{ slot: 1, time: '17:10', captainId: null }, { slot: 2, time: '17:17', captainId: null }])]);
-    await call(tony, 'select lineup_join($1, $2, 1::smallint)', [eventId, al]);
-    await call(tony, 'select lineup_join($1, $2, 2::smallint)', [eventId, bob]);
-    await submit(roundId);
-    expect(await queued()).toEqual([]);
-    const [r2] = await rows<{ id: string }>(db, `insert into rounds (league_id, event_id, tee_slot) values ($1, $2, 2) returning id`, [oak, eventId]);
-    expect(await ready()).toBe(false); // still scoring
-    await submit(r2!.id);
-    expect(await queued()).toEqual([eventId]);
-
-    // Only the server takes the queue and posts; it checks the week is still ready.
-    await db.query(`insert into round_players (round_id, player_id, league_id, side) values ($1, $2, $3, 'A')`, [roundId, al, oak]);
-    const entries = JSON.stringify([{ player_id: al, round_id: roundId, kind: 'skin', amount_cents: 9000, hole_number: 3 }]);
-    await expect(call(tony, 'select take_settle_queue()', [])).rejects.toThrow(/permission denied/);
-    await expect(call(tony, 'select auto_settle_event($1, $2::jsonb)', [eventId, entries])).rejects.toThrow(/permission denied/);
-    await expect(call(tony, 'select post_settlement($1, $2::jsonb)', [eventId, entries])).rejects.toThrow(/permission denied/);
-    await expect(call(joe, 'select settle_event($1, $2::jsonb)', [eventId, entries])).rejects.toThrow(/commissioners only/);
-    expect(await rows(db, 'select take_settle_queue() as id')).toEqual([{ id: eventId }]);
-    expect(await queued()).toEqual([]);
-    expect(await rows(db, 'select auto_settle_event($1, $2::jsonb) as ok', [eventId, entries])).toEqual([{ ok: true }]);
-    expect(await rows(db, 'select status from events where id = $1', [eventId])).toEqual([{ status: 'settled' }]);
-    expect(await rows(db, 'select player_id, amount_cents from ledger_entries')).toEqual([{ player_id: al, amount_cents: 9000 }]);
-    expect((await rows<{ title: string }>(db, 'select title from push_outbox where $1 = any (user_ids)', [tony])).map((m) => m.title)).toContain('Week 1 is settled');
-    expect(await rows(db, 'select auto_settle_event($1, $2::jsonb) as ok', [eventId, entries])).toEqual([{ ok: false }]); // already settled
-
-    // Turned off: the commissioner settles.
-    await call(tony, 'select reopen_event($1)', [eventId]);
-    await call(tony, 'update leagues set auto_settle = false where id = $1', [oak]);
-    await db.query(`update rounds set status = 'live' where id = $1`, [r2!.id]);
-    await submit(r2!.id);
-    expect(await queued()).toEqual([]);
+    await as(db, joe, () => db.query(`update rounds set status = 'submitted' where id = $1`, [roundId]));
+    expect(await rows(db, 'select status from events where id = $1', [eventId])).toEqual([{ status: 'scheduled' }]);
+    await expect(as(db, joe, () => db.query(`select settle_event($1, '[]'::jsonb)`, [eventId]))).rejects.toThrow(/commissioners only/);
   });
 
   it('runs the tee sheet: captains, joining, full groups, partners and matches', async () => {

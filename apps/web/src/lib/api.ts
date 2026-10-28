@@ -30,7 +30,7 @@ export interface Api {
   myLeagues(): Promise<LeagueSummary[]>;
   createLeague(name: string, slug: string): Promise<string>;
   league(slug: string): Promise<League | null>;
-  updateLeague(id: string, patch: { name?: string; joinCode?: string | null; timezone?: string; brandColor?: string | null; accentColor?: string | null; sharePhones?: boolean; shareEmails?: boolean; showMoney?: boolean; autoSettle?: boolean; rsvpReminderDays?: number | null }): Promise<void>;
+  updateLeague(id: string, patch: { name?: string; joinCode?: string | null; timezone?: string; brandColor?: string | null; accentColor?: string | null; sharePhones?: boolean; shareEmails?: boolean; showMoney?: boolean; rsvpReminderDays?: number | null }): Promise<void>;
   /** playerId → phone, for texting from the app: commissioners always; golfers when the league shares phone numbers. */
   phoneBook(leagueId: string): Promise<Record<string, string>>;
   /** playerId → email: commissioners always; golfers when the league shares emails. */

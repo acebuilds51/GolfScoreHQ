@@ -46,7 +46,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 26. `20261120000000_captain_vacate.sql` (captains work like the old OCBC app: a captain who drops out gives up the tee time, the group breaks up and the groups behind move up; the commissioner can put a captain back in)
 27. `20261121000000_tee_sheet_notifications.sql` (phone notifications for tee sheet and sub news, through an outbox the database hands to the `push` function; redeploy `push` with `--no-verify-jwt`)
 28. `20261122000000_pilot_codes.sql` (pilot sign-up codes: staff make them, commissioners use the link golfscorehq.app/pilot/<code>)
-29. `20261123000000_league_privacy_auto_settle.sql` (what golfers see: season money, phones and emails each on their own switch; the week settles itself once every group on the tee sheet has submitted. Deploy `auto-settle` with `--no-verify-jwt` and redeploy `send-recap`)
+29. `20261123000000_league_privacy.sql` (what golfers see, set by the commissioner: season money, phones and emails each on their own switch; redeploy `send-recap`)
 
 **B. Command line**
 
