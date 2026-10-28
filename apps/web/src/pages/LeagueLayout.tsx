@@ -76,9 +76,12 @@ export function LeagueLayout() {
             <NavLink to="play" className={({ isActive }) => (isActive || /\/(week|round)\//.test(window.location.pathname) ? 'active' : '')}>Play</NavLink>
             <NavLink to="live">Live</NavLink>
             <NavLink to="standings">Standings</NavLink>
+            <NavLink to="awards">Awards</NavLink>
             <NavLink to="roster">Roster</NavLink>
             <NavLink to="courses">Courses</NavLink>
             {commish && <NavLink to="settings">Settings</NavLink>}
+            {/* Everything else (import, setup help, install) lives on the More page, same as the phone's bottom bar. */}
+            <NavLink to="more" className={({ isActive }) => (isActive || /\/(import|setup|player)\b/.test(window.location.pathname) ? 'active' : '')}>More</NavLink>
           </nav>
         </div>
         <Outlet />

@@ -14,6 +14,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 // @ts-ignore generated JavaScript bundle of packages/engine (npm run build:functions)
 import { recapText, weeklyRecap, withPostedResults } from '../_shared/engine.js';
 import { buildRecapEmail } from './email.ts';
+import { senderFrom } from '../_shared/sender.ts';
 import { cleanStory, emptyStoryReason, storyFromResponse, storyRequest } from './story.ts';
 
 const cors = {
@@ -154,7 +155,7 @@ Deno.serve(async (req) => {
   if (sent && !body.force) return json({ error: 'already_sent', alreadySent: sent }, 409);
   const key = env('RESEND_API_KEY');
   if (!key) return json({ error: "Email isn't set up yet. Add the RESEND_API_KEY secret in Supabase." }, 503);
-  const from = env('RECAP_FROM_EMAIL') || 'GolfScoreHQ <recaps@golfscorehq.app>';
+  const from = senderFrom(env('RECAP_FROM_EMAIL'));
 
   let delivered = 0;
   for (let i = 0; i < recipients.length; i += 100) {

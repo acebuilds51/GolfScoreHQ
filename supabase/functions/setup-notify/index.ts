@@ -7,6 +7,7 @@
 //
 // Secrets: RESEND_API_KEY, RECAP_FROM_EMAIL (sender), SUPPORT_EMAIL (default support@golfscorehq.app), APP_URL.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { senderFrom } from '../_shared/sender.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -44,7 +45,7 @@ Deno.serve(async (req) => {
 
   const key = env('RESEND_API_KEY');
   if (!key) return json({ error: "Email isn't set up yet." }, 503);
-  const from = env('RECAP_FROM_EMAIL') || 'GolfScoreHQ <recaps@golfscorehq.app>';
+  const from = senderFrom(env('RECAP_FROM_EMAIL'));
   const support = env('SUPPORT_EMAIL') || 'support@golfscorehq.app';
   const appUrl = env('APP_URL') || 'https://golfscorehq.app';
   const requester = (await admin.auth.admin.getUserById(r.requested_by)).data.user?.email ?? null;
