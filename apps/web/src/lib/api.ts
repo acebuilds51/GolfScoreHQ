@@ -30,7 +30,9 @@ export interface Api {
   myLeagues(): Promise<LeagueSummary[]>;
   createLeague(name: string, slug: string): Promise<string>;
   league(slug: string): Promise<League | null>;
-  updateLeague(id: string, patch: { name?: string; joinCode?: string | null; timezone?: string; brandColor?: string | null; accentColor?: string | null }): Promise<void>;
+  updateLeague(id: string, patch: { name?: string; joinCode?: string | null; timezone?: string; brandColor?: string | null; accentColor?: string | null; sharePhones?: boolean }): Promise<void>;
+  /** playerId → phone, for texting from the app: commissioners always; golfers when the league shares phone numbers. */
+  phoneBook(leagueId: string): Promise<Record<string, string>>;
   /** Branding (Pro): upload an already-resized PNG as the league logo. Returns its URL. */
   uploadLogo(leagueId: string, png: Blob): Promise<string>;
   removeLogo(leagueId: string): Promise<void>;

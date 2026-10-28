@@ -7,22 +7,30 @@ import { checkGolferRows, parseRoster, type GolferRow } from '../lib/util';
 import { fmtIndex, leagueIndexes, loadPlayedRounds, parseIndex, type IndexInfo } from '../lib/handicaps';
 import { handicapRules } from '../lib/scoring';
 import { norm } from '../lib/importer';
+import { smsLink, telNumber } from '../lib/sms';
 
 export function RosterPage() {
   const { league } = useLeague();
   const commish = isCommissioner(league.role);
+  // The roster itself loads first; it doesn't wait for handicaps.
   const data = useAsync(async () => {
-    const [players, contacts, seasons, played] = await Promise.all([
+    const [players, contacts, phones, seasons] = await Promise.all([
       api.players(league.id),
       commish ? api.contacts(league.id) : Promise.resolve({} as Record<string, Contact>),
+      !commish && league.sharePhones ? api.phoneBook(league.id) : Promise.resolve({} as Record<string, string>),
       api.seasons(league.id),
-      loadPlayedRounds(api, league.id),
     ]);
     const rules = seasons[0]?.rules;
     const hcp = rules ? handicapRules(rules) : undefined;
-    const indexes = leagueIndexes(players, played, hcp?.source ?? 'ghinFirst');
-    return { players, contacts, indexes, handicapsOn: !!hcp?.enabled };
-  }, [league.id, commish]);
+    return { players, contacts, phones, hcp: hcp?.enabled ? hcp : null };
+  }, [league.id, commish, league.sharePhones]);
+  // League-calculated handicaps read every round the league has played, so only when the league plays
+  // with handicaps, and after the roster is on screen. GHIN indexes show straight away.
+  const leagueHcp = useAsync(async () => {
+    const d = data.data;
+    if (!d?.hcp) return null;
+    return leagueIndexes(d.players, await loadPlayedRounds(api, league.id), d.hcp.source ?? 'ghinFirst');
+  }, [data.data]);
   const [showInactive, setShowInactive] = useState(false);
   const [inviteFor, setInviteFor] = useState<{ player: Player; link: string } | null>(null);
 
@@ -32,9 +40,12 @@ export function RosterPage() {
   const subs = active.filter((p) => p.isSub);
   const inactive = players.filter((p) => !p.active);
   const [showSubs, setShowSubs] = useState(false);
+  const phoneOf = (p: Player) => (commish ? data.data?.contacts[p.id]?.phone : data.data?.phones[p.id]) ?? null;
+  const indexOf = (p: Player): IndexInfo | undefined =>
+    leagueHcp.data?.get(p.id) ?? (p.handicapIndex != null ? { index: p.handicapIndex, from: 'ghin', leagueIndex: null, leagueRounds: 0 } : undefined);
   const row = (p: Player) => (
-    <PlayerRow key={p.id} player={p} others={players.filter((x) => x.id !== p.id)} contact={data.data?.contacts[p.id]} index={data.data?.indexes.get(p.id)}
-      handicapsOn={!!data.data?.handicapsOn} commish={commish} onChanged={data.reload} onInvite={(link) => setInviteFor({ player: p, link })} />
+    <PlayerRow key={p.id} player={p} others={players.filter((x) => x.id !== p.id)} contact={data.data?.contacts[p.id]} textPhone={phoneOf(p)} index={indexOf(p)}
+      handicapsOn={!!data.data?.hcp} commish={commish} onChanged={data.reload} onInvite={(link) => setInviteFor({ player: p, link })} />
   );
 
   return (
@@ -54,6 +65,7 @@ export function RosterPage() {
       )}
 
       {commish && <Duplicates players={players} onMerged={data.reload} />}
+      {commish && data.data && <TextLeague players={active} phoneOf={phoneOf} />}
 
       <section className="card flush">
         <div className="row between pad">
@@ -130,9 +142,53 @@ function keeperOf(set: Player[]): Player {
   return set.find((p) => p.userId) ?? set.find((p) => p.active && !p.isSub) ?? set.find((p) => p.active) ?? set[0]!;
 }
 
-function PlayerRow({ player, others, contact, index, handicapsOn, commish, onChanged, onInvite }: {
-  player: Player; others: Player[]; contact?: Contact; index?: IndexInfo; handicapsOn: boolean; commish: boolean; onChanged: () => void; onInvite: (link: string) => void;
+/**
+ * Commissioners: one text to everyone (or just members or subs), opened in the
+ * phone's own Messages app as a group text. Also where golfers are allowed to see
+ * each other's numbers.
+ */
+function TextLeague({ players, phoneOf }: { players: Player[]; phoneOf: (p: Player) => string | null }) {
+  const { league, reloadLeague } = useLeague();
+  const [audience, setAudience] = useState<'all' | 'members' | 'subs'>('members');
+  const [message, setMessage] = useState('');
+  const { busy, error, run } = useAction();
+  const chosen = players.filter((p) => (audience === 'all' ? true : audience === 'subs' ? p.isSub : !p.isSub));
+  const withPhone = chosen.filter((p) => telNumber(phoneOf(p)));
+  const missing = chosen.filter((p) => !telNumber(phoneOf(p)));
+  const link = smsLink(withPhone.map(phoneOf), message);
+
+  return (
+    <section className="card stack">
+      <h2>Text the league</h2>
+      <div className="row wrap pills" role="group" aria-label="Who gets it">
+        {([['members', 'Members'], ['subs', 'Subs'], ['all', 'Everyone']] as const).map(([k, label]) => (
+          <button key={k} type="button" className={`pill ${audience === k ? 'on' : ''}`} aria-pressed={audience === k} onClick={() => setAudience(k)}>{label}</button>
+        ))}
+      </div>
+      <textarea rows={3} maxLength={1000} value={message} placeholder="e.g. Rainout tonight, see everyone next Thursday." onChange={(e) => setMessage(e.target.value)} />
+      <div className="row wrap">
+        {link ? <a className="btn btn-primary" href={link}>Open in Messages ({withPhone.length})</a> : <span className="small muted">Nobody here has a phone number yet.</span>}
+      </div>
+      <p className="small muted">
+        Opens your phone's Messages app with everyone's numbers and your message filled in, as one group text from your own number. Nothing is sent until you press send there.
+        {missing.length > 0 && <> No number for {missing.map((p) => p.displayName).join(', ')}.</>}
+      </p>
+      <label className="check-row small">
+        <input
+          type="checkbox" checked={!!league.sharePhones} disabled={busy}
+          onChange={async (e) => { const on = e.target.checked; const ok = await run(async () => { await api.updateLeague(league.id, { sharePhones: on }); return true; }); if (ok) reloadLeague(); }}
+        />
+        Golfers can see each other's phone numbers (adds a Text button on the roster for everyone). Emails stay private.
+      </label>
+      <ErrorText>{error}</ErrorText>
+    </section>
+  );
+}
+
+function PlayerRow({ player, others, contact, textPhone, index, handicapsOn, commish, onChanged, onInvite }: {
+  player: Player; others: Player[]; contact?: Contact; textPhone: string | null; index?: IndexInfo; handicapsOn: boolean; commish: boolean; onChanged: () => void; onInvite: (link: string) => void;
 }) {
+  const textLink = smsLink([textPhone]);
   const [mergeInto, setMergeInto] = useState('');
   const { league } = useLeague();
   const [editing, setEditing] = useState(false);
@@ -234,8 +290,12 @@ function PlayerRow({ player, others, contact, index, handicapsOn, commish, onCha
         {(handicapsOn || player.handicapIndex != null) && index && <HandicapLine info={index} />}
         <ErrorText>{error}</ErrorText>
       </div>
+      {!commish && textLink && (
+        <div className="row actions"><a className="btn btn-sm" href={textLink} aria-label={`Text ${player.displayName}`}>Text</a></div>
+      )}
       {commish && (
         <div className="row actions">
+          {textLink && <a className="btn btn-sm" href={textLink} aria-label={`Text ${player.displayName}`}>Text</a>}
           {!player.userId && player.active && (
             <button
               className="btn btn-sm"

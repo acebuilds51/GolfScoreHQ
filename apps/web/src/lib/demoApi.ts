@@ -27,7 +27,7 @@ interface Db {
   leagues: {
     id: string; name: string; slug: string; ownerId: string; plan: Plan; joinCode: string | null; timezone: string;
     logoUrl?: string | null; bannerUrl?: string | null; brandColor?: string | null; accentColor?: string | null;
-    planExpiresAt?: string | null; clubId?: string | null; demoSub?: LeagueBilling['subscription'];
+    planExpiresAt?: string | null; clubId?: string | null; demoSub?: LeagueBilling['subscription']; sharePhones?: boolean;
   }[];
   clubs: { id: string; ownerId: string; name: string; expiresAt: string | null }[];
   members: { leagueId: string; userId: string; role: Role }[];
@@ -254,7 +254,7 @@ export function demoApi(): DemoApi {
       const role = roleIn(db, l.id);
       if (!role) return null;
       const league: League = { id: l.id, name: l.name, slug: l.slug, plan: l.plan, role, joinCode: l.joinCode, timezone: l.timezone, effectivePlan: l.plan, features: FEATURES[l.plan],
-        logoUrl: l.logoUrl ?? null, bannerUrl: l.bannerUrl ?? null, brandColor: l.brandColor ?? null, accentColor: l.accentColor ?? null };
+        logoUrl: l.logoUrl ?? null, bannerUrl: l.bannerUrl ?? null, brandColor: l.brandColor ?? null, accentColor: l.accentColor ?? null, sharePhones: !!l.sharePhones };
       return league;
     },
     uploadLogo: (leagueId, png) => demoBrandFile(leagueId, 'logoUrl', png),
@@ -274,7 +274,16 @@ export function demoApi(): DemoApi {
       if ((patch.brandColor || patch.accentColor) && !has(db, leagueId, 'branding')) throw new Error('plan_feature: League logo and colors needs GolfScoreHQ Pro');
       if (patch.brandColor !== undefined) l.brandColor = patch.brandColor;
       if (patch.accentColor !== undefined) l.accentColor = patch.accentColor;
+      if (patch.sharePhones !== undefined) l.sharePhones = patch.sharePhones;
       save(db);
+    },
+    async phoneBook(leagueId) {
+      // Same rule as league_phone_book(): commissioners always; golfers when the league shares numbers.
+      const db = load();
+      const l = db.leagues.find((x) => x.id === leagueId)!;
+      if (!isCommissioner(roleIn(db, leagueId)) && !(l.sharePhones && roleIn(db, leagueId))) return {};
+      const active = new Set(db.players.filter((p) => p.leagueId === leagueId && p.active).map((p) => p.id));
+      return Object.fromEntries(Object.entries(db.contacts).filter(([pid, c]) => active.has(pid) && c.phone).map(([pid, c]) => [pid, c.phone!]));
     },
 
     async players(leagueId) {
