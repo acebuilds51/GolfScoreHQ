@@ -1,5 +1,7 @@
 import type { CourseSummary, LookupCourse } from '../../../../supabase/functions/course-lookup/normalize';
+import type { HealthSnapshot } from '../../../../supabase/functions/health-report/report';
 import type {
+  AppErrorReport,
   Club, LeagueBilling,
   Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, LedgerRow, Member, NewCourse, NewPlayer, Player, Role,
   PaymentHandles, RecapPreview, RoundData, RoundPlayer, RsvpStatus, ScoreEntry, Season, SubOffer, SubRequest, TvDisplay, TvFeed, TvSettings, User,
@@ -7,6 +9,7 @@ import type {
 } from './types';
 
 export type { CourseSummary, LookupCourse, LookupTee } from '../../../../supabase/functions/course-lookup/normalize';
+export type { ErrorGroup, HealthSnapshot } from '../../../../supabase/functions/health-report/report';
 
 /**
  * Everything the screens need from the backend. Two implementations:
@@ -207,6 +210,15 @@ export interface Api {
   /** holeNumber → playerId the commissioner picked for a disputed CTP. */
   ctpDecisions(eventId: string): Promise<Record<number, string>>;
   setCtpDecision(leagueId: string, eventId: string, holeNumber: number, playerId: string | null): Promise<void>;
+
+  /** Diagnostics: the app reports a crash, a failed action, or a golfer's "Report a problem" note. Never throws. */
+  logAppError(report: AppErrorReport): Promise<void>;
+  /** "I have the app open" (every 2 minutes while it's on screen), for counting people online. */
+  heartbeat(): Promise<void>;
+  /** Staff: errors, failed timers and calls, and capacity against plan limits. */
+  staffHealth(days: number): Promise<HealthSnapshot>;
+  staffResolveError(fingerprint: string): Promise<void>;
+  staffSetLimit(key: string, value: number): Promise<void>;
 }
 
 /** Turn database errors into sentences a commissioner can act on. */

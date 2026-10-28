@@ -767,6 +767,72 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
   });
 });
 
+describe('diagnostics', () => {
+  const call = (user: string | null, sql: string, params: unknown[] = []) => as(db, user, () => rows<any>(db, sql, params));
+  const log = (user: string | null, kind: string, message: string, slug: string | null = null) =>
+    call(user, `select log_app_error($1, $2, 'stack', '/l/x', 'abc1234', 'iPhone', $3)`, [kind, message, slug]);
+
+  it('anyone can report a problem; nobody but staff can read them', async () => {
+    await log(joe, 'error', 'Cannot read properties of undefined (week 3a1b2c3d-1111-2222-3333-444455556666)', 'oak-creek');
+    await log(tony, 'error', 'Cannot read properties of undefined (week 9f9f9f9f-1111-2222-3333-444455556666)');
+    await log(null, 'report', 'The sign-in code never came');
+    await log(joe, 'nonsense', 'ignored');
+    await log(joe, 'error', '   ');
+
+    const all = await rows<any>(db, 'select kind, user_id, league_id, fingerprint, app_version from app_errors order by id');
+    expect(all.map((e) => [e.kind, e.user_id])).toEqual([['error', joe], ['error', tony], ['report', null]]);
+    expect(all[0].league_id).toBe(oak);
+    expect(all[0].fingerprint).toBe(all[1].fingerprint); // same problem, different week ids
+    await expect(call(joe, 'select * from app_errors')).rejects.toThrow(/permission denied/);
+    await expect(call(joe, `insert into app_errors (kind, message, fingerprint) values ('error', 'x', 'x')`)).rejects.toThrow(/permission denied/);
+  });
+
+  it('caps reports at 30 an hour per person', async () => {
+    for (let i = 0; i < 35; i++) await log(joe, 'failed_action', `boom ${i}`);
+    expect(await rows(db, 'select count(*)::int as n from app_errors where user_id = $1', [joe])).toEqual([{ n: 30 }]);
+  });
+
+  it('staff see problems grouped, mark them fixed, and set plan limits', async () => {
+    const staff = await createUser(db, 'staff@golfscorehq.app');
+    await db.query('insert into staff_users (user_id) values ($1)', [staff]);
+    await log(joe, 'error', 'Score 5 failed');
+    await log(tony, 'error', 'Score 7 failed');
+    await log(joe, 'report', 'Week 3 is blank', 'oak-creek');
+
+    await expect(call(tony, 'select staff_health(7)')).rejects.toThrow(/staff only/);
+    const h = (await call(staff, 'select staff_health(7) as h'))[0].h;
+    const crash = h.errors.find((e: any) => e.kind === 'error');
+    expect(crash).toMatchObject({ count: 2, people: 2, resolved: false, message: 'Score 7 failed', path: '/l/x', app_version: 'abc1234' });
+    expect(h.errors.find((e: any) => e.kind === 'report')).toMatchObject({ league: 'Oak Creek Men', reported_by: 'joe@example.com' });
+    expect(h.limits.online).toEqual({ label: expect.stringMatching(/live connections/), value: 200 });
+    expect(h.usage).toMatchObject({ leagues: 2, online_now: 0 });
+    expect(h.failed_jobs).toEqual([]);
+
+    await expect(call(tony, 'select staff_resolve_error($1)', [crash.fingerprint])).rejects.toThrow(/staff only/);
+    await call(staff, 'select staff_resolve_error($1)', [crash.fingerprint]);
+    expect((await call(staff, 'select staff_health(7) as h'))[0].h.errors.find((e: any) => e.kind === 'error').resolved).toBe(true);
+    await log(joe, 'error', 'Score 9 failed'); // happens again: open again
+    expect((await call(staff, 'select staff_health(7) as h'))[0].h.errors.find((e: any) => e.kind === 'error').resolved).toBe(false);
+
+    await call(staff, `select staff_set_limit('online', 500)`);
+    await expect(call(staff, `select staff_set_limit('online', 0)`)).rejects.toThrow(/above 0/);
+    await expect(call(tony, `select staff_set_limit('online', 9999)`)).rejects.toThrow(/staff only/);
+    expect(await rows(db, `select value::int as v from capacity_limits where key = 'online'`)).toEqual([{ v: 500 }]);
+  });
+
+  it('counts who has the app open', async () => {
+    await call(joe, 'select app_heartbeat()');
+    await call(tony, 'select app_heartbeat()');
+    await call(tony, 'select app_heartbeat()');
+    await call(null, 'select app_heartbeat()'); // not signed in: nothing
+    await db.query(`update app_presence set last_seen = now() - interval '10 minutes' where user_id = $1`, [tony]);
+    await db.query('select take_capacity_sample()');
+    expect(await rows(db, 'select online, live_rounds from capacity_samples')).toEqual([{ online: 1, live_rounds: 0 }]);
+    await expect(call(joe, 'select take_capacity_sample()')).rejects.toThrow(/permission denied/);
+    await expect(call(joe, 'select * from app_presence')).rejects.toThrow(/permission denied/);
+  });
+});
+
 describe('Clubhouse TV feed', () => {
   it('keeps the TV sponsor slot to Club leagues, short and with a safe logo link', async () => {
     await setPlan(oak, 'pro');

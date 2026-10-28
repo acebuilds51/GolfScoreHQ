@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
+import { reportProblem } from '../lib/diagnostics';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
 import { applyQueue, compact, enqueue, flush, readQueue, type FlushResult, type PendingOp } from '../lib/pendingQueue';
 import { asBestBall, currentMarker, fmtMoney, handicapRules, holesCompleted, individualRules, isScramble, matchSoFar, scoreMark, toEngineRound } from '../lib/scoring';
@@ -76,6 +77,8 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
     const r = await flush(league.id, round.id, queueRef.current);
     setQueue(r.left);
     setProblem(r.problem);
+    // The server refused a score (not just no signal): staff should know.
+    if (r.problem && r.problem !== 'offline') reportProblem('failed_action', `Score didn't save: ${r.problem}`, `${r.left.length} change(s) still waiting on this phone`);
     setSaving(false);
   }, [league.id, round.id]);
 

@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon, type IconName } from '../components/Icon';
+import { reportProblem } from '../lib/diagnostics';
 import { useLeague } from '../lib/hooks';
 import { useInstallPrompt } from '../lib/install';
 import { isCommissioner } from '../lib/types';
@@ -48,6 +50,27 @@ export function MorePage() {
           )}
         </section>
       )}
+      <ReportProblem />
     </div>
+  );
+}
+
+/** Anyone can tell us something isn't working; it lands on the staff health page and in the daily email. */
+function ReportProblem() {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState('');
+  const [sent, setSent] = useState(false);
+  if (sent) return <p className="small good">Thanks, we got it. We'll look into it.</p>;
+  if (!open) return <p className="small muted">Something not working? <button type="button" className="linkish" onClick={() => setOpen(true)}>Report a problem</button></p>;
+  return (
+    <section className="card stack">
+      <h2>Report a problem</h2>
+      <textarea rows={4} maxLength={2000} value={note} autoFocus placeholder="What happened, and what were you trying to do? e.g. Week 3 scores won't save for our group." onChange={(e) => setNote(e.target.value)} />
+      <p className="small muted">Which page you're on and your phone type are sent with it, to help us find the problem.</p>
+      <div className="row wrap">
+        <button className="btn btn-primary" disabled={note.trim().length < 5} onClick={() => { reportProblem('report', note.trim().slice(0, 200), note.trim()); setSent(true); }}>Send</button>
+        <button className="btn btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+    </section>
   );
 }

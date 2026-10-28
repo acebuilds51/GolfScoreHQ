@@ -385,6 +385,18 @@ export interface ScoreEntry {
   strokes: number;
 }
 
+/** A problem the app reports about itself, or a golfer's "Report a problem" note. */
+export interface AppErrorReport {
+  kind: 'error' | 'failed_action' | 'report';
+  message: string;
+  /** Stack trace, or the golfer's note. */
+  detail?: string | null;
+  path?: string | null;
+  appVersion?: string | null;
+  userAgent?: string | null;
+  leagueSlug?: string | null;
+}
+
 export const COMMISSIONER_ROLES: Role[] = ['owner', 'commissioner'];
 export const isCommissioner = (role: Role | undefined) => !!role && COMMISSIONER_ROLES.includes(role);
 

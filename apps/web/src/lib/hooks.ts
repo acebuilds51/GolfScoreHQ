@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { friendlyError } from './api';
 import { api } from './backend';
 import { cached, cacheKey, remember, setCacheOwner } from './cache';
+import { reportProblem, worthReporting } from './diagnostics';
 import type { League, User } from './types';
 
 export function useAuthState() {
@@ -63,7 +64,11 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[], opts: { fresh
     });
     fn().then(
       (data) => { if (n !== seq.current) return; remember(key, data); setState({ data, error: null, loading: false, stale: false }); },
-      (e) => n === seq.current && setState({ data: undefined, error: friendlyError(e), loading: false, stale: false }),
+      (e) => {
+        if (n !== seq.current) return;
+        reportFailure('error', 'A screen could not load', e);
+        setState({ data: undefined, error: friendlyError(e), loading: false, stale: false });
+      },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
@@ -88,6 +93,18 @@ export function useLiveRefresh(leagueId: string, reload: () => void, enabled = t
   return updatedAt;
 }
 
+/**
+ * Tell staff about a failure, unless it's one the person was meant to see (a
+ * plan message, no signal). Grouped by the underlying message; what the person
+ * was shown goes in the details.
+ */
+function reportFailure(kind: 'error' | 'failed_action', what: string, e: unknown) {
+  const raw = e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : String(e);
+  const shown = friendlyError(e);
+  if (!worthReporting(raw) || !worthReporting(shown)) return;
+  reportProblem(kind, raw, `${what}. Shown: "${shown}"${e instanceof Error && e.stack ? `\n${e.stack}` : ''}`);
+}
+
 /** Wrap an action: tracks busy state and turns failures into a message. */
 export function useAction() {
   const [busy, setBusy] = useState(false);
@@ -98,6 +115,7 @@ export function useAction() {
     try {
       return await fn();
     } catch (e) {
+      reportFailure('failed_action', 'An action failed', e);
       setError(friendlyError(e));
       return undefined;
     } finally {

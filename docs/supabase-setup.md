@@ -47,6 +47,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 27. `20261121000000_tee_sheet_notifications.sql` (phone notifications for tee sheet and sub news, through an outbox the database hands to the `push` function; redeploy `push` with `--no-verify-jwt`)
 28. `20261122000000_pilot_codes.sql` (pilot sign-up codes: staff make them, commissioners use the link golfscorehq.app/pilot/<code>)
 29. `20261123000000_league_privacy.sql` (what golfers see, set by the commissioner: season money, phones and emails each on their own switch; redeploy `send-recap`)
+30. `20261124000000_diagnostics.sql` (app health: problems the app reports, people online every 5 minutes, plan limits, a daily health email; deploy `health-report` with `--no-verify-jwt`, see step 8)
 
 **B. Command line**
 
@@ -157,3 +158,15 @@ npx supabase functions deploy setup-notify --use-api
 ```
 
 On `/staff`: download the files, **Join the league to set it up** (only when the commissioner ticked the consent box), do the setup with the normal screens, then set the status and write a message. Saving emails the commissioner; **All set up** takes you back out of the league.
+
+## 8. App health (diagnostics)
+
+The app reports its own crashes, screens that couldn't load, failed actions and scores that wouldn't save, and golfers can **Report a problem** from the More page. Staff see it all under **App health** on `/staff`: problems grouped by type (with how many people they hit), timers and server calls that failed, and capacity against each plan's limits (people online at once, emails a day and a month, database size).
+
+Every day at 12:00 UTC (8 AM Eastern) the `health-report` function emails `SUPPORT_EMAIL` when something needs a look (a new problem, a failed timer, or anything at 70% of a limit), and sends a summary every Monday. It uses the same `RESEND_API_KEY`, `RECAP_FROM_EMAIL` and `APP_URL` secrets.
+
+```bash
+npx supabase functions deploy health-report --no-verify-jwt --use-api
+```
+
+When you upgrade a plan (Supabase Pro, Resend Pro), raise its limit with **Change limit** under Capacity so the warnings stay meaningful.

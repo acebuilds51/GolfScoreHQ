@@ -5,8 +5,11 @@ import '@fontsource/barlow-condensed/600.css';
 import '@fontsource/barlow-condensed/700.css';
 import { App } from './App';
 import { loadCache } from './lib/cache';
+import { installDiagnostics } from './lib/diagnostics';
 import { hideSplash } from './lib/splash';
 import './styles.css';
+
+installDiagnostics();
 
 // While the splash is up: bring back what each screen showed last time, so the app opens on it.
 loadCache().finally(() => {

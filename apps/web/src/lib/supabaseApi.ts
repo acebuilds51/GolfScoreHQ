@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Api, CourseSummary, LookupCourse } from './api';
+import type { Api, CourseSummary, HealthSnapshot, LookupCourse } from './api';
 import type { LeagueBilling, PilotCode, PilotCodeStatus, RecapPreview, ReminderPreview, RsvpLinkInfo, SetupRequest, SubOffer, TeeTime } from './types';
 import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, TvFeed, User } from './types';
 import { randomToken, sha256Hex } from './util';
@@ -682,6 +682,26 @@ export function supabaseApi(url: string, anonKey: string): Api {
         return;
       }
       check(await sb.from('ctp_decisions').upsert({ event_id: eventId, league_id: leagueId, hole_number: holeNumber, player_id: playerId, decided_by: await uid(), decided_at: new Date().toISOString() }));
+    },
+
+    async logAppError(r) {
+      // Reporting a problem must never cause one.
+      await sb.rpc('log_app_error', {
+        p_kind: r.kind, p_message: r.message, p_detail: r.detail ?? null, p_path: r.path ?? null,
+        p_version: r.appVersion ?? null, p_user_agent: r.userAgent ?? null, p_league_slug: r.leagueSlug ?? null,
+      }).then(() => undefined, () => undefined);
+    },
+    async heartbeat() {
+      await sb.rpc('app_heartbeat').then(() => undefined, () => undefined);
+    },
+    async staffHealth(days) {
+      return check(await sb.rpc('staff_health', { p_days: days })) as HealthSnapshot;
+    },
+    async staffResolveError(fingerprint) {
+      check(await sb.rpc('staff_resolve_error', { p_fingerprint: fingerprint }));
+    },
+    async staffSetLimit(key, value) {
+      check(await sb.rpc('staff_set_limit', { p_key: key, p_value: value }));
     },
   };
 }
