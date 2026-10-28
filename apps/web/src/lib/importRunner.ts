@@ -1,5 +1,5 @@
 import type { Api } from './api';
-import { matchRoster, type ImportPlan } from './importer';
+import { matchRoster, norm, type ImportPlan } from './importer';
 import { weekRules } from './scoring';
 import { settleWeek } from './settlement';
 import type { Layout, RoundPlayer, Season } from './types';
@@ -38,7 +38,9 @@ export async function runImport(
     result.golfersAdded = missing.length;
     roster = await api.players(leagueId);
   }
-  const { matched } = matchRoster(plan.names, roster);
+  // Look golfers up by name, ignoring spacing and capitals, so every spelling in the file finds the same roster spot.
+  const byName = new Map(roster.map((p) => [norm(p.displayName), p.id]));
+  const idOf = (name: string) => byName.get(norm(name));
 
   const events = await api.events(season.id);
   for (const w of plan.weeks) {
@@ -53,15 +55,16 @@ export async function runImport(
 
     for (const g of w.groups) {
       const players: RoundPlayer[] = g.players
-        .map((p, i) => ({ playerId: matched[p.name]!, side: p.side, position: i, courseHandicap: null }))
-        .filter((p) => p.playerId);
+        .map((p, i) => ({ playerId: idOf(p.name)!, side: p.side, position: i, courseHandicap: null }))
+        // Skip golfers not found, and a golfer listed twice in one group (two spellings of one name).
+        .filter((p, i, all) => p.playerId && all.findIndex((x) => x.playerId === p.playerId) === i);
       if (!players.length) continue;
       const roundId = await api.startRound(leagueId, eventId, g.teeSlot, players);
-      const entries = g.players.flatMap((p) => Object.entries(p.scores).map(([hole, strokes]) => ({ playerId: matched[p.name]!, holeNumber: Number(hole), strokes })));
+      const entries = g.players.flatMap((p) => Object.entries(p.scores).map(([hole, strokes]) => ({ playerId: idOf(p.name)!, holeNumber: Number(hole), strokes })));
       if (entries.length) await api.saveScores(leagueId, roundId, entries);
       for (const p of g.presses) await api.addPress(leagueId, roundId, p.startHole, p.calledBy);
       for (const [hole, who] of Object.entries(g.ctp)) {
-        await api.saveCtp(leagueId, roundId, Number(hole), { playerId: who ? matched[who] ?? null : null, beat: null });
+        await api.saveCtp(leagueId, roundId, Number(hole), { playerId: who ? idOf(who) ?? null : null, beat: null });
       }
       await api.submitRound(roundId);
       result.groupsAdded++;

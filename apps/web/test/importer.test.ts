@@ -92,6 +92,18 @@ describe('the old OCBC export', () => {
   });
 });
 
+describe('one golfer per name', () => {
+  it('treats different spacing and capitals of a name as the same golfer', () => {
+    const r = (names: string[], extra = {}) => ({ week: 1, side: 'front', teeTime: 1, players: names.map((name) => ({ name, isSub: true })), scores: [], ...extra });
+    const exp = JSON.stringify([r(['Aaron Seal', 'Bob']), { ...r(['Aaron  Seal ', 'aaron seal']), teeTime: 2 }, { ...r(['Cy'], { ctpWinners: { 2: 'AARON SEAL' } }), teeTime: 3 }]);
+    const p = planFromOcbc(exp, layouts);
+    expect(p.names).toEqual(['Aaron Seal', 'Bob', 'Cy']);
+    expect(p.subs).toContain('Aaron Seal');
+    expect(p.weeks[0]!.groups[1]!.players.map((x) => x.name)).toEqual(['Aaron Seal', 'Aaron Seal']);
+    expect(p.weeks[0]!.groups[2]!.ctp).toEqual({ 2: 'Aaron Seal' });
+  });
+});
+
 describe('matching the roster and dates', () => {
   it('matches names ignoring case and extra spaces', () => {
     expect(matchRoster(['al  adams', 'New Guy'], [{ id: '1', displayName: 'Al Adams' }])).toEqual({ matched: { 'al  adams': '1' }, missing: ['New Guy'] });

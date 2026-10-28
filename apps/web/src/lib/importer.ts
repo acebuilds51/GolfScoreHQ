@@ -90,7 +90,7 @@ export interface ImportPlan {
   problems: string[];
 }
 
-const norm = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
+export const norm = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
 
 /** Match a golfer in the file to the roster by name (case and spacing don't matter). */
 export function matchRoster(names: string[], roster: Pick<Player, 'id' | 'displayName'>[]): { matched: Record<string, string>; missing: string[] } {
@@ -171,7 +171,7 @@ export function planFromTable(rows: string[][], roles: ColumnRole[], layouts: La
     const layout = layouts.find((l) => l.id === w.layoutId)!;
     const team = col('team') >= 0 ? (r[col('team')] ?? '').trim().toUpperCase() : '';
     const tee = col('tee') >= 0 ? Number((r[col('tee')] ?? '').replace(/[^\d]/g, '')) || null : null;
-    if (!names.some((n) => norm(n) === norm(name))) names.push(name);
+    if (!names.some((n) => norm(n) === norm(name))) names.push(name.replace(/\s+/g, ' '));
     w.entries.push({ tee, player: { name, side: team === 'A' || team === '1' ? 'A' : team === 'B' || team === '2' ? 'B' : null, isSub: false, scores: onLayout(holes, layout) } });
     weeks.set(week, w);
   });
@@ -247,12 +247,19 @@ export function planFromOcbc(text: string, layouts: Layout[]): ImportPlan {
   const names: string[] = [];
   const subs = new Set<string>();
   const weeks = new Map<number, PlanWeek>();
+  // One golfer per name, whatever the spacing or capitals: the first spelling seen wins.
+  const canonical = new Map<string, string>();
+  const nameOf = (raw: string) => {
+    const key = norm(raw);
+    if (!canonical.has(key)) { canonical.set(key, raw.trim().replace(/\s+/g, ' ')); names.push(canonical.get(key)!); }
+    return canonical.get(key)!;
+  };
 
   for (const r of all.filter((x) => !x.isScramble)) {
     const layout = r.side === 'back' ? back : front;
     if (r.side === 'back' && back === front) problems.push(`Week ${r.week} was played on the back nine, but this course has one layout; scores went on ${front.name}.`);
-    const players: PlanPlayer[] = r.players.map((p, idx) => {
-      if (!names.includes(p.name)) names.push(p.name);
+    const players: PlanPlayer[] = r.players.map((raw, idx) => {
+      const p = { ...raw, name: nameOf(raw.name) };
       if (p.isSub) subs.add(p.name);
       const scores: Record<number, number> = {};
       layout.holes.forEach((h, hi) => {
@@ -265,7 +272,7 @@ export function planFromOcbc(text: string, layouts: Layout[]): ImportPlan {
     for (const [hole, who] of Object.entries(r.ctpWinners ?? {})) {
       const n = Number(hole);
       if (!who) continue;
-      ctp[n] = who === '__HIGHER_TEE__' || who === '__none__' ? null : who;
+      ctp[n] = who === '__HIGHER_TEE__' || who === '__none__' ? null : nameOf(who);
     }
     const w = weeks.get(r.week) ?? { week: r.week, date: null, layoutId: layout.id, groups: [] };
     let tee = Number(r.teeTime) || w.groups.length + 1;

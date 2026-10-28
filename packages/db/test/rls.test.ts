@@ -404,6 +404,33 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
     await expect(as(db, staff, () => db.query('select staff_join_league($1)', [req!.id]))).rejects.toThrow(/done/);
   });
 
+  it('merges a duplicate golfer into the one kept, history and all', async () => {
+    const keep = await addPlayer(tony, oak, 'Aaron Seal', true);
+    const dup = await addPlayer(tony, oak, 'Aaron  Seal', true);
+    const other = await addPlayer(tony, oak, 'Bob');
+    const { eventId, roundId } = await weekWithRound(tony, oak);
+    // Set up the duplicate's history directly (what an import leaves behind).
+    await db.query(`insert into round_players (round_id, player_id, league_id, side, position) values ($1, $2, $3, 'A', 0), ($1, $4, $3, 'B', 1)`, [roundId, dup, oak, other]);
+    await db.query(`insert into hole_scores (round_id, player_id, league_id, hole_number, strokes) values ($1, $2, $3, 1, 4), ($1, $2, $3, 2, 3)`, [roundId, dup, oak]);
+    await db.query(`insert into ctp_reports (round_id, league_id, hole_number, player_id) values ($1, $2, 2, $3)`, [roundId, oak, dup]);
+    await db.query(`insert into player_contacts (player_id, league_id, email) values ($1, $2, 'aaron@example.com')`, [dup, oak]);
+    await db.query(`insert into ledger_entries (league_id, event_id, round_id, player_id, kind, amount_cents) values ($1, $2, $3, $4, 'skin', 900)`, [oak, eventId, roundId, dup]);
+
+    await expect(as(db, joe, () => db.query('select merge_players($1, $2)', [keep, dup]))).rejects.toThrow(/commissioners only/);
+    await as(db, tony, () => db.query('select merge_players($1, $2)', [keep, dup]));
+
+    expect(await rows(db, 'select count(*)::int as n from players where id = $1', [dup])).toEqual([{ n: 0 }]);
+    expect(await rows(db, 'select display_name from players where id = $1', [keep])).toEqual([{ display_name: 'Aaron Seal' }]);
+    expect(await rows(db, 'select side, position from round_players where player_id = $1', [keep])).toEqual([{ side: 'A', position: 0 }]);
+    expect(await rows(db, 'select hole_number, strokes from hole_scores where player_id = $1 order by hole_number', [keep])).toEqual([{ hole_number: 1, strokes: 4 }, { hole_number: 2, strokes: 3 }]);
+    expect(await rows(db, 'select player_id from ctp_reports')).toEqual([{ player_id: keep }]);
+    expect(await rows(db, 'select player_id, amount_cents from ledger_entries')).toEqual([{ player_id: keep, amount_cents: 900 }]);
+    expect(await rows(db, 'select email from player_contacts where player_id = $1', [keep])).toEqual([{ email: 'aaron@example.com' }]);
+
+    // Two golfers who played in the same group can't be merged.
+    await expect(as(db, tony, () => db.query('select merge_players($1, $2)', [keep, other]))).rejects.toThrow(/same group/);
+  });
+
   it('lists the new features on every paid plan', async () => {
     const feats = await rows<{ code: string; f: string[] }>(db, `select code, features as f from plans order by code`);
     for (const p of feats) {
