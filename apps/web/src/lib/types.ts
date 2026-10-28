@@ -249,6 +249,15 @@ export interface TvSettings {
   hideMoney: boolean;
   secondsPerPanel: number;
   panels: TvPanel[];
+  /** Club plan: a sponsor's screen in the rotation and a line along the bottom. */
+  sponsor?: TvSponsor | null;
+}
+
+export interface TvSponsor {
+  name: string;
+  message?: string | null;
+  /** https:// link to the sponsor's logo. */
+  logoUrl?: string | null;
 }
 
 export interface TvDisplay {

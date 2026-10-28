@@ -71,12 +71,15 @@ function TvScreen({ feed, stale }: { feed: TvFeed; stale: boolean }) {
     if (p === 'live' || p === 'matches') return board.lines.length > 0 || board.matches.length > 0;
     return true;
   });
+  // Club plan: the sponsor gets a screen of their own in the rotation.
+  const sponsor = settings.sponsor?.name ? settings.sponsor : null;
+  const rotation: (TvPanel | 'waiting' | 'sponsor')[] = [...(panels.length ? panels : ['waiting' as const]), ...(sponsor ? ['sponsor' as const] : [])];
   const [idx, setIdx] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setIdx((i) => i + 1), Math.max(5, settings.secondsPerPanel) * 1000);
     return () => clearInterval(t);
   }, [settings.secondsPerPanel]);
-  const panel = panels.length ? panels[idx % panels.length]! : null;
+  const panel = rotation[idx % rotation.length]!;
 
   const flash = useFlash(board, names);
   const clock = useClock();
@@ -109,8 +112,15 @@ function TvScreen({ feed, stale }: { feed: TvFeed; stale: boolean }) {
       {flash && <div className="tv-flash" role="status">{flash}</div>}
 
       <main className="tv-main">
-        {!panel ? (
+        {panel === 'waiting' ? (
           <div className="tv-center"><h2>Waiting for the first scores</h2></div>
+        ) : panel === 'sponsor' ? (
+          <section className="tv-panel tv-sponsor" key="sponsor">
+            <p className="tv-sponsor-by">Tonight's scores brought to you by</p>
+            {sponsor!.logoUrl && /^https:\/\//.test(sponsor!.logoUrl) && <img className="tv-sponsor-logo" src={sponsor!.logoUrl} alt="" />}
+            <h2 className="tv-sponsor-name">{sponsor!.name}</h2>
+            {sponsor!.message && <p className="tv-sponsor-line">{sponsor!.message}</p>}
+          </section>
         ) : (
           <section className="tv-panel" key={panel}>
             <h2 className="tv-panel-title">{panel === 'matches' && board.format !== 'bestBallMatch' ? 'Groups' : PANEL_TITLES[panel]}</h2>
@@ -122,13 +132,16 @@ function TvScreen({ feed, stale }: { feed: TvFeed; stale: boolean }) {
             {panel === 'standings' && <TvStandings feed={feed} names={names} hideMoney={settings.hideMoney} />}
           </section>
         )}
-        {panels.length > 1 && (
-          <div className="tv-dots" aria-hidden="true">{panels.map((p, i) => <span key={p} className={i === idx % panels.length ? 'on' : ''} />)}</div>
+        {rotation.length > 1 && (
+          <div className="tv-dots" aria-hidden="true">{rotation.map((p, i) => <span key={p} className={i === idx % rotation.length ? 'on' : ''} />)}</div>
         )}
       </main>
 
       <footer className="tv-foot">
-        <div className="tv-ticker">{ticker.length ? ticker.join('   ·   ') : 'Birdies and eagles show up here as they happen.'}</div>
+        <div className="tv-ticker">
+          {sponsor && <span className="tv-ticker-sponsor">Sponsored by {sponsor.name}</span>}
+          {ticker.length ? ticker.join('   ·   ') : 'Birdies and eagles show up here as they happen.'}
+        </div>
         {qr && (
           <div className="tv-qr">
             <img src={qr} alt="" width={64} height={64} />

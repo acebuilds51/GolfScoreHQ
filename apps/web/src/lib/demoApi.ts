@@ -966,6 +966,14 @@ export function demoApi(): DemoApi {
       const db = load();
       const d = db.tvDisplays.find((x) => x.id === did)!;
       requireCommissioner(db, d.leagueId);
+      // Same rule as enforce_tv_sponsor() in the database.
+      const sp = patch.settings?.sponsor;
+      if (sp && JSON.stringify(sp) !== JSON.stringify(d.settings.sponsor ?? null)) {
+        if (!has(db, d.leagueId, 'multi_league')) throw new Error('plan_feature: A TV sponsor needs the Club plan');
+        if (!sp.name || sp.name.length > 60 || (sp.message ?? '').length > 140 || (sp.logoUrl && !/^https:\/\//.test(sp.logoUrl))) {
+          throw new Error('Sponsor: a name (up to 60 characters), a line up to 140, and a logo link starting with https://.');
+        }
+      }
       if (patch.name !== undefined) d.name = patch.name;
       if (patch.settings !== undefined) d.settings = patch.settings;
       save(db);

@@ -599,6 +599,20 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
 });
 
 describe('Clubhouse TV feed', () => {
+  it('keeps the TV sponsor slot to Club leagues, short and with a safe logo link', async () => {
+    await setPlan(oak, 'pro');
+    const [tv] = await as(db, tony, () => rows<{ id: string }>(db, `insert into tv_displays (league_id, token_hash, created_by) values ($1, 'hash-sponsor', $2) returning id`, [oak, tony]));
+    const sponsor = (s: unknown) => as(db, tony, () => db.query(`update tv_displays set settings = settings || jsonb_build_object('sponsor', $2::jsonb) where id = $1`, [tv!.id, JSON.stringify(s)]));
+    await expect(sponsor({ name: 'Joe’s Pro Shop' })).rejects.toThrow(/Club plan/);
+    await sponsor(null); // clearing is always fine
+    await as(db, tony, () => db.query(`update tv_displays set settings = jsonb_set(settings, '{hideMoney}', 'false') where id = $1`, [tv!.id])); // other settings still save
+    await setPlan(oak, 'comp');
+    await expect(sponsor({ name: 'Shop', logoUrl: 'http://example.com/logo.png' })).rejects.toThrow(/https/);
+    await expect(sponsor({ name: '' })).rejects.toThrow(/name/);
+    await sponsor({ name: 'Joe’s Pro Shop', message: '10% off for league members', logoUrl: 'https://example.com/logo.png' });
+    expect((await rows<{ s: any }>(db, `select settings -> 'sponsor' as s from tv_displays where id = $1`, [tv!.id]))[0]!.s).toMatchObject({ name: 'Joe’s Pro Shop' });
+  });
+
   it('serves the week to a valid TV link without sign-in, and nothing else', async () => {
     await setPlan(oak, 'pro');
     const al = await addPlayer(tony, oak, 'Al');
