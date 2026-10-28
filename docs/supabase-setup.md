@@ -44,6 +44,8 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 24. `20261118000000_push_notifications.sql` (phone notifications: each person's devices; deploy `push`, and set the `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` secrets from `npx web-push generate-vapid-keys`)
 25. `20261119000000_tv_sponsor.sql` (Clubhouse TV sponsor screen, Club plan only)
 26. `20261120000000_captain_vacate.sql` (captains work like the old OCBC app: a captain who drops out gives up the tee time, the group breaks up and the groups behind move up; the commissioner can put a captain back in)
+27. `20261121000000_tee_sheet_notifications.sql` (phone notifications for tee sheet and sub news, through an outbox the database hands to the `push` function; redeploy `push` with `--no-verify-jwt`)
+28. `20261122000000_pilot_codes.sql` (pilot sign-up codes: staff make them, commissioners use the link golfscorehq.app/pilot/<code>)
 
 **B. Command line**
 

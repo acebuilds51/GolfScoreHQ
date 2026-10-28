@@ -3,7 +3,7 @@ import type {
   Club, LeagueBilling,
   Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, LedgerRow, Member, NewCourse, NewPlayer, Player, Role,
   PaymentHandles, RecapPreview, RoundData, RoundPlayer, RsvpStatus, ScoreEntry, Season, SubOffer, SubRequest, TvDisplay, TvFeed, TvSettings, User,
-  NewSetupRequest, SetupFile, SetupRequest, SetupStatus, StaffSetupRequest, LineupStatus, TeeSheet, TeeTime, ReminderPreview, RsvpLinkInfo,
+  NewSetupRequest, SetupFile, SetupRequest, SetupStatus, StaffSetupRequest, LineupStatus, TeeSheet, TeeTime, ReminderPreview, RsvpLinkInfo, PilotCode, PilotCodeStatus,
 } from './types';
 
 export type { CourseSummary, LookupCourse, LookupTee } from '../../../../supabase/functions/course-lookup/normalize';
@@ -180,6 +180,16 @@ export interface Api {
   /** GolfScoreHQ staff only. */
   isStaff(): Promise<boolean>;
   staffSetupQueue(): Promise<StaffSetupRequest[]>;
+  /** Pilot sign-up: is this code good (anyone, signed in or not). */
+  pilotCodeStatus(code: string): Promise<PilotCodeStatus>;
+  /** A new league on the pilot plan; returns its id. */
+  createPilotLeague(code: string, name: string, slug: string): Promise<string>;
+  /** An existing free league joins the pilot (its commissioner). */
+  redeemPilotCode(code: string, leagueId: string): Promise<void>;
+  /** Staff: pilot codes, making one, ending one. */
+  staffPilotCodes(): Promise<PilotCode[]>;
+  createPilotCode(note: string, maxUses: number): Promise<string>;
+  revokePilotCode(code: string): Promise<void>;
   /** Join the request's league as a commissioner (with the commissioner's consent); returns its slug. */
   staffJoinLeague(requestId: string): Promise<string>;
   /** Change status and reply; emails the commissioner. 'done' removes staff's access to the league. */

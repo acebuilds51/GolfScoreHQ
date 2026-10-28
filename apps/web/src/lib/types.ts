@@ -336,6 +336,21 @@ export interface StaffSetupRequest extends SetupRequest {
   staffUserId: string | null;
 }
 
+/** 'ok', 'used' (no uses left), 'ended' (revoked or past its date) or 'invalid'. */
+export type PilotCodeStatus = 'ok' | 'used' | 'ended' | 'invalid';
+
+/** A pilot sign-up code (staff), with the leagues that used it. */
+export interface PilotCode {
+  code: string;
+  note: string | null;
+  maxUses: number;
+  uses: number;
+  pilotUntil: string;
+  createdAt: string;
+  revokedAt: string | null;
+  leagues: { id: string; name: string; slug: string }[];
+}
+
 /** Everything a Clubhouse TV shows, from tv_feed(). */
 export interface TvFeed {
   error?: 'plan';

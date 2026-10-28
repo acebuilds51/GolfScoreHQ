@@ -15,7 +15,7 @@ export function LeaguesPage() {
     <div className="page">
       <div className="row between wrap">
         <h1>Your leagues</h1>
-        {staff.data && <Link className="btn btn-sm" to="/staff">Staff: setup requests</Link>}
+        {staff.data && <Link className="btn btn-sm" to="/staff">Staff: pilot codes and setup requests</Link>}
       </div>
       {leagues.error && <ErrorText>{leagues.error}</ErrorText>}
       {leagues.data && leagues.data.length === 0 && (

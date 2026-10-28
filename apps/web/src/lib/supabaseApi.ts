@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Api, CourseSummary, LookupCourse } from './api';
-import type { LeagueBilling, RecapPreview, ReminderPreview, RsvpLinkInfo, SetupRequest, SubOffer, TeeTime } from './types';
+import type { LeagueBilling, PilotCode, PilotCodeStatus, RecapPreview, ReminderPreview, RsvpLinkInfo, SetupRequest, SubOffer, TeeTime } from './types';
 import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, TvFeed, User } from './types';
 import { randomToken, sha256Hex } from './util';
 
@@ -598,6 +598,24 @@ export function supabaseApi(url: string, anonKey: string): Api {
     async isStaff() {
       const { data } = await sb.rpc('is_staff');
       return data === true;
+    },
+    async pilotCodeStatus(code) {
+      return check(await sb.rpc('pilot_code_status', { p_code: code })) as PilotCodeStatus;
+    },
+    async createPilotLeague(code, name, slug) {
+      return check(await sb.rpc('create_pilot_league', { p_code: code, p_name: name, p_slug: slug })) as string;
+    },
+    async redeemPilotCode(code, leagueId) {
+      check(await sb.rpc('redeem_pilot_code', { p_code: code, p_league: leagueId }));
+    },
+    async staffPilotCodes() {
+      return check(await sb.rpc('staff_pilot_codes')) as PilotCode[];
+    },
+    async createPilotCode(note, maxUses) {
+      return check(await sb.rpc('create_pilot_code', { p_note: note, p_max_uses: maxUses })) as string;
+    },
+    async revokePilotCode(code) {
+      check(await sb.rpc('revoke_pilot_code', { p_code: code }));
     },
     async staffSetupQueue() {
       const rows = check(await sb.rpc('staff_setup_queue')) as Row[];
