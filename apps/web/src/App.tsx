@@ -11,6 +11,7 @@ import { LivePage } from './pages/LivePage';
 import { MorePage } from './pages/MorePage';
 import { LeaguesPage } from './pages/LeaguesPage';
 import { OverviewPage } from './pages/OverviewPage';
+import { PilotPage } from './pages/PilotPage';
 import { PlayPage } from './pages/PlayPage';
 import { ScoreRoundPage } from './pages/ScoreRoundPage';
 import { WeekPage } from './pages/WeekPage';
@@ -47,6 +48,7 @@ export function App() {
           <Route path="/" element={auth.loading ? <PageSkeleton /> : auth.user ? <Navigate to="/leagues" replace /> : <SignInPage />} />
           <Route path="/join/:token" element={<JoinInvitePage />} />
           <Route path="/rsvp/:token" element={<RsvpLinkPage />} />
+          <Route path="/pilot/:code" element={<PilotPage />} />
           <Route path="/leagues" element={<RequireUser><LeaguesPage /></RequireUser>} />
           <Route path="/staff" element={<RequireUser><StaffPage /></RequireUser>} />
           <Route path="/l/:slug" element={<RequireUser><LeagueLayout /></RequireUser>}>

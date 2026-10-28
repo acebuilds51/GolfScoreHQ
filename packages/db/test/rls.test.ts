@@ -575,6 +575,93 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
     expect((await rows(db, 'select length(token) as n from cron_secret'))[0]).toEqual({ n: 64 });
   });
 
+  it('signs pilot leagues up with a code: a new league, or an existing free one', async () => {
+    const staff = await createUser(db, 'staff@golfscorehq.app');
+    await db.query('insert into staff_users (user_id) values ($1)', [staff]);
+    const call = (user: string | null, sql: string, params: unknown[] = []) => as(db, user, () => rows<any>(db, sql, params));
+    const status = async (code: string) => (await call(null, 'select pilot_code_status($1) as s', [code]))[0].s;
+
+    await expect(call(tony, `select create_pilot_code('For me', 1::smallint)`)).rejects.toThrow(/staff only/);
+    const code = (await call(staff, `select create_pilot_code('Crystal Lake men', 1::smallint) as c`))[0].c as string;
+    expect(code).toMatch(/^PILOT-[0-9A-F]{6}$/);
+    expect([await status(code), await status(code.toLowerCase()), await status('PILOT-NOPE')]).toEqual(['ok', 'ok', 'invalid']);
+
+    // Sam already has his free league; the code starts a second one on the pilot plan.
+    const lid = (await call(sam, `select create_pilot_league($1, 'Crystal Lake Men', 'crystal-lake') as id`, [code]))[0].id;
+    expect((await rows(db, `select plan, plan_expires_at::date::text as until from leagues where id = $1`, [lid]))[0]).toEqual({ plan: 'pilot', until: '2028-01-01' });
+    expect((await call(sam, 'select role from league_members where league_id = $1', [lid]))).toEqual([{ role: 'owner' }]);
+    expect(await status(code)).toBe('used');
+    await expect(call(joe, `select create_pilot_league($1, 'Another', 'another')`, [code])).rejects.toThrow(/already been used/);
+
+    // A code for two leagues: Tony's existing free league joins; only commissioners of a free league can.
+    const two = (await call(staff, `select create_pilot_code('Club with two leagues', 2::smallint) as c`))[0].c as string;
+    await expect(call(joe, 'select redeem_pilot_code($1, $2)', [two, oak])).rejects.toThrow(/commissioner/);
+    await call(tony, 'select redeem_pilot_code($1, $2)', [two, oak]);
+    expect((await rows(db, 'select plan from leagues where id = $1', [oak]))[0]).toEqual({ plan: 'pilot' });
+    await expect(call(tony, 'select redeem_pilot_code($1, $2)', [two, oak])).rejects.toThrow(/already has Pro/);
+    expect(await status(two)).toBe('ok'); // one use left
+
+    // Staff can end a code; only staff see the codes and who used them.
+    await call(staff, 'select revoke_pilot_code($1)', [two]);
+    expect(await status(two)).toBe('ended');
+    expect((await call(staff, 'select code, uses from pilot_codes order by created_at')).map((r: any) => r.uses)).toEqual([1, 1]);
+    expect(await call(staff, 'select count(*)::int as n from pilot_redemptions')).toEqual([{ n: 2 }]);
+    const list = (await call(staff, 'select staff_pilot_codes() as l'))[0].l;
+    expect(list.map((c: any) => [c.note, c.leagues.map((l: any) => l.name)])).toEqual([['Club with two leagues', ['Oak Creek Men']], ['Crystal Lake men', ['Crystal Lake Men']]]);
+    await expect(call(tony, 'select staff_pilot_codes()')).rejects.toThrow(/staff only/);
+    expect(await call(tony, 'select * from pilot_codes')).toEqual([]);
+    await expect(call(tony, `insert into pilot_codes (code) values ('FREE-FOR-ME')`)).rejects.toThrow(/permission denied/);
+  });
+
+  it('queues phone notifications for tee sheet and sub news, never to whoever did it', async () => {
+    const { eventId } = await weekWithRound(tony, oak);
+    await db.query('delete from rounds where event_id = $1', [eventId]);
+    await setPlan(oak, 'pro');
+    const [yan, zed, sue] = await Promise.all(['yan@example.com', 'zed@example.com', 'sue@example.com'].map((e) => createUser(db, e)));
+    for (const u of [yan, zed, sue]) await db.query(`insert into league_members (league_id, user_id, role) values ($1, $2, 'player')`, [oak, u]);
+    const bee = await linkedPlayer(joe, 'Bee Bly');
+    const [y, z, s] = await Promise.all([linkedPlayer(yan, 'Yan Young'), linkedPlayer(zed, 'Zed Zane'), linkedPlayer(sue, 'Sue Sub')]);
+    const ace = await addPlayer(tony, oak, 'Ace');
+    const call = (user: string, sql: string, params: unknown[]) => as(db, user, () => db.query(sql, params));
+    const inbox = async (user: string) => (await rows<{ title: string; body: string }>(db,
+      'select title, body from push_outbox where $1 = any (user_ids) and sent_at is null order by id', [user])).map((m) => `${m.title} | ${m.body}`);
+    const clear = () => db.query('update push_outbox set sent_at = now()');
+
+    await call(tony, 'select set_tee_times($1, $2::jsonb)', [eventId, JSON.stringify([
+      { slot: 1, time: '17:10', captainId: ace }, { slot: 2, time: '17:17', captainId: bee }, { slot: 3, time: '17:24', captainId: null }])]);
+    await call(tony, 'select lineup_join($1, $2, 2::smallint)', [eventId, y]);
+    await call(zed, 'select lineup_join($1, $2, 3::smallint)', [eventId, z]); // Zed joins himself: no notice
+    expect(await inbox(joe)).toEqual([`Week 1: you're captain of T2 at 5:17 PM | Fill your group, or tap "Not playing" if you can't make it.`]);
+    expect(await inbox(yan)).toEqual(['Week 1: you\'re in T2 at 5:17 PM | The commissioner put you in the group.']);
+    expect(await inbox(zed)).toEqual([]);
+    await clear();
+
+    // Bee drops out: Yan's group is off, the commissioner hears, Zed's group moves up. Not Bee (he did it).
+    await call(joe, `select lineup_status($1, $2, 'out')`, [eventId, bee]);
+    expect(await inbox(yan)).toEqual(['Week 1: your T2 at 5:17 PM group is off | Bee gave up the tee time (out this week), so the group broke up. Tap to join another group.']);
+    expect(await inbox(tony)).toEqual(['Week 1: Bee gave up T2 | Out this week. The groups behind moved up a tee time.']);
+    expect(await inbox(zed)).toEqual(['Week 1: your group is now T2 at 5:17 PM | The tee times moved after a captain change.']);
+    expect(await inbox(joe)).toEqual([]);
+    await clear();
+
+    // Yan teams up with Zed to look for a match: Zed hears.
+    await call(yan, `select lineup_status($1, $2, 'match', $3)`, [eventId, y, z]);
+    expect(await inbox(zed)).toEqual(['Week 1: Yan teamed up with you | You two need a match. Tap to find a group with room.']);
+    expect(await inbox(yan)).toEqual([]);
+    await clear();
+
+    // A sub is asked; when she says yes, the commissioner who asked hears.
+    const [req] = await call(tony, `insert into sub_requests (league_id, event_id, tee_slot, created_by) values ($1, $2, 1, $3) returning id`, [oak, eventId, tony]).then((r) => r.rows as { id: string }[]);
+    await call(tony, 'insert into sub_offers (request_id, player_id, league_id) values ($1, $2, $3)', [req!.id, s, oak]);
+    expect(await inbox(sue)).toEqual(['Sub needed: Oak Creek Men, week 1 | Can you fill in at T1 at 5:10 PM? First to say yes gets the spot.']);
+    await call(sue, 'select respond_to_sub_offer($1, $2, true)', [req!.id, s]);
+    expect(await inbox(tony)).toEqual(['Week 1: Sue is subbing | Sue took the spot at T1 at 5:10 PM.']);
+
+    // Nobody reads or empties the outbox but the server.
+    await expect(call(tony, 'select * from push_outbox', [])).rejects.toThrow(/permission denied/);
+    await expect(call(tony, 'select take_push_outbox()', [])).rejects.toThrow(/permission denied/);
+  });
+
   it('runs captains like the old app: a captain who drops out gives up the tee time and the groups move up', async () => {
     const { eventId } = await weekWithRound(tony, oak);
     await db.query('delete from rounds where event_id = $1', [eventId]);

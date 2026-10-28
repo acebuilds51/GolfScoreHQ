@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ErrorText, PageSkeleton } from '../components/ui';
+import { CopyField, ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync } from '../lib/hooks';
 import type { SetupStatus, StaffSetupRequest } from '../lib/types';
@@ -20,6 +20,7 @@ export function StaffPage() {
 
   return (
     <div className="page stack">
+      <PilotCodes />
       <div className="row between wrap">
         <div>
           <Link to="/leagues" className="small">← Your leagues</Link>
@@ -30,6 +31,69 @@ export function StaffPage() {
       </div>
       {shown.length === 0 ? <NoRequests /> : shown.map((r) => <StaffRequest key={r.id} request={r} onChanged={queue.reload} />)}
     </div>
+  );
+}
+
+const PILOT_SPOTS = 10;
+
+/** Pilot sign-up links: one code per league being recruited (or more uses for a club with several leagues). */
+function PilotCodes() {
+  const codes = useAsync(() => api.staffPilotCodes(), []);
+  const [note, setNote] = useState('');
+  const [uses, setUses] = useState('1');
+  const [made, setMade] = useState<string | null>(null);
+  const { busy, error, setError, run } = useAction();
+  const link = (code: string) => `${window.location.origin}/pilot/${code}`;
+  const joined = (codes.data ?? []).reduce((n, c) => n + c.leagues.length, 0);
+
+  return (
+    <section className="card stack">
+      <div className="row between wrap">
+        <h2>Pilot codes</h2>
+        <span className="small muted">{joined} of {PILOT_SPOTS} pilot leagues signed up</span>
+      </div>
+      <p className="small muted">Make a code for each league you're recruiting and send them the link. They sign in, name their league (or pick a free one they run) and it's on the pilot plan, free through 2027.</p>
+      <form className="row wrap" onSubmit={async (e) => {
+        e.preventDefault();
+        const n = Number(uses);
+        if (!(n >= 1 && n <= 50)) return setError('Uses: 1 to 50.');
+        const code = await run(() => api.createPilotCode(note, n));
+        if (code) { setMade(code); setNote(''); setUses('1'); codes.reload(); }
+      }}>
+        <input className="grow" placeholder="Who it's for, e.g. Crystal Lake Tuesday men" value={note} onChange={(e) => { setNote(e.target.value); setError(null); }} maxLength={120} />
+        <label className="inline" style={{ maxWidth: 110 }}>Leagues<input inputMode="numeric" value={uses} onChange={(e) => setUses(e.target.value.replace(/\D/g, ''))} /></label>
+        <button className="btn btn-primary btn-sm" disabled={busy}>Make a code</button>
+      </form>
+      {made && (
+        <div className="subcard stack">
+          <strong>New pilot link</strong>
+          <CopyField value={link(made)} />
+        </div>
+      )}
+      <ErrorText>{error ?? codes.error}</ErrorText>
+      {(codes.data ?? []).length > 0 && (
+        <ul className="list">
+          {codes.data!.map((c) => (
+            <li key={c.code} className="list-row">
+              <div className="grow">
+                <strong className="mono">{c.code}</strong>{c.note && <span className="muted"> · {c.note}</span>}
+                <div className="small muted">
+                  {c.revokedAt ? 'Ended' : `${c.uses} of ${c.maxUses} used`}
+                  {c.leagues.length > 0 && <> · {c.leagues.map((l, i) => <span key={l.id}>{i > 0 && ', '}<Link to={`/l/${l.slug}`}>{l.name}</Link></span>)}</>}
+                </div>
+              </div>
+              {!c.revokedAt && c.uses < c.maxUses && (
+                <div className="row">
+                  <button className="btn btn-ghost btn-sm" onClick={() => navigator.clipboard?.writeText(link(c.code))}>Copy link</button>
+                  <button className="btn btn-ghost btn-sm" disabled={busy}
+                    onClick={async () => { if (window.confirm(`End ${c.code}? The link stops working.`)) { await run(() => api.revokePilotCode(c.code)); codes.reload(); } }}>End</button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

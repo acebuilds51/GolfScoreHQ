@@ -1,5 +1,5 @@
 import type { Api } from './api';
-import type { Contact, Course, JoinRequest, League, LeagueBilling, LeagueEvent, LedgerRow, PaymentHandles, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SetupRequest, SubRequest, TeeSheet, TeeTime, TvDisplay, User } from './types';
+import type { Contact, Course, JoinRequest, League, LeagueBilling, LeagueEvent, LedgerRow, PaymentHandles, PilotCode, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SetupRequest, SubRequest, TeeSheet, TeeTime, TvDisplay, User } from './types';
 import { isCommissioner } from './types';
 import type { WeeklyRecap } from '@golfscorehq/engine';
 import { buildRecapEmail } from '../../../../supabase/functions/send-recap/email';
@@ -58,12 +58,14 @@ interface Db {
   seasonTeeTimes: Record<string, string[]>;
   /** eventId → when its reminder email went out (demo never emails anyone). */
   reminderSends: Record<string, { sent_at: string; recipients: number }>;
+  /** Pilot sign-up codes (staff). */
+  pilotCodes: (Omit<PilotCode, 'leagues'> & { leagueIds: string[] })[];
 }
 
 const empty = (): Db => ({
   session: null, users: {}, leagues: [], members: [], players: [], contacts: {}, invites: [], joinRequests: [], courses: [],
   seasons: [], events: [], rounds: [], ledger: [], ctpDecisions: {}, tvDisplays: [], rsvps: {}, subRequests: [],
-  recapSends: {}, recapPrefs: {}, paymentHandles: {}, clubs: [], setupRequests: [], teeSheets: {}, seasonTeeTimes: {}, reminderSends: {},
+  recapSends: {}, recapPrefs: {}, paymentHandles: {}, clubs: [], setupRequests: [], teeSheets: {}, seasonTeeTimes: {}, reminderSends: {}, pilotCodes: [],
 });
 
 /** Demo uploads live only for this page view (too big for the browser's saved demo data). */
@@ -1087,6 +1089,64 @@ export function demoApi(): DemoApi {
     // Demo: you're GolfScoreHQ staff too, so the staff page can be tried.
     async isStaff() {
       return !!load().session;
+    },
+    // ── Pilot codes: same rules as the database functions ──
+    async pilotCodeStatus(code) {
+      const c = load().pilotCodes.find((x) => x.code === code.trim().toUpperCase());
+      if (!c) return 'invalid';
+      if (c.revokedAt || new Date(c.pilotUntil) < new Date()) return 'ended';
+      return c.uses >= c.maxUses ? 'used' : 'ok';
+    },
+    async createPilotLeague(code, name, slug) {
+      const status = await this.pilotCodeStatus(code);
+      if (status !== 'ok') throw new Error(status === 'used' ? 'That pilot code has already been used.' : status === 'ended' ? 'That pilot code has ended.' : "That pilot code isn't right. Check the link you were sent.");
+      const db = load();
+      const u = me(db);
+      if (db.leagues.some((l) => l.slug === slug)) throw new Error('duplicate key value violates unique constraint "leagues_slug_key"');
+      const c = db.pilotCodes.find((x) => x.code === code.trim().toUpperCase())!;
+      const league = { id: id(), name, slug, ownerId: u.id, plan: 'pilot' as Plan, joinCode: null, timezone: 'America/Detroit', planExpiresAt: c.pilotUntil };
+      db.leagues.push(league);
+      db.members.push({ leagueId: league.id, userId: u.id, role: 'owner' });
+      c.uses += 1;
+      c.leagueIds.push(league.id);
+      save(db);
+      return league.id;
+    },
+    async redeemPilotCode(code, leagueId) {
+      const status = await this.pilotCodeStatus(code);
+      const db = load();
+      requireCommissioner(db, leagueId);
+      const l = db.leagues.find((x) => x.id === leagueId)!;
+      if (l.plan !== 'free') throw new Error('This league already has Pro features.');
+      if (status !== 'ok') throw new Error(status === 'used' ? 'That pilot code has already been used.' : status === 'ended' ? 'That pilot code has ended.' : "That pilot code isn't right. Check the link you were sent.");
+      const c = db.pilotCodes.find((x) => x.code === code.trim().toUpperCase())!;
+      l.plan = 'pilot';
+      l.planExpiresAt = c.pilotUntil;
+      c.uses += 1;
+      c.leagueIds.push(l.id);
+      save(db);
+    },
+    async staffPilotCodes() {
+      const db = load();
+      me(db);
+      return [...db.pilotCodes].reverse().map(({ leagueIds, ...c }) => ({
+        ...c, leagues: leagueIds.map((lid) => db.leagues.find((l) => l.id === lid)).filter(Boolean).map((l) => ({ id: l!.id, name: l!.name, slug: l!.slug })),
+      }));
+    },
+    async createPilotCode(note, maxUses) {
+      const db = load();
+      me(db);
+      const code = `PILOT-${crypto.randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+      db.pilotCodes.push({ code, note: note.trim() || null, maxUses, uses: 0, pilotUntil: '2028-01-01T00:00:00Z', createdAt: new Date().toISOString(), revokedAt: null, leagueIds: [] });
+      save(db);
+      return code;
+    },
+    async revokePilotCode(code) {
+      const db = load();
+      me(db);
+      const c = db.pilotCodes.find((x) => x.code === code);
+      if (c && !c.revokedAt) c.revokedAt = new Date().toISOString();
+      save(db);
     },
     async staffSetupQueue() {
       const db = load();

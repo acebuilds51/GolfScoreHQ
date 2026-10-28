@@ -5,6 +5,27 @@ import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
 import { billingReturn, clearBillingReturn, fmtDay, PRICE, PRO_PERKS } from '../lib/plans';
 
+/** A pilot code (from the pilot invite) puts this free league on the pilot plan. */
+function PilotCodeEntry() {
+  const { league, reloadLeague } = useLeague();
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState('');
+  const { busy, error, setError, run } = useAction();
+  if (!open) return <p className="small muted">Invited to the 2027 pilot? <button type="button" className="linkish" onClick={() => setOpen(true)}>Enter your pilot code</button></p>;
+  return (
+    <form className="row wrap" onSubmit={async (e) => {
+      e.preventDefault();
+      if (!code.trim()) return setError('Enter the code from your invite, like PILOT-7F3A9C.');
+      const ok = await run(async () => { await api.redeemPilotCode(code.trim(), league.id); return true; });
+      if (ok) reloadLeague();
+    }}>
+      <input className="code-input" placeholder="PILOT-7F3A9C" value={code} onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(null); }} />
+      <button className="btn btn-sm" disabled={busy}>{busy ? 'Checking…' : 'Use code'}</button>
+      <ErrorText>{error}</ErrorText>
+    </form>
+  );
+}
+
 /** Settings: the league's plan, upgrading to Pro, and managing what's paid. */
 export function PlanSection() {
   const { league, reloadLeague } = useLeague();
@@ -89,6 +110,7 @@ export function PlanSection() {
             </p>
           </div>
           <p className="small muted">Running several leagues? A <strong>Club</strong> covers up to 5 of your leagues for {PRICE.club} a year. Set it up on <Link to="/leagues">Your leagues</Link>.</p>
+          <PilotCodeEntry />
         </>
       )}
       <ErrorText>{error ?? billing.error}</ErrorText>
