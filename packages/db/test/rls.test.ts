@@ -575,6 +575,62 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
     expect((await rows(db, 'select length(token) as n from cron_secret'))[0]).toEqual({ n: 64 });
   });
 
+  it('runs captains like the old app: a captain who drops out gives up the tee time and the groups move up', async () => {
+    const { eventId } = await weekWithRound(tony, oak);
+    await db.query('delete from rounds where event_id = $1', [eventId]);
+    await setPlan(oak, 'pro');
+    const bee = await linkedPlayer(joe, 'Bee'); // a captain using the app
+    const [ace, cee, x, y, z, w] = await Promise.all(['Ace', 'Cee', 'X', 'Y', 'Z', 'W'].map((n) => addPlayer(tony, oak, n)));
+    const call = (user: string, sql: string, params: unknown[]) => as(db, user, () => db.query(sql, params));
+    const name = new Map([[ace, 'Ace'], [bee, 'Bee'], [cee, 'Cee'], [x, 'X'], [y, 'Y'], [z, 'Z'], [w, 'W']]);
+    // "T1 Ace: Ace, X" — each tee time's captain and golfers (captain first).
+    const sheet = async () => {
+      const t = await rows<{ slot: number; captain_id: string | null }>(db, 'select slot, captain_id from event_tee_times where event_id = $1 order by slot', [eventId]);
+      const l = await rows<{ slot: number; player_id: string }>(db, 'select slot, player_id from event_lineup where event_id = $1 and slot is not null', [eventId]);
+      return t.map((s) => {
+        const ids = l.filter((r) => r.slot === s.slot).map((r) => r.player_id).sort((a, b) => (a === s.captain_id ? -1 : b === s.captain_id ? 1 : name.get(a)!.localeCompare(name.get(b)!)));
+        return `T${s.slot} ${s.captain_id ? name.get(s.captain_id) : '-'}: ${ids.map((i) => name.get(i)).join(', ')}`;
+      });
+    };
+    const vacated = () => rows(db, 'select player_id, original_slot, reason from event_vacated where event_id = $1 order by created_at', [eventId]);
+
+    await call(tony, 'select set_tee_times($1, $2::jsonb)', [eventId, JSON.stringify([
+      { slot: 1, time: '17:10', captainId: ace }, { slot: 2, time: '17:17', captainId: bee }, { slot: 3, time: '17:24', captainId: cee }, { slot: 4, time: '17:31', captainId: null }])]);
+    for (const [p, s] of [[x, 1], [y, 2], [z, 3], [w, 4]] as const) await call(tony, 'select lineup_join($1, $2, $3::smallint)', [eventId, p, s]);
+    expect(await sheet()).toEqual(['T1 Ace: Ace, X', 'T2 Bee: Bee, Y', 'T3 Cee: Cee, Z', 'T4 -: W']);
+
+    // A captain can't just leave their group.
+    await expect(call(joe, 'select lineup_leave($1, $2)', [eventId, bee])).rejects.toThrow(/Captains can't leave/);
+
+    // Bee isn't playing: T2's group breaks up (Y is still playing, no group) and everyone behind moves up.
+    await call(joe, `select lineup_status($1, $2, 'out')`, [eventId, bee]);
+    expect(await sheet()).toEqual(['T1 Ace: Ace, X', 'T2 Cee: Cee, Z', 'T3 -: W', 'T4 -: ']);
+    expect(await vacated()).toEqual([{ player_id: bee, original_slot: 2, reason: 'Out this week' }]);
+    expect(await rows(db, 'select status from event_rsvps where event_id = $1 and player_id = $2', [eventId, y])).toEqual([{ status: 'in' }]);
+
+    // Cee (captain of T2) joins W's open group at T3: Cee gives up T2, W's group moves up to T2.
+    await call(tony, 'select lineup_join($1, $2, 3::smallint)', [eventId, cee]);
+    expect(await sheet()).toEqual(['T1 Ace: Ace, X', 'T2 -: Cee, W', 'T3 -: ', 'T4 -: ']);
+    expect((await vacated())[1]).toEqual({ player_id: cee, original_slot: 2, reason: 'Playing in T2' });
+
+    // The commissioner puts Bee back in at T2: the groups from there move down one.
+    await expect(call(joe, 'select lineup_restore_captain($1, $2, 2::smallint)', [eventId, bee])).rejects.toThrow(/commissioners only/);
+    await call(tony, 'select lineup_restore_captain($1, $2, 2::smallint)', [eventId, bee]);
+    expect(await sheet()).toEqual(['T1 Ace: Ace, X', 'T2 Bee: Bee', 'T3 -: Cee, W', 'T4 -: ']);
+    expect((await vacated()).map((v: any) => v.player_id)).toEqual([cee]);
+    expect(await rows(db, 'select status from event_rsvps where event_id = $1 and player_id = $2', [eventId, bee])).toEqual([{ status: 'in' }]);
+
+    // The commissioner takes a captain out: same as giving it up.
+    await call(tony, 'select lineup_leave($1, $2)', [eventId, ace]);
+    expect(await sheet()).toEqual(['T1 Bee: Bee', 'T2 -: Cee, W', 'T3 -: ', 'T4 -: ']);
+    expect((await vacated()).find((v: any) => v.player_id === ace)).toMatchObject({ original_slot: 1, reason: 'Taken out by the commissioner' });
+
+    // Golfers who aren't captains come and go without moving anyone.
+    await call(tony, 'select lineup_leave($1, $2)', [eventId, w]);
+    expect(await sheet()).toEqual(['T1 Bee: Bee', 'T2 -: Cee', 'T3 -: ', 'T4 -: ']);
+    expect(await as(db, sam, () => rows(db, 'select * from event_vacated'))).toEqual([]);
+  });
+
   it('keeps phone notification devices private to their owner', async () => {
     const add = (user: string, endpoint: string) => as(db, user, () =>
       db.query(`insert into push_subscriptions (endpoint, p256dh, auth) values ($1, 'key', 'secret')`, [endpoint]));

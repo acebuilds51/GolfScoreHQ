@@ -126,13 +126,13 @@ export function demoApi(): DemoApi {
     requireMember(db, ev.leagueId);
     if (!has(db, ev.leagueId, 'lineup')) throw new Error('plan_feature: The tee sheet needs GolfScoreHQ Pro');
     if (ev.status === 'settled' || ev.status === 'rainout') throw new Error('This week is over.');
-    const sheet = (db.teeSheets[eventId] ??= { times: [], lineup: [], custom: false, seasonTimes: 0 });
+    const sheet = (db.teeSheets[eventId] ??= { times: [], lineup: [], custom: false, seasonTimes: 0, vacated: [] });
     return { db, ev, sheet };
   }
   /** Same as sync_week_tee_times(): an upcoming week follows its season's tee times (captains and groups stay put). */
   function demoSyncWeek(db: Db, eventId: string) {
     const ev = db.events.find((e) => e.id === eventId);
-    const sheet = (db.teeSheets[eventId] ??= { times: [], lineup: [], custom: false, seasonTimes: 0 });
+    const sheet = (db.teeSheets[eventId] ??= { times: [], lineup: [], custom: false, seasonTimes: 0, vacated: [] });
     if (!ev || sheet.custom || ev.status !== 'scheduled' || db.rounds.some((r) => r.eventId === eventId)) return;
     const season = db.seasonTeeTimes[ev.seasonId] ?? [];
     for (const l of sheet.lineup) if (l.slot !== null && l.slot > season.length) l.slot = null;
@@ -146,9 +146,33 @@ export function demoApi(): DemoApi {
     const mine = (id: string | null | undefined) => !!id && db.players.find((p) => p.id === id)?.userId === u.id;
     return mine(sheet.times.find((t) => t.slot === slot)?.captainId) || sheet.lineup.some((l) => l.slot === slot && mine(l.playerId));
   }
-  /** Out of any group and captaincy; a paired-up partner needs a partner again. */
+  /** Same as lineup_compress(): captained groups first, then other groups with golfers, then empty tee times. Returns old slot → new slot. */
+  function demoCompress(sheet: TeeSheet): Map<number, number> {
+    const has = (slot: number) => sheet.lineup.some((l) => l.slot === slot);
+    const bySlot = [...sheet.times].sort((a, b) => a.slot - b.slot);
+    const order = [...bySlot].sort((a, b) => Number(!a.captainId) - Number(!b.captainId) || Number(!has(a.slot)) - Number(!has(b.slot)) || a.slot - b.slot);
+    const moves = new Map(order.map((t, i) => [t.slot, bySlot[i]!.slot]));
+    const captains = new Map(sheet.times.map((t) => [t.slot, t.captainId]));
+    for (const t of sheet.times) {
+      const from = [...moves].find(([, to]) => to === t.slot)![0];
+      t.captainId = captains.get(from) ?? null;
+    }
+    for (const l of sheet.lineup) if (l.slot !== null) l.slot = moves.get(l.slot) ?? l.slot;
+    return moves;
+  }
+  /** Same as lineup_vacate(): a captain gives up their tee time, the group breaks up, the groups behind move up. */
+  function demoVacate(sheet: TeeSheet, playerId: string, reason: string): Map<number, number> | null {
+    const t = sheet.times.find((x) => x.captainId === playerId);
+    if (!t) return null;
+    sheet.vacated = [...(sheet.vacated ?? []).filter((v) => v.playerId !== playerId), { playerId, slot: t.slot, reason }];
+    t.captainId = null;
+    sheet.lineup = sheet.lineup.filter((l) => l.slot !== t.slot || l.playerId === playerId);
+    for (const l of sheet.lineup) if (l.playerId === playerId) l.slot = null;
+    return demoCompress(sheet);
+  }
+  /** Out of any group (a captain gives up their tee time first); a paired-up partner needs a partner again. */
   function demoClear(sheet: TeeSheet, playerId: string) {
-    for (const t of sheet.times) if (t.captainId === playerId) t.captainId = null;
+    demoVacate(sheet, playerId, 'Out this week');
     for (const l of sheet.lineup) if (l.partnerId === playerId) { l.looking = 'partner'; l.partnerId = null; }
     sheet.lineup = sheet.lineup.filter((l) => l.playerId !== playerId);
   }
@@ -867,7 +891,7 @@ export function demoApi(): DemoApi {
       const ev = db.events.find((e) => e.id === eventId)!;
       requireMember(db, ev.leagueId);
       const sheet: TeeSheet = JSON.parse(JSON.stringify(db.teeSheets[eventId] ?? { times: [], lineup: [] }));
-      return { ...sheet, custom: !!sheet.custom, seasonTimes: (db.seasonTeeTimes[ev.seasonId] ?? []).length };
+      return { ...sheet, custom: !!sheet.custom, seasonTimes: (db.seasonTeeTimes[ev.seasonId] ?? []).length, vacated: sheet.vacated ?? [] };
     },
     async seasonTeeTimes(seasonId) {
       const db = load();
@@ -915,6 +939,12 @@ export function demoApi(): DemoApi {
       if (!demoCanPlace(db, ev.leagueId, sheet, playerId, slot)) throw new Error('You can add yourself, or golfers to your own group.');
       const n = sheet.lineup.filter((l) => l.slot === slot && l.playerId !== playerId).length;
       if (n >= 5 || (n >= 4 && !isCommissioner(roleIn(db, ev.leagueId)))) throw new Error('That group is full.');
+      // A captain joining another group gives up their own tee time; the group they join may move up.
+      const own = sheet.times.find((x) => x.captainId === playerId)?.slot;
+      if (own !== undefined && own !== slot) {
+        slot = demoVacate(sheet, playerId, 'Playing in another group')?.get(slot) ?? slot;
+        sheet.vacated!.find((v) => v.playerId === playerId)!.reason = `Playing in T${slot}`;
+      }
       if (!sheet.lineup.some((l) => l.playerId === playerId && l.slot === slot)) {
         demoClear(sheet, playerId);
         sheet.lineup.push({ playerId, slot, looking: null, partnerId: null });
@@ -925,8 +955,31 @@ export function demoApi(): DemoApi {
     async lineupLeave(eventId, playerId) {
       const { db, ev, sheet } = lineupDb(eventId);
       const slot = sheet.lineup.find((l) => l.playerId === playerId)?.slot ?? null;
-      if (!demoCanPlace(db, ev.leagueId, sheet, playerId, slot)) throw new Error('You can only take yourself out, or golfers from a group you captain.');
+      if (sheet.times.some((t) => t.captainId === playerId)) {
+        if (!isCommissioner(roleIn(db, ev.leagueId))) throw new Error('Captains can\'t leave their group. Tap "Not playing", or ask the commissioner.');
+        demoVacate(sheet, playerId, 'Taken out by the commissioner');
+      } else if (!demoCanPlace(db, ev.leagueId, sheet, playerId, slot)) {
+        throw new Error('You can only take yourself out, or golfers from your own group.');
+      }
       demoClear(sheet, playerId);
+      save(db);
+    },
+    async lineupRestoreCaptain(eventId, playerId, slot) {
+      const { db, ev, sheet } = lineupDb(eventId);
+      requireCommissioner(db, ev.leagueId);
+      if (!sheet.times.some((t) => t.slot === slot)) throw new Error('No such tee time.');
+      if (sheet.times.some((t) => t.captainId === playerId)) throw new Error('They already captain a tee time this week.');
+      demoClear(sheet, playerId);
+      const empty = (s: number) => !sheet.times.find((t) => t.slot === s)?.captainId && !sheet.lineup.some((l) => l.slot === s);
+      const gap = sheet.times.map((t) => t.slot).filter((s) => s >= slot && empty(s)).sort((a, b) => a - b)[0];
+      if (gap === undefined) throw new Error(`Every tee time from T${slot} on has golfers in it. Add a tee time for this week first.`);
+      for (const l of sheet.lineup) if (l.slot !== null && l.slot >= slot && l.slot < gap) l.slot += 1;
+      const captains = new Map(sheet.times.map((t) => [t.slot, t.captainId]));
+      for (const t of sheet.times) if (t.slot > slot && t.slot <= gap) t.captainId = captains.get(t.slot - 1) ?? null;
+      sheet.times.find((t) => t.slot === slot)!.captainId = playerId;
+      sheet.lineup.push({ playerId, slot, looking: null, partnerId: null });
+      (db.rsvps[eventId] ??= {})[playerId] = 'in';
+      sheet.vacated = (sheet.vacated ?? []).filter((v) => v.playerId !== playerId);
       save(db);
     },
     async lineupStatus(eventId, playerId, status, partnerId) {
@@ -935,6 +988,8 @@ export function demoApi(): DemoApi {
       const actsFor = (pid: string) => isCommissioner(roleIn(db, ev.leagueId)) || db.players.find((p) => p.id === pid)?.userId === u.id;
       if (!actsFor(playerId)) throw new Error('You can only change your own status.');
       if (status === 'match' && (!partnerId || partnerId === playerId)) throw new Error('Pick your partner.');
+      demoVacate(sheet, playerId, status === 'partner' ? 'Looking for a partner' : status === 'match' ? 'Looking for a match' : 'Out this week');
+      if (status === 'match' && partnerId) demoVacate(sheet, partnerId, 'Looking for a match');
       demoClear(sheet, playerId);
       const rsvps = (db.rsvps[eventId] ??= {});
       if (status === 'out') rsvps[playerId] = 'out';

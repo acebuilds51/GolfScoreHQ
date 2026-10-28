@@ -292,6 +292,8 @@ export interface TeeSheet {
   custom: boolean;
   /** How many tee times the season has (0: none set for the season). */
   seasonTimes: number;
+  /** Captains who gave up their tee time this week (slot: the one they had), and why. */
+  vacated: { playerId: string; slot: number; reason: string }[];
 }
 
 export type LineupStatus = 'partner' | 'match' | 'out' | 'none';

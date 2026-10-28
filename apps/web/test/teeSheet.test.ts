@@ -20,6 +20,7 @@ const sheet: TeeSheet = {
   ],
   custom: false,
   seasonTimes: 2,
+  vacated: [],
 };
 const view = sheetView(sheet, players, { gone: 'out', maybe: 'maybe', me: 'in' });
 
