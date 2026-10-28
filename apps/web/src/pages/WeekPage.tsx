@@ -1,12 +1,13 @@
 import { teamHandicap } from '@golfscorehq/engine';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
-import { useAction, useAsync, useLeague, useLiveRefresh } from '../lib/hooks';
+import { useAction, useAsync, useAuth, useLeague, useLiveRefresh } from '../lib/hooks';
 import { courseHandicapFor, leagueIndexes, loadPlayedRounds } from '../lib/handicaps';
 import { allLayouts, describeRules, fmtDate, handicapRules, individualRules, isScramble, matchSoFar, weekRules } from '../lib/scoring';
 import { SpecialWeek } from './SpecialWeek';
+import { TeeSheetPanel } from './TeeSheetPanel';
 import { isCommissioner, type Layout, type Player, type RoundData, type RoundPlayer, type Season } from '../lib/types';
 import { WeekResults } from './WeekResults';
 import { WhosPlaying } from './WhosPlaying';
@@ -64,6 +65,7 @@ export function WeekPage() {
           : <div><button className="btn btn-primary" onClick={() => setStarting(true)}>Start scoring a group</button></div>
       )}
 
+      {event.status === 'scheduled' && rounds.length === 0 && <TeeSheetPanel event={event} players={players} />}
       {event.status === 'scheduled' && <WhosPlaying eventId={event.id} weekNumber={event.weekNumber} players={players} />}
 
       {layout && season && <WeekResults event={event} season={season} layout={layout} rounds={rounds} names={names} onChanged={data.reload} />}
@@ -152,6 +154,28 @@ function StartGroup({ eventId, rounds, players, season, layout, onCancel }: {
   const firstFree = [...Array(30).keys()].map((i) => i + 1).find((n) => !usedSlots.has(n)) ?? 1;
   const [teeSlot, setTeeSlot] = useState(String(firstFree));
   const [picks, setPicks] = useState<string[]>(['', '', '', '', '']);
+  // Fill the group in from the tee sheet: start on my tee time, with that group's golfers, until someone edits the picks.
+  const { user } = useAuth();
+  const sheet = useAsync(async () => (league.features.includes('lineup') ? api.teeSheet(eventId) : null), [eventId]);
+  const [edited, setEdited] = useState(false);
+  useEffect(() => {
+    const s = sheet.data;
+    if (!s) return;
+    const mine = players.find((p) => user && p.userId === user.id);
+    const mySlot = mine ? s.lineup.find((l) => l.playerId === mine.id)?.slot : null;
+    if (mySlot && !usedSlots.has(mySlot)) setTeeSlot(String(mySlot));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheet.data]);
+  useEffect(() => {
+    const s = sheet.data;
+    if (!s || edited) return;
+    const slot = Number(teeSlot);
+    const captain = s.times.find((t) => t.slot === slot)?.captainId;
+    const ids = s.lineup.filter((l) => l.slot === slot && !busyPlayers.has(l.playerId)).map((l) => l.playerId);
+    const ordered = captain && ids.includes(captain) ? [captain, ...ids.filter((id) => id !== captain)] : ids;
+    setPicks([...ordered.slice(0, 5), '', '', '', '', ''].slice(0, 5));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheet.data, teeSlot, edited]);
   const [subName, setSubName] = useState('');
   const [extraNames, setExtraNames] = useState<{ id: string; name: string }[]>([]);
   const { busy, error, setError, run } = useAction();
@@ -196,7 +220,7 @@ function StartGroup({ eventId, rounds, players, season, layout, onCancel }: {
         {slotLabels.map((label, i) => (
           <label key={label}>
             {label}
-            <select value={picks[i]} onChange={(e) => { const v = [...picks]; v[i] = e.target.value; setPicks(v); setError(null); }}>
+            <select value={picks[i]} onChange={(e) => { const v = [...picks]; v[i] = e.target.value; setPicks(v); setEdited(true); setError(null); }}>
               <option value="">{i === 0 ? 'Pick a golfer' : '— none —'}</option>
               {roster.map((p) => (
                 <option key={p.id} value={p.id}>

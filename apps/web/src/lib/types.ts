@@ -234,6 +234,31 @@ export interface TvDisplay {
   createdAt: string;
 }
 
+// ── Tee sheet ────────────────────────────────────────────────────────────────
+
+export interface TeeTime {
+  slot: number;
+  /** "17:10", or null for no clock time. */
+  time: string | null;
+  captainId: string | null;
+}
+
+export interface LineupEntry {
+  playerId: string;
+  /** In this tee time's group. */
+  slot: number | null;
+  /** Not in a group yet: needs a partner, or needs a match together with partnerId. */
+  looking: 'partner' | 'match' | null;
+  partnerId: string | null;
+}
+
+export interface TeeSheet {
+  times: TeeTime[];
+  lineup: LineupEntry[];
+}
+
+export type LineupStatus = 'partner' | 'match' | 'out' | 'none';
+
 // ── "We set up your league" ─────────────────────────────────────────────────
 
 export type SetupStatus = 'requested' | 'in_progress' | 'needs_info' | 'done';

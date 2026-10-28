@@ -27,6 +27,15 @@ export function smsLink(phones: (string | null | undefined)[], body = '', ua = t
   return `sms:${nums.join(',')}${msg ? `?body=${msg}` : ''}`;
 }
 
+const SIZE_KEY = 'gshq-text-group-size';
+/** The largest group text this phone's owner picked (default 20, what most carriers allow). */
+export function savedGroupSize(): number {
+  try { return Number(localStorage.getItem(SIZE_KEY)) || 20; } catch { return 20; }
+}
+export function saveGroupSize(n: number) {
+  try { localStorage.setItem(SIZE_KEY, String(n)); } catch { /* not saved */ }
+}
+
 /**
  * Carriers cap how many people one group text (MMS) can go to (often 10 or 20;
  * iMessage allows 32). Split a long list into group texts of at most `size`,

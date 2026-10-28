@@ -1,5 +1,5 @@
 import type { Api } from './api';
-import type { Contact, Course, JoinRequest, League, LeagueBilling, LeagueEvent, LedgerRow, PaymentHandles, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SetupRequest, SubRequest, TvDisplay, User } from './types';
+import type { Contact, Course, JoinRequest, League, LeagueBilling, LeagueEvent, LedgerRow, PaymentHandles, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SetupRequest, SubRequest, TeeSheet, TvDisplay, User } from './types';
 import { isCommissioner } from './types';
 import type { WeeklyRecap } from '@golfscorehq/engine';
 import { buildRecapEmail } from '../../../../supabase/functions/send-recap/email';
@@ -51,12 +51,14 @@ interface Db {
   recapPrefs: Record<string, boolean>;
   paymentHandles: Record<string, PaymentHandles>;
   setupRequests: (SetupRequest & { requestedBy: string; staffUserId: string | null })[];
+  /** eventId → the week's tee sheet. */
+  teeSheets: Record<string, TeeSheet>;
 }
 
 const empty = (): Db => ({
   session: null, users: {}, leagues: [], members: [], players: [], contacts: {}, invites: [], joinRequests: [], courses: [],
   seasons: [], events: [], rounds: [], ledger: [], ctpDecisions: {}, tvDisplays: [], rsvps: {}, subRequests: [],
-  recapSends: {}, recapPrefs: {}, paymentHandles: {}, clubs: [], setupRequests: [],
+  recapSends: {}, recapPrefs: {}, paymentHandles: {}, clubs: [], setupRequests: [], teeSheets: {},
 });
 
 /** Demo uploads live only for this page view (too big for the browser's saved demo data). */
@@ -112,6 +114,29 @@ export function demoApi(): DemoApi {
   }
   const has = (db: Db, leagueId: string, feature: string) =>
     FEATURES[db.leagues.find((l) => l.id === leagueId)?.plan ?? 'free'].includes(feature);
+  /** The tee sheet for a week, after the same checks as lineup_guard(). */
+  function lineupDb(eventId: string) {
+    const db = load();
+    const ev = db.events.find((e) => e.id === eventId)!;
+    requireMember(db, ev.leagueId);
+    if (!has(db, ev.leagueId, 'lineup')) throw new Error('plan_feature: The tee sheet needs GolfScoreHQ Pro');
+    if (ev.status === 'settled' || ev.status === 'rainout') throw new Error('This week is over.');
+    const sheet = (db.teeSheets[eventId] ??= { times: [], lineup: [] });
+    return { db, ev, sheet };
+  }
+  /** Golfer themselves, the slot's captain, or a commissioner. */
+  function demoCanPlace(db: Db, leagueId: string, sheet: TeeSheet, playerId: string, slot: number | null) {
+    const u = me(db);
+    if (isCommissioner(roleIn(db, leagueId)) || db.players.find((p) => p.id === playerId)?.userId === u.id) return true;
+    const cap = sheet.times.find((t) => t.slot === slot)?.captainId;
+    return !!cap && db.players.find((p) => p.id === cap)?.userId === u.id;
+  }
+  /** Out of any group and captaincy; a paired-up partner needs a partner again. */
+  function demoClear(sheet: TeeSheet, playerId: string) {
+    for (const t of sheet.times) if (t.captainId === playerId) t.captainId = null;
+    for (const l of sheet.lineup) if (l.partnerId === playerId) { l.looking = 'partner'; l.partnerId = null; }
+    sheet.lineup = sheet.lineup.filter((l) => l.playerId !== playerId);
+  }
   /** Same as rules_are_basic_format() in the database: other formats need Pro. */
   const checkFormat = (db: Db, leagueId: string, r: Season['rules']) => {
     if (!BASIC_FORMATS.includes(r.format as FormatKey) && !has(db, leagueId, 'all_formats')) throw new Error('plan_feature: This format needs GolfScoreHQ Pro');
@@ -788,6 +813,67 @@ export function demoApi(): DemoApi {
       r.closed = true;
       save(db);
     },
+    // ── Tee sheet: same rules as the database functions ──
+    async teeSheet(eventId) {
+      const db = load();
+      const ev = db.events.find((e) => e.id === eventId)!;
+      requireMember(db, ev.leagueId);
+      return JSON.parse(JSON.stringify(db.teeSheets[eventId] ?? { times: [], lineup: [] }));
+    },
+    async setTeeTimes(eventId, times) {
+      const { db, ev, sheet } = lineupDb(eventId);
+      requireCommissioner(db, ev.leagueId);
+      sheet.times = times.map((t) => ({ ...t }));
+      for (const l of sheet.lineup) if (l.slot !== null && !times.some((t) => t.slot === l.slot)) l.slot = null;
+      for (const t of times) {
+        if (!t.captainId) continue;
+        sheet.lineup = sheet.lineup.filter((l) => l.playerId !== t.captainId);
+        sheet.lineup.push({ playerId: t.captainId, slot: t.slot, looking: null, partnerId: null });
+        (db.rsvps[eventId] ??= {})[t.captainId] = 'in';
+      }
+      save(db);
+    },
+    async lineupJoin(eventId, playerId, slot) {
+      const { db, ev, sheet } = lineupDb(eventId);
+      const t = sheet.times.find((x) => x.slot === slot);
+      if (!t) throw new Error('No such tee time.');
+      if (!demoCanPlace(db, ev.leagueId, sheet, playerId, slot)) throw new Error('You can add yourself, or golfers to a group you captain.');
+      const n = sheet.lineup.filter((l) => l.slot === slot && l.playerId !== playerId).length;
+      if (n >= 5 || (n >= 4 && !isCommissioner(roleIn(db, ev.leagueId)))) throw new Error('That group is full.');
+      if (!sheet.lineup.some((l) => l.playerId === playerId && l.slot === slot)) {
+        demoClear(sheet, playerId);
+        sheet.lineup.push({ playerId, slot, looking: null, partnerId: null });
+      }
+      if (!t.captainId) t.captainId = playerId;
+      (db.rsvps[eventId] ??= {})[playerId] = 'in';
+      save(db);
+    },
+    async lineupLeave(eventId, playerId) {
+      const { db, ev, sheet } = lineupDb(eventId);
+      const slot = sheet.lineup.find((l) => l.playerId === playerId)?.slot ?? null;
+      if (!demoCanPlace(db, ev.leagueId, sheet, playerId, slot)) throw new Error('You can only take yourself out, or golfers from a group you captain.');
+      demoClear(sheet, playerId);
+      save(db);
+    },
+    async lineupStatus(eventId, playerId, status, partnerId) {
+      const { db, ev, sheet } = lineupDb(eventId);
+      const u = me(db);
+      const actsFor = (pid: string) => isCommissioner(roleIn(db, ev.leagueId)) || db.players.find((p) => p.id === pid)?.userId === u.id;
+      if (!actsFor(playerId)) throw new Error('You can only change your own status.');
+      if (status === 'match' && (!partnerId || partnerId === playerId)) throw new Error('Pick your partner.');
+      demoClear(sheet, playerId);
+      const rsvps = (db.rsvps[eventId] ??= {});
+      if (status === 'out') rsvps[playerId] = 'out';
+      if (status === 'partner') { sheet.lineup.push({ playerId, slot: null, looking: 'partner', partnerId: null }); rsvps[playerId] = 'in'; }
+      if (status === 'match' && partnerId) {
+        demoClear(sheet, partnerId);
+        sheet.lineup.push({ playerId, slot: null, looking: 'match', partnerId }, { playerId: partnerId, slot: null, looking: 'match', partnerId: playerId });
+        rsvps[playerId] = 'in';
+        rsvps[partnerId] = 'in';
+      }
+      save(db);
+    },
+
     async tvDisplays(leagueId) {
       const db = load();
       requireCommissioner(db, leagueId);

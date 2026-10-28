@@ -469,6 +469,28 @@ export function supabaseApi(url: string, anonKey: string): Api {
     async closeSubRequest(requestId) {
       check(await sb.from('sub_requests').update({ closed_at: new Date().toISOString() }).eq('id', requestId));
     },
+    async teeSheet(eventId) {
+      const [times, lineup] = await Promise.all([
+        sb.from('event_tee_times').select('slot, tee_time, captain_id').eq('event_id', eventId).order('slot'),
+        sb.from('event_lineup').select('player_id, slot, looking, partner_id').eq('event_id', eventId),
+      ]);
+      return {
+        times: (check(times) as Row[]).map((r) => ({ slot: r.slot, time: r.tee_time ? String(r.tee_time).slice(0, 5) : null, captainId: r.captain_id })),
+        lineup: (check(lineup) as Row[]).map((r) => ({ playerId: r.player_id, slot: r.slot, looking: r.looking, partnerId: r.partner_id })),
+      };
+    },
+    async setTeeTimes(eventId, times) {
+      check(await sb.rpc('set_tee_times', { p_event: eventId, p_times: times.map((t) => ({ slot: t.slot, time: t.time, captainId: t.captainId })) }));
+    },
+    async lineupJoin(eventId, playerId, slot) {
+      check(await sb.rpc('lineup_join', { p_event: eventId, p_player: playerId, p_slot: slot }));
+    },
+    async lineupLeave(eventId, playerId) {
+      check(await sb.rpc('lineup_leave', { p_event: eventId, p_player: playerId }));
+    },
+    async lineupStatus(eventId, playerId, status, partnerId) {
+      check(await sb.rpc('lineup_status', { p_event: eventId, p_player: playerId, p_status: status, p_partner: partnerId ?? null }));
+    },
     async tvDisplays(leagueId) {
       const rows = check(await sb.from('tv_displays').select('id, name, settings, created_at').eq('league_id', leagueId).is('revoked_at', null).order('created_at')) as Row[];
       return rows.map((r) => ({ id: r.id, name: r.name, settings: r.settings, createdAt: r.created_at }));
@@ -548,7 +570,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
     },
     watchLeague(leagueId, onChange) {
       const channel = sb.channel(`league-${leagueId}-${Math.random().toString(36).slice(2)}`);
-      for (const table of ['hole_scores', 'rounds', 'ctp_reports', 'presses', 'events']) {
+      for (const table of ['hole_scores', 'rounds', 'ctp_reports', 'presses', 'events', 'event_tee_times', 'event_lineup', 'event_rsvps']) {
         channel.on('postgres_changes', { event: '*', schema: 'public', table, filter: `league_id=eq.${leagueId}` }, () => onChange());
       }
       channel.subscribe();

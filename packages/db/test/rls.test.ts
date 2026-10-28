@@ -445,6 +445,52 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
     expect(await as(db, joe, () => rows(db, 'select * from player_contacts'))).toEqual([]); // emails stay private
   });
 
+  it('runs the tee sheet: captains, joining, full groups, partners and matches', async () => {
+    const { eventId } = await weekWithRound(tony, oak);
+    const joeSpot = await linkedPlayer(joe, 'Joe');
+    const [bob, cy, dee, ed] = await Promise.all(['Bob', 'Cy', 'Dee', 'Ed'].map((n) => addPlayer(tony, oak, n)));
+    const call = (user: string, sql: string, params: unknown[]) => as(db, user, () => db.query(sql, params));
+    const times = JSON.stringify([{ slot: 1, time: '17:10', captainId: joeSpot }, { slot: 2, time: '17:17', captainId: null }]);
+    const lineup = () => rows<{ player_id: string; slot: number | null; looking: string | null; partner_id: string | null }>(db,
+      'select player_id, slot, looking, partner_id from event_lineup where event_id = $1 order by slot nulls last, player_id', [eventId]);
+
+    await expect(call(tony, 'select set_tee_times($1, $2::jsonb)', [eventId, times])).rejects.toThrow(/plan_feature/); // Free
+    await setPlan(oak, 'pro');
+    await expect(call(joe, 'select set_tee_times($1, $2::jsonb)', [eventId, times])).rejects.toThrow(/commissioners only/);
+    await call(tony, 'select set_tee_times($1, $2::jsonb)', [eventId, times]);
+    expect(await lineup()).toEqual([{ player_id: joeSpot, slot: 1, looking: null, partner_id: null }]); // captain plays in their group
+    expect(await rows(db, 'select status from event_rsvps where player_id = $1', [joeSpot])).toEqual([{ status: 'in' }]);
+
+    // A captain fills their own group, but can't place golfers elsewhere or change their status.
+    await call(joe, 'select lineup_join($1, $2, 1::smallint)', [eventId, bob]);
+    await expect(call(joe, 'select lineup_join($1, $2, 2::smallint)', [eventId, cy])).rejects.toThrow(/group you captain/);
+    await expect(call(joe, `select lineup_status($1, $2, 'out')`, [eventId, bob])).rejects.toThrow(/your own status/);
+
+    // Full at four (a commissioner can add a fifth).
+    await call(tony, 'select lineup_join($1, $2, 1::smallint)', [eventId, cy]);
+    await call(tony, 'select lineup_join($1, $2, 1::smallint)', [eventId, dee]);
+    await expect(call(joe, 'select lineup_join($1, $2, 1::smallint)', [eventId, ed])).rejects.toThrow(/full/);
+    await call(tony, 'select lineup_join($1, $2, 1::smallint)', [eventId, ed]);
+    await expect(call(tony, 'select lineup_join($1, $2, 1::smallint)', [eventId, bob])).resolves.toBeTruthy(); // already there: no change
+
+    // Cy and Dee leave to look for a match together; then Cy drops out and Dee needs a partner again.
+    await call(tony, `select lineup_status($1, $2, 'match', $3)`, [eventId, cy, dee]);
+    expect((await lineup()).filter((r) => r.looking)).toEqual(
+      [{ player_id: cy, slot: null, looking: 'match', partner_id: dee }, { player_id: dee, slot: null, looking: 'match', partner_id: cy }].sort((a, b) => a.player_id.localeCompare(b.player_id)),
+    );
+    await call(tony, `select lineup_status($1, $2, 'out')`, [eventId, cy]);
+    expect((await lineup()).find((r) => r.player_id === dee)).toMatchObject({ looking: 'partner', partner_id: null });
+    expect(await rows(db, 'select status from event_rsvps where player_id = $1', [cy])).toEqual([{ status: 'out' }]);
+
+    // The captain going to another tee time leaves tee time 1 without a captain; the first to join tee time 2 runs it.
+    await call(joe, 'select lineup_join($1, $2, 2::smallint)', [eventId, joeSpot]);
+    expect(await rows(db, 'select slot, captain_id from event_tee_times where event_id = $1 order by slot', [eventId])).toEqual([{ slot: 1, captain_id: null }, { slot: 2, captain_id: joeSpot }]);
+
+    // Other leagues can't see it; nobody writes to it directly.
+    expect(await as(db, sam, () => rows(db, 'select * from event_lineup'))).toEqual([]);
+    await expect(call(joe, 'insert into event_lineup (event_id, player_id, league_id, slot) values ($1, $2, $3, 1)', [eventId, ed, oak])).rejects.toThrow(/permission denied/);
+  });
+
   it('lists the new features on every paid plan', async () => {
     const feats = await rows<{ code: string; f: string[] }>(db, `select code, features as f from plans order by code`);
     for (const p of feats) {
