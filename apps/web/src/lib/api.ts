@@ -1,7 +1,7 @@
 import type { CourseSummary, LookupCourse } from '../../../../supabase/functions/course-lookup/normalize';
 import type { HealthSnapshot } from '../../../../supabase/functions/health-report/report';
 import type {
-  AppErrorReport,
+  AppErrorReport, UpgradeInterest,
   Club, LeagueBilling,
   Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, LedgerRow, Member, NewCourse, NewPlayer, Player, Role,
   PaymentHandles, RecapPreview, RoundData, RoundPlayer, RsvpStatus, ScoreEntry, Season, SubOffer, SubRequest, TvDisplay, TvFeed, TvSettings, User,
@@ -210,6 +210,12 @@ export interface Api {
   /** holeNumber → playerId the commissioner picked for a disputed CTP. */
   ctpDecisions(eventId: string): Promise<Record<number, string>>;
   setCtpDecision(leagueId: string, eventId: string, holeNumber: number, playerId: string | null): Promise<void>;
+
+  /** "I'd chip in": a golfer offers their share of Pro for the season (free leagues); notifies the commissioners. Returns how many have offered. */
+  chipIn(leagueId: string, amountCents: number): Promise<number>;
+  takeBackChipIn(leagueId: string): Promise<void>;
+  /** How many offered and how much; your own offer; names for commissioners. */
+  upgradeInterest(leagueId: string): Promise<UpgradeInterest>;
 
   /** Diagnostics: the app reports a crash, a failed action, or a golfer's "Report a problem" note. Never throws. */
   logAppError(report: AppErrorReport): Promise<void>;

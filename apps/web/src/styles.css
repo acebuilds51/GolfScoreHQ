@@ -575,6 +575,11 @@ label.dispute { color: var(--warn); }
   .bottom-bar a.on { color: var(--league); background: color-mix(in srgb, var(--league) 11%, transparent); }
   main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 }
+/* Upgrade card (free leagues): a Pro-purple edge so it stands apart from the rest of Home. */
+.upgrade-card { border: 2px solid color-mix(in srgb, var(--pro-text) 35%, transparent); background: linear-gradient(160deg, var(--pro-bg), var(--surface) 55%); }
+.upgrade-card h2::before { background: var(--pro-text) !important; }
+.upgrade-share { font-size: 1.35rem; color: var(--pro-text); }
+
 /* Staff health */
 .meter { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
 .meter span { display: block; height: 100%; background: var(--accent); border-radius: 4px; }

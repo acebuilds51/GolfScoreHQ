@@ -1,9 +1,20 @@
 // What we sell, in words for the upgrade screens. Prices must match the
 // Stripe prices (and the plans table).
 export const PRICE = { pro: '$149', club: '$299' } as const;
+/** Pro for one league, one year (the "I'd chip in" limit in the database matches). */
+export const PRO_CENTS = 14900;
+
+/**
+ * Each golfer's share of Pro for the season, in whole dollars (rounded up so
+ * the shares cover the price), split across the regular golfers. Null with nobody to split it.
+ */
+export function shareDollars(golfers: number): number | null {
+  return golfers > 0 ? Math.ceil(PRO_CENTS / golfers / 100) : null;
+}
 
 export const PRO_PERKS = [
   'Skins, closest to the pin, presses and match money, settled for you',
+  'Tee sheet: tee times, captains, groups and partners',
   'Weekly recap email with an AI write-up and pay links',
   'RSVP and sub finder',
   'Clubhouse TV leaderboard',

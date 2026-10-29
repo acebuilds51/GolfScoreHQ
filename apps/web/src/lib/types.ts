@@ -385,6 +385,16 @@ export interface ScoreEntry {
   strokes: number;
 }
 
+/** Golfers who said they'd chip in for Pro. */
+export interface UpgradeInterest {
+  count: number;
+  totalCents: number;
+  /** What you offered, if you did. */
+  mine: number | null;
+  /** Who offered (commissioners only; empty for golfers). */
+  names: string[];
+}
+
 /** A problem the app reports about itself, or a golfer's "Report a problem" note. */
 export interface AppErrorReport {
   kind: 'error' | 'failed_action' | 'report';

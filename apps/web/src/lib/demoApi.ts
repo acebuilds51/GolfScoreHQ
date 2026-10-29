@@ -62,12 +62,14 @@ interface Db {
   reminderSends: Record<string, { sent_at: string; recipients: number }>;
   /** Pilot sign-up codes (staff). */
   pilotCodes: (Omit<PilotCode, 'leagues'> & { leagueIds: string[] })[];
+  /** leagueId → golfers who said they'd chip in for Pro (older saved demos don't have it). */
+  upgradeInterest: Record<string, { userId: string; playerId: string | null; amountCents: number }[]>;
 }
 
 const empty = (): Db => ({
   session: null, users: {}, leagues: [], members: [], players: [], contacts: {}, invites: [], joinRequests: [], courses: [],
   seasons: [], events: [], rounds: [], ledger: [], ctpDecisions: {}, tvDisplays: [], rsvps: {}, subRequests: [],
-  recapSends: {}, recapPrefs: {}, paymentHandles: {}, clubs: [], setupRequests: [], teeSheets: {}, seasonTeeTimes: {}, reminderSends: {}, pilotCodes: [],
+  recapSends: {}, recapPrefs: {}, paymentHandles: {}, clubs: [], setupRequests: [], teeSheets: {}, seasonTeeTimes: {}, reminderSends: {}, pilotCodes: [], upgradeInterest: {},
 });
 
 /** Demo uploads live only for this page view (too big for the browser's saved demo data). */
@@ -1290,6 +1292,39 @@ export function demoApi(): DemoApi {
       if (playerId) d[holeNumber] = playerId;
       else delete d[holeNumber];
       save(db);
+    },
+
+    // "I'd chip in": same rules as say_would_chip_in() (demo sends no notifications).
+    async chipIn(leagueId, amountCents) {
+      const db = load();
+      const u = me(db);
+      requireMember(db, leagueId);
+      if (db.leagues.find((l) => l.id === leagueId)?.plan !== 'free') throw new Error('This league already has Pro.');
+      if (!(amountCents >= 100 && amountCents <= 14900)) throw new Error("That amount doesn't look right.");
+      const list = (db.upgradeInterest[leagueId] ??= []);
+      const playerId = db.players.find((p) => p.leagueId === leagueId && p.userId === u.id && p.active)?.id ?? null;
+      const mine = list.find((x) => x.userId === u.id);
+      if (mine) mine.amountCents = amountCents;
+      else list.push({ userId: u.id, playerId, amountCents });
+      save(db);
+      return list.length;
+    },
+    async takeBackChipIn(leagueId) {
+      const db = load();
+      const u = me(db);
+      db.upgradeInterest[leagueId] = (db.upgradeInterest[leagueId] ?? []).filter((x) => x.userId !== u.id);
+      save(db);
+    },
+    async upgradeInterest(leagueId) {
+      const db = load();
+      const u = me(db);
+      requireMember(db, leagueId);
+      const list = db.upgradeInterest[leagueId] ?? [];
+      return {
+        count: list.length, totalCents: list.reduce((s, x) => s + x.amountCents, 0),
+        mine: list.find((x) => x.userId === u.id)?.amountCents ?? null,
+        names: isCommissioner(roleIn(db, leagueId)) ? list.map((x) => db.players.find((p) => p.id === x.playerId)?.displayName ?? db.users[x.userId]?.email ?? 'A golfer') : [],
+      };
     },
 
     async logAppError(r) {
