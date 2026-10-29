@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
-import { PRICE, PRO_CENTS, PRO_PERKS, shareDollars } from '../lib/plans';
+import { COMMISH_TEASERS, GOLFER_TEASERS, nextTeaser, PRICE, PRO_CENTS, PRO_PERKS, shareDollars, type ProTeaser } from '../lib/plans';
 import { fmtMoney } from '../lib/scoring';
 import { isCommissioner } from '../lib/types';
 import { ErrorText } from './ui';
@@ -24,9 +24,32 @@ export function namesLine(names: string[]): string {
 }
 
 /**
- * Free leagues, on Home: what Pro adds and what it costs each golfer for the
- * season. Golfers can say they'd chip in their share (the commissioner gets a
- * notification); commissioners see who has. "Not now" hides it for two weeks.
+ * "Wouldn't it be great if…? You get that with Pro!" A different one each time
+ * the card appears (and on "Another idea"), with the full list of what Pro includes folded away.
+ */
+function Teaser({ list, who }: { list: ProTeaser[]; who: string }) {
+  const [i, setI] = useState(() => nextTeaser(list, `gshq-upgrade-teaser:${who}`));
+  const t = list[i]!;
+  return (
+    <div className="teaser stack">
+      <div className="row teaser-wish"><span className="teaser-icon" aria-hidden="true">{t.icon}</span><strong>{t.wish}</strong></div>
+      <p>{t.answer} <strong className="teaser-pro">You get that with Pro!</strong></p>
+      <div className="row wrap small">
+        <button type="button" className="linkish" onClick={() => setI(nextTeaser(list, `gshq-upgrade-teaser:${who}`))}>Another idea ›</button>
+        <details className="teaser-all">
+          <summary>Everything in Pro</summary>
+          <ul className="ticks small">{PRO_PERKS.map((p) => <li key={p}>{p}</li>)}</ul>
+        </details>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Free leagues, on Home: a taste of what Pro adds, then what it costs each
+ * golfer for the season. Golfers can say they'd chip in their share (the
+ * commissioner gets a notification); commissioners see who has. "Not now"
+ * hides it for two weeks.
  * `golfers`: the league's regular golfers, to split the price across.
  */
 export function UpgradeCard({ golfers }: { golfers: number }) {
@@ -40,17 +63,16 @@ export function UpgradeCard({ golfers }: { golfers: number }) {
 
   const share = shareDollars(golfers);
   const i = interest.data;
-  const perks = PRO_PERKS.slice(0, 4);
   const notNow = <button className="btn btn-ghost btn-sm" onClick={() => { snooze(key); setHidden(true); }}>Not now</button>;
   const costLine = share
-    ? <>Pro is <strong>{PRICE.pro} a year for the whole league</strong>. Split across your {golfers} golfers, that's about <strong className="num upgrade-share">${share}</strong> each for the season.</>
-    : <>Pro is <strong>{PRICE.pro} a year for the whole league</strong>.</>;
+    ? <>All of Pro is <strong>{PRICE.pro} a year for the whole league</strong>. Split across your {golfers} golfers, that's about <strong className="num upgrade-share">${share}</strong> each for the season.</>
+    : <>All of Pro is <strong>{PRICE.pro} a year for the whole league</strong>.</>;
 
   if (commish) {
     return (
       <section className="card stack upgrade-card">
         <div className="row between wrap"><h2>Unlock Pro for {league.name}</h2><span className="badge badge-pro">Pro</span></div>
-        <ul className="ticks small">{perks.map((p) => <li key={p}>{p}</li>)}<li>…and more</li></ul>
+        <Teaser list={COMMISH_TEASERS} who="commish" />
         <p>{costLine}</p>
         {i && i.count > 0 && (
           <p className="notice">
@@ -70,8 +92,7 @@ export function UpgradeCard({ golfers }: { golfers: number }) {
   return (
     <section className="card stack upgrade-card">
       <div className="row between wrap"><h2>Get more out of league night</h2><span className="badge badge-pro">Pro</span></div>
-      <p className="small muted">Your league is on the free plan. With GolfScoreHQ Pro:</p>
-      <ul className="ticks small">{perks.map((p) => <li key={p}>{p}</li>)}<li>…and more</li></ul>
+      <Teaser list={GOLFER_TEASERS} who="golfer" />
       <p>{costLine}</p>
       {i?.mine ? (
         <>
