@@ -684,6 +684,17 @@ export function supabaseApi(url: string, anonKey: string): Api {
       check(await sb.from('ctp_decisions').upsert({ event_id: eventId, league_id: leagueId, hole_number: holeNumber, player_id: playerId, decided_by: await uid(), decided_at: new Date().toISOString() }));
     },
 
+    async chipIn(leagueId, amountCents) {
+      return check(await sb.rpc('say_would_chip_in', { p_league: leagueId, p_amount_cents: amountCents })) as number;
+    },
+    async takeBackChipIn(leagueId) {
+      check(await sb.rpc('take_back_chip_in', { p_league: leagueId }));
+    },
+    async upgradeInterest(leagueId) {
+      const r = check(await sb.rpc('upgrade_interest_summary', { p_league: leagueId })) as Row;
+      return { count: r.count ?? 0, totalCents: r.total_cents ?? 0, mine: r.mine ?? null, names: r.names ?? [] };
+    },
+
     async logAppError(r) {
       // Reporting a problem must never cause one.
       await sb.rpc('log_app_error', {

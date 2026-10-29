@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ErrorText } from '../components/ui';
+import { namesLine } from '../components/UpgradeCard';
+import { fmtMoney } from '../lib/scoring';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
 import { billingReturn, clearBillingReturn, fmtDay, PRICE, PRO_PERKS } from '../lib/plans';
@@ -47,6 +49,9 @@ export function PlanSection() {
     return () => clearInterval(t);
   }, [waiting]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (league.effectivePlan !== 'free') setWaiting(false); }, [league.effectivePlan]);
+  // Arriving from an upgrade card ("See Pro"): bring the plan into view.
+  useEffect(() => { if (window.location.hash === '#plan') document.getElementById('plan')?.scrollIntoView({ block: 'start' }); }, []);
+  const interest = useAsync(async () => (league.effectivePlan === 'free' ? api.upgradeInterest(league.id) : null), [league.id, league.effectivePlan]);
 
   const go = async (getUrl: () => Promise<string>) => {
     const url = await run(getUrl);
@@ -103,6 +108,11 @@ export function PlanSection() {
               <span><span className="num upgrade-price">{PRICE.pro}</span> <span className="small muted">per league, per year</span></span>
             </div>
             <ul className="ticks small">{PRO_PERKS.map((p) => <li key={p}>{p}</li>)}</ul>
+            {interest.data && interest.data.count > 0 && (
+              <p className="notice small">
+                <strong>{namesLine(interest.data.names)}</strong> {interest.data.count === 1 ? 'says they' : 'say they'}'d chip in for the season: {fmtMoney(interest.data.totalCents)} of {PRICE.pro} so far.
+              </p>
+            )}
             <div><button className="btn btn-primary" disabled={busy} onClick={() => go(() => api.startCheckout({ leagueId: league.id }))}>{busy ? 'Opening checkout…' : `Upgrade to Pro, ${PRICE.pro}/year`}</button></div>
             <p className="small muted">
               Secure checkout by Stripe. Renews yearly; cancel anytime. Full refund within 14 days. Have a discount code? Enter it at checkout.

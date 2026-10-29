@@ -767,6 +767,37 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
   });
 });
 
+describe("upgrade prompts: I'd chip in", () => {
+  const call = (user: string | null, sql: string, params: unknown[] = []) => as(db, user, () => rows<any>(db, sql, params));
+  const summary = async (user: string) => (await call(user, 'select upgrade_interest_summary($1) as s', [oak]))[0].s;
+
+  it('golfers offer their share; commissioners see who and get notified once per golfer', async () => {
+    const joePlayer = await addPlayer(tony, oak, 'Joe Smith');
+    await db.query('update players set user_id = $2 where id = $1', [joePlayer, joe]);
+
+    expect(await call(joe, `select say_would_chip_in($1, 700) as n`, [oak])).toEqual([{ n: 1 }]);
+    expect(await call(joe, `select say_would_chip_in($1, 800) as n`, [oak])).toEqual([{ n: 1 }]); // changed amount, still one offer
+    const pushes = await rows<any>(db, `select user_ids, title, body, url from push_outbox where tag = $1`, [`pro-interest-${oak}`]);
+    expect(pushes).toEqual([{ user_ids: [tony], title: 'Joe would chip in $7 for Pro', body: '1 golfer so far, $7 of the $149 a year. Tap to see Pro.', url: '/l/oak-creek/settings' }]);
+
+    expect(await summary(tony)).toEqual({ count: 1, total_cents: 800, mine: null, names: ['Joe Smith'] });
+    expect(await summary(joe)).toEqual({ count: 1, total_cents: 800, mine: 800, names: [] }); // golfers don't see who
+
+    await call(joe, 'select take_back_chip_in($1)', [oak]);
+    expect((await summary(tony)).count).toBe(0);
+  });
+
+  it('only members of a free league, for a sensible amount; nobody reads the table directly', async () => {
+    await expect(call(sam, `select say_would_chip_in($1, 700)`, [oak])).rejects.toThrow(/members only/);
+    await expect(call(sam, 'select upgrade_interest_summary($1)', [oak])).rejects.toThrow(/members only/);
+    await expect(call(joe, `select say_would_chip_in($1, 50)`, [oak])).rejects.toThrow(/amount/);
+    await expect(call(joe, `select say_would_chip_in($1, 20000)`, [oak])).rejects.toThrow(/amount/);
+    await setPlan(oak, 'pro');
+    await expect(call(joe, `select say_would_chip_in($1, 700)`, [oak])).rejects.toThrow(/already has Pro/);
+    await expect(call(joe, 'select * from upgrade_interest')).rejects.toThrow(/permission denied/);
+  });
+});
+
 describe('diagnostics', () => {
   const call = (user: string | null, sql: string, params: unknown[] = []) => as(db, user, () => rows<any>(db, sql, params));
   const log = (user: string | null, kind: string, message: string, slug: string | null = null) =>

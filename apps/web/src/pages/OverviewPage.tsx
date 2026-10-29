@@ -6,6 +6,7 @@ import { fmtDate } from '../lib/scoring';
 import { isCommissioner, type LeagueEvent, type Player, type RsvpStatus } from '../lib/types';
 import { RsvpButtons } from './WhosPlaying';
 import { PhoneNotifications } from '../components/PhoneNotifications';
+import { UpgradeCard } from '../components/UpgradeCard';
 
 export function OverviewPage() {
   const { league } = useLeague();
@@ -40,6 +41,8 @@ export function OverviewPage() {
         <div className="stat"><span>Joined the app</span><strong>{joined}</strong></div>
         <div className="stat"><span>Courses</span><strong>{courses.length}</strong></div>
       </div>
+
+      <UpgradeCard golfers={regulars} />
 
       {commish && steps.some((s) => !s.done) && (
         <section className="card">
