@@ -6,7 +6,7 @@ import { PageSkeleton } from './components/ui';
 import { SiteFooter } from './components/SiteFooter';
 import { AuthContext, useAuth, useAuthState } from './lib/hooks';
 import {
-  AwardsPage, CoursesPage, ImportPage, JoinInvitePage, PilotPage, PlayerPage, prefetchPages, PricingPage, PrivacyPage, RefundsPage,
+  AwardsPage, CoursesPage, HelpPage, ImportPage, JoinInvitePage, PilotPage, PlayerPage, prefetchPages, PricingPage, PrivacyPage, RefundsPage,
   RosterPage, RsvpLinkPage, SettingsPage, SetupServicePage, StaffPage, TermsPage, TvPage,
 } from './lib/lazyPages';
 // League night's pages are in the first download.
@@ -68,6 +68,7 @@ export function App() {
             <Route path="settings" element={<SettingsPage />} />
             <Route path="more" element={<MorePage />} />
           </Route>
+          <Route path="/help" element={<HelpPage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />

@@ -429,6 +429,20 @@ export interface AppErrorReport {
   leagueSlug?: string | null;
 }
 
+/** A question asked on the Help page and the answer it got (staff view). */
+export interface HelpQuestion {
+  id: string;
+  question: string;
+  /** Null: the helper couldn't answer. */
+  answer: string | null;
+  /** 1 = first question; more = a follow-up in the same conversation. */
+  turn: number;
+  helpful: boolean | null;
+  createdAt: string;
+  email: string | null;
+  leagueName: string | null;
+}
+
 export const COMMISSIONER_ROLES: Role[] = ['owner', 'commissioner'];
 export const isCommissioner = (role: Role | undefined) => !!role && COMMISSIONER_ROLES.includes(role);
 

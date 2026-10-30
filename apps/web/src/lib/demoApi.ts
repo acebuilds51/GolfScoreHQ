@@ -1,5 +1,6 @@
 import type { Api, ErrorGroup, HealthSnapshot } from './api';
-import type { AppErrorReport, MatchMoney as LeagueMatchMoney, PaidMark, PayHandles } from './types';
+import type { AppErrorReport, HelpQuestion, MatchMoney as LeagueMatchMoney, PaidMark, PayHandles } from './types';
+import { searchHelp } from '../../../../supabase/functions/ask-help/manual';
 import type { Contact, Course, JoinRequest, League, LeagueBilling, LeagueEvent, LedgerRow, PaymentHandles, PilotCode, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SetupRequest, SubRequest, TeeSheet, TeeTime, TvDisplay, User } from './types';
 import { isCommissioner } from './types';
 import type { WeeklyRecap } from '@golfscorehq/engine';
@@ -82,6 +83,7 @@ const demoFiles = new Map<string, string>();
 
 /** Demo diagnostics: problems reported during this page view, and the free plans' limits. */
 const demoErrors: (AppErrorReport & { at: string; resolved: boolean })[] = [];
+const demoQuestions: HelpQuestion[] = [];
 const demoLimits: HealthSnapshot['limits'] = {
   online: { label: 'People with the app open at once (Supabase live connections)', value: 200 },
   emails_day: { label: 'Emails a day (Resend)', value: 100 },
@@ -1404,6 +1406,32 @@ export function demoApi(): DemoApi {
         mine: list.find((x) => x.userId === u.id)?.amountCents ?? null,
         names: isCommissioner(roleIn(db, leagueId)) ? list.map((x) => db.players.find((p) => p.id === x.playerId)?.displayName ?? db.users[x.userId]?.email ?? 'A golfer') : [],
       };
+    },
+
+    // Demo: no AI. The answer is the closest question on the Help page.
+    async askHelp(messages, leagueSlug) {
+      const db = load();
+      const u = me(db);
+      const question = [...messages].reverse().find((m) => m.role === 'user')?.content.trim() ?? '';
+      if (!question) throw new Error('Type your question first.');
+      const hit = searchHelp(question, 1)[0];
+      const answer = hit
+        ? `${hit.a}\n\n(Demo: this is the closest question on the Help page, "${hit.q}". The real app answers in its own words.)`
+        : "I'm not sure about that one. Tap Send it to us and a person will answer. (Demo: the real app answers in its own words.)";
+      const id = `hq-${demoQuestions.length + 1}`;
+      demoQuestions.unshift({
+        id, question: question.slice(0, 600), answer: hit ? answer : null, turn: messages.length, helpful: null, createdAt: new Date().toISOString(),
+        email: u.email, leagueName: db.leagues.find((l) => l.slug === leagueSlug)?.name ?? null,
+      });
+      return { answer, id };
+    },
+    async rateHelpAnswer(id, helpful) {
+      const q = demoQuestions.find((x) => x.id === id);
+      if (q) q.helpful = helpful;
+    },
+    async staffHelpQuestions() {
+      me(load());
+      return demoQuestions.map((q) => ({ ...q }));
     },
 
     async logAppError(r) {

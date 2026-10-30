@@ -723,6 +723,20 @@ export function supabaseApi(url: string, anonKey: string): Api {
       return { count: r.count ?? 0, totalCents: r.total_cents ?? 0, mine: r.mine ?? null, names: r.names ?? [] };
     },
 
+    async askHelp(messages, leagueSlug) {
+      return (await invokeFn(sb, 'ask-help', { messages, leagueSlug }, "The helper isn't answering right now. Look through the questions above, or tap Send it to us.")) as { answer: string; id: string | null };
+    },
+    async rateHelpAnswer(id, helpful) {
+      check(await sb.rpc('rate_help_answer', { p_id: id, p_helpful: helpful }));
+    },
+    async staffHelpQuestions(days) {
+      const rows = (check(await sb.rpc('staff_help_questions', { p_days: days })) ?? []) as Row[];
+      return rows.map((r) => ({
+        id: r.id, question: r.question, answer: r.answer ?? null, turn: r.turn ?? 1, helpful: r.helpful ?? null,
+        createdAt: r.created_at, email: r.email ?? null, leagueName: r.league_name ?? null,
+      }));
+    },
+
     async logAppError(r) {
       // Reporting a problem must never cause one.
       await sb.rpc('log_app_error', {

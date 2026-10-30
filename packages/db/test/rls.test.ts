@@ -1173,3 +1173,29 @@ describe('joining', () => {
     expect(await as(db, tony, () => rows(db, 'select status from join_requests'))).toEqual([{ status: 'pending' }]);
   });
 });
+
+describe('help questions', () => {
+  const call = (user: string | null, sql: string, params: unknown[] = []) => as(db, user, () => rows<any>(db, sql, params));
+  // The ask-help server function saves questions with the service key (no access rules), like this.
+  const ask = async (user: string, question: string, answer: string | null) =>
+    (await rows<{ id: string }>(db, 'insert into help_questions (user_id, league_id, question, answer) values ($1, $2, $3, $4) returning id', [user, oak, question, answer]))[0]!.id;
+
+  it('only the asker rates an answer; nobody reads the table directly', async () => {
+    const id = await ask(joe, 'How do I add a sub?', 'Tap Add a sub.');
+    await call(tony, 'select rate_help_answer($1, false)', [id]); // not theirs: ignored
+    await call(joe, 'select rate_help_answer($1, true)', [id]);
+    expect(await rows(db, 'select helpful from help_questions')).toEqual([{ helpful: true }]);
+    await expect(call(joe, 'select * from help_questions')).rejects.toThrow(/permission denied/);
+    await expect(call(joe, `insert into help_questions (question) values ('x')`)).rejects.toThrow(/permission denied/);
+    await expect(call(null, 'select rate_help_answer($1, true)', [id])).rejects.toThrow(/permission denied/);
+  });
+
+  it('staff see recent questions with who asked and their league', async () => {
+    const staff = await createUser(db, 'staff@golfscorehq.app');
+    await db.query('insert into staff_users (user_id) values ($1)', [staff]);
+    await ask(joe, 'Can we play a shamble?', null);
+    await expect(call(tony, 'select staff_help_questions(30)')).rejects.toThrow(/staff only/);
+    const list = (await call(staff, 'select staff_help_questions(30) as q'))[0].q;
+    expect(list).toEqual([expect.objectContaining({ question: 'Can we play a shamble?', answer: null, email: 'joe@example.com', league_name: 'Oak Creek Men', turn: 1 })]);
+  });
+});

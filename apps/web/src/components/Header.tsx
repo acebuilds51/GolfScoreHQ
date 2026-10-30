@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api, demoSite } from '../lib/backend';
 import type { DemoApi } from '../lib/demoApi';
 import { demoLink, demoTvToken, setDemoSite } from '../lib/demoSite';
@@ -29,9 +29,16 @@ function DemoSiteBar() {
   );
 }
 
+/** From inside a league, the Help page knows which league a question is about. */
+const slugFrom = (path: string) => {
+  const slug = path.match(/^\/l\/([^/]+)/)?.[1];
+  return slug ? `?from=${encodeURIComponent(slug)}` : '';
+};
+
 export function Header() {
   const { user } = useAuth();
   const nav = useNavigate();
+  const { pathname } = useLocation();
   return (
     <>
       {demoSite ? <DemoSiteBar /> : api.mode === 'demo' && <div className="demo-bar">Demo mode — everything stays in this browser. No emails are sent.</div>}
@@ -40,8 +47,9 @@ export function Header() {
           <img className="brand-icon" src="/icon-192.png" alt="" width={36} height={36} />
           <span>GolfScoreHQ</span>
         </Link>
-        {user && (
-          <div className="topbar-right">
+        <div className="topbar-right">
+          <Link className="btn btn-ghost btn-sm" to={`/help${slugFrom(pathname)}`}>Help</Link>
+          {user && (<>
             <span className="muted small hide-narrow">{user.email}</span>
             <button
               className="btn btn-ghost btn-sm"
@@ -52,8 +60,8 @@ export function Header() {
             >
               Sign out
             </button>
-          </div>
-        )}
+          </>)}
+        </div>
       </header>
     </>
   );

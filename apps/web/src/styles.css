@@ -595,3 +595,26 @@ input.limit-input { width: 90px; padding: 2px 6px; margin: 0 4px 0 8px; font-siz
 .health-list .list-row { padding-left: 0; padding-right: 0; }
 .more-list a { display: flex; align-items: center; gap: 12px; padding: 16px; color: var(--text); text-decoration: none; font-weight: 600; }
 .more-list li + li { border-top: 1px solid var(--border); }
+
+/* Help page */
+.help-search { font-size: 1rem; padding: 12px 14px; border-radius: 12px; }
+.segmented-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.segmented-row .chip { cursor: pointer; font: inherit; font-size: 0.9rem; padding: 6px 14px; color: var(--text); }
+.segmented-row .chip.on { background: var(--chrome); color: var(--on-chrome); border-color: var(--chrome); }
+.help-topics { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.92rem; }
+.help-topics a { color: var(--brand-2); font-weight: 600; text-decoration: none; }
+.help-list .help-item { border-top: 1px solid var(--border); }
+.help-item summary { display: flex; align-items: center; gap: 10px; padding: 14px 16px; cursor: pointer; font-weight: 600; list-style: none; }
+.help-item summary::-webkit-details-marker { display: none; }
+.help-item summary::after { content: '+'; font-size: 1.3rem; line-height: 1; color: var(--text-2); }
+.help-item[open] summary::after { content: '–'; }
+.help-item[open] summary { color: var(--brand-2); }
+.help-answer { padding: 0 16px 14px; line-height: 1.5; }
+.help-answer p { margin: 0 0 8px; }
+.help-chat { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; }
+.help-msg { align-self: flex-start; max-width: 88%; padding: 10px 13px; border-radius: 14px; background: var(--accent-bg); color: var(--text); line-height: 1.45; }
+.help-msg.mine { align-self: flex-end; background: var(--chrome); color: var(--on-chrome); }
+.help-msg.err { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); }
+.help-msg-actions { margin-top: 6px; gap: 6px; }
+.help-ask { display: flex; gap: 8px; align-items: stretch; }
+.help-ask textarea { flex: 1; resize: none; font: inherit; }
