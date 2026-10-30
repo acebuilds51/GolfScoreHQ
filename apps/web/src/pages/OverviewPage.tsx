@@ -33,6 +33,8 @@ export function OverviewPage() {
     { done: joined > 0 || members.length > 1, label: 'Invite golfers to join', to: 'roster' },
     { done: !!league.joinCode, label: 'Set a league code', to: 'settings' },
   ];
+  // The setup questions build the course, season and roster; once those exist they have nothing left to do.
+  const wizardHelps = steps.slice(0, 3).some((s) => !s.done);
 
   return (
     <div className="page stack">
@@ -47,10 +49,14 @@ export function OverviewPage() {
       <UpgradeCard golfers={regulars} />
 
       {commish && steps.some((s) => !s.done) && (
-        <section className="card">
-          <h2>Set up your league</h2>
-          <p><Link className="btn btn-primary btn-sm" to="start">Answer a few questions and we'll build it</Link></p>
-          <p className="small muted">Or do it a step at a time:</p>
+        <section className="card stack">
+          <h2>{wizardHelps ? 'Set up your league' : 'Finish setting up'}</h2>
+          {wizardHelps && (
+            <>
+              <div><Link className="btn btn-primary btn-sm" to="start">Answer a few questions and we'll build it</Link></div>
+              <p className="small muted">Or do it a step at a time:</p>
+            </>
+          )}
           <ol className="checklist">
             {steps.map((s) => (
               <li key={s.label} className={s.done ? 'done' : ''}>
