@@ -20,6 +20,7 @@ import { ScoreRoundPage } from './pages/ScoreRoundPage';
 import { WeekPage } from './pages/WeekPage';
 import { StandingsPage } from './pages/StandingsPage';
 import { SignInPage } from './pages/SignInPage';
+import { DemoPage } from './pages/DemoPage';
 
 function RequireUser({ children }: { children: JSX.Element }) {
   const { user, loading } = useAuth();
@@ -44,6 +45,7 @@ export function App() {
         <Suspense fallback={<PageSkeleton />}>
         <Routes>
           <Route path="/" element={auth.loading ? <PageSkeleton /> : auth.user ? <Navigate to="/leagues" replace /> : <SignInPage />} />
+          <Route path="/demo" element={<DemoPage />} />
           <Route path="/join/:token" element={<JoinInvitePage />} />
           <Route path="/rsvp/:token" element={<RsvpLinkPage />} />
           <Route path="/pilot/:code" element={<PilotPage />} />
