@@ -1,9 +1,9 @@
 import type { Api, ErrorGroup, HealthSnapshot } from './api';
-import type { AppErrorReport } from './types';
+import type { AppErrorReport, MatchMoney as LeagueMatchMoney, PaidMark, PayHandles } from './types';
 import type { Contact, Course, JoinRequest, League, LeagueBilling, LeagueEvent, LedgerRow, PaymentHandles, PilotCode, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SetupRequest, SubRequest, TeeSheet, TeeTime, TvDisplay, User } from './types';
 import { isCommissioner } from './types';
 import type { WeeklyRecap } from '@golfscorehq/engine';
-import { buildRecapEmail } from '../../../../supabase/functions/send-recap/email';
+import { buildRecapEmail, splitMoney, type MatchMoney } from '../../../../supabase/functions/send-recap/email';
 import { cleanStory } from '../../../../supabase/functions/send-recap/story';
 import { buildWeekRecap } from './recap';
 import { BASIC_FORMATS, playsForMoney, weekRules, type FormatKey } from './scoring';
@@ -29,7 +29,7 @@ interface Db {
     id: string; name: string; slug: string; ownerId: string; plan: Plan; joinCode: string | null; timezone: string;
     logoUrl?: string | null; bannerUrl?: string | null; brandColor?: string | null; accentColor?: string | null;
     planExpiresAt?: string | null; clubId?: string | null; demoSub?: LeagueBilling['subscription']; sharePhones?: boolean;
-    shareEmails?: boolean; showMoney?: boolean;
+    shareEmails?: boolean; showMoney?: boolean; matchMoney?: LeagueMatchMoney;
     rsvpReminderDays?: number | null;
   }[];
   clubs: { id: string; ownerId: string; name: string; expiresAt: string | null }[];
@@ -64,12 +64,17 @@ interface Db {
   pilotCodes: (Omit<PilotCode, 'leagues'> & { leagueIds: string[] })[];
   /** leagueId → golfers who said they'd chip in for Pro (older saved demos don't have it). */
   upgradeInterest: Record<string, { userId: string; playerId: string | null; amountCents: number }[]>;
+  /** playerId → the golfer's own Venmo / PayPal / Zelle. */
+  payHandles: Record<string, PayHandles>;
+  /** seasonId → playerId → dues received; eventId → playerId → winnings paid. */
+  duesPaid: Record<string, Record<string, PaidMark>>;
+  payoutsPaid: Record<string, Record<string, PaidMark>>;
 }
 
 const empty = (): Db => ({
   session: null, users: {}, leagues: [], members: [], players: [], contacts: {}, invites: [], joinRequests: [], courses: [],
   seasons: [], events: [], rounds: [], ledger: [], ctpDecisions: {}, tvDisplays: [], rsvps: {}, subRequests: [],
-  recapSends: {}, recapPrefs: {}, paymentHandles: {}, clubs: [], setupRequests: [], teeSheets: {}, seasonTeeTimes: {}, reminderSends: {}, pilotCodes: [], upgradeInterest: {},
+  recapSends: {}, recapPrefs: {}, paymentHandles: {}, clubs: [], setupRequests: [], teeSheets: {}, seasonTeeTimes: {}, reminderSends: {}, pilotCodes: [], upgradeInterest: {}, payHandles: {}, duesPaid: {}, payoutsPaid: {},
 });
 
 /** Demo uploads live only for this page view (too big for the browser's saved demo data). */
@@ -263,11 +268,19 @@ export function demoApi(): DemoApi {
       recipients.push(p);
     }
     const first = recipients[0];
+    // Same split as the send-recap server function.
+    const matchMoney: MatchMoney = league.matchMoney === 'commissioner' || season.rules.format !== 'bestBallMatch' ? 'commissioner' : 'golfers';
+    const asRows = (rows: LedgerRow[]) => rows.map((e) => ({ playerId: e.playerId, kind: e.kind, amount: e.amountCents }));
+    const week = first ? splitMoney(asRows(db.ledger.filter((e) => e.eventId === eventId)), first.id, matchMoney) : null;
+    const all = first ? splitMoney(asRows(db.ledger.filter((e) => earlier.has(e.eventId))), first.id, matchMoney) : null;
+    const showSeason = forMoney && league.showMoney !== false;
     const sample = buildRecapEmail({
       leagueName: league.name, weekNumber: ev.weekNumber, leagueUrl: `${location.origin}/l/${league.slug}`, recapBody: text,
       playerName: first?.displayName ?? 'Golfer', payment: db.paymentHandles[league.id] ?? { venmo: null, paypalMe: null, zelle: null },
-      weekCents: forMoney && first ? recap.weekBalances[first.id] ?? 0 : null,
-      seasonCents: forMoney && first && league.showMoney !== false ? recap.seasonBalances[first.id] ?? 0 : null,
+      weekCents: forMoney && week ? week.commissioner : null,
+      seasonCents: showSeason && all ? all.commissioner : null,
+      matchCents: forMoney && week ? week.match : null,
+      seasonMatchCents: showSeason && all ? all.match : null,
       story: story ? cleanStory(story) : null,
     });
     return { recap, preview: { subject: sample.subject, text: sample.text, recipients: recipients.length, missing, alreadySent: db.recapSends[eventId] ?? null } };
@@ -337,7 +350,7 @@ export function demoApi(): DemoApi {
       if (!role) return null;
       const league: League = { id: l.id, name: l.name, slug: l.slug, plan: l.plan, role, joinCode: l.joinCode, timezone: l.timezone, effectivePlan: l.plan, features: FEATURES[l.plan],
         logoUrl: l.logoUrl ?? null, bannerUrl: l.bannerUrl ?? null, brandColor: l.brandColor ?? null, accentColor: l.accentColor ?? null, sharePhones: !!l.sharePhones,
-        shareEmails: !!l.shareEmails, showMoney: l.showMoney !== false,
+        shareEmails: !!l.shareEmails, showMoney: l.showMoney !== false, matchMoney: l.matchMoney ?? 'golfers',
         rsvpReminderDays: l.rsvpReminderDays ?? null };
       return league;
     },
@@ -361,6 +374,7 @@ export function demoApi(): DemoApi {
       if (patch.sharePhones !== undefined) l.sharePhones = patch.sharePhones;
       if (patch.shareEmails !== undefined) l.shareEmails = patch.shareEmails;
       if (patch.showMoney !== undefined) l.showMoney = patch.showMoney;
+      if (patch.matchMoney !== undefined) l.matchMoney = patch.matchMoney;
       if (patch.rsvpReminderDays !== undefined) l.rsvpReminderDays = patch.rsvpReminderDays;
       save(db);
     },
@@ -1291,6 +1305,71 @@ export function demoApi(): DemoApi {
       const d = (db.ctpDecisions[eventId] ??= {});
       if (playerId) d[holeNumber] = playerId;
       else delete d[holeNumber];
+      save(db);
+    },
+
+    // ── Paying out: same rules as the database (golfer or commissioner for handles; commissioners tick) ──
+    async payHandles(leagueId) {
+      const db = load();
+      const u = me(db);
+      const commish = isCommissioner(roleIn(db, leagueId));
+      const visible = db.players.filter((p) => p.leagueId === leagueId && (commish || p.userId === u.id)).map((p) => p.id);
+      return Object.fromEntries(visible.filter((id) => db.payHandles[id]).map((id) => [id, db.payHandles[id]!]));
+    },
+    async savePayHandles(leagueId, playerId, h) {
+      const db = load();
+      const u = me(db);
+      const p = db.players.find((x) => x.id === playerId && x.leagueId === leagueId);
+      if (!p || !(p.userId === u.id || isCommissioner(roleIn(db, leagueId)))) throw new Error("You don't have permission to do that.");
+      db.payHandles[playerId] = h;
+      save(db);
+    },
+    async setSeasonDues(seasonId, cents) {
+      const db = load();
+      const s = db.seasons.find((x) => x.id === seasonId);
+      if (!s) throw new Error('no such season');
+      requireCommissioner(db, s.leagueId);
+      if (!has(db, s.leagueId, 'payments')) throw new Error('plan_feature: Tracking dues and payouts needs GolfScoreHQ Pro');
+      s.duesCents = cents || null;
+      save(db);
+    },
+    async duesPaid(seasonId) {
+      const db = load();
+      const s = db.seasons.find((x) => x.id === seasonId);
+      if (!s) return {};
+      const u = me(db);
+      const all = db.duesPaid[seasonId] ?? {};
+      if (isCommissioner(roleIn(db, s.leagueId))) return all;
+      return Object.fromEntries(Object.entries(all).filter(([pid]) => db.players.find((p) => p.id === pid)?.userId === u.id));
+    },
+    async markDuesPaid(seasonId, playerId, paid) {
+      const db = load();
+      const s = db.seasons.find((x) => x.id === seasonId);
+      if (!s) throw new Error('no such season');
+      requireCommissioner(db, s.leagueId);
+      const m = (db.duesPaid[seasonId] ??= {});
+      if (paid) m[playerId] = { amountCents: s.duesCents ?? 0, paidAt: new Date().toISOString() };
+      else delete m[playerId];
+      save(db);
+    },
+    async payoutsPaid(eventId) {
+      const db = load();
+      const ev = db.events.find((e) => e.id === eventId);
+      if (!ev) return {};
+      const u = me(db);
+      const all = db.payoutsPaid[eventId] ?? {};
+      if (isCommissioner(roleIn(db, ev.leagueId))) return all;
+      return Object.fromEntries(Object.entries(all).filter(([pid]) => db.players.find((p) => p.id === pid)?.userId === u.id));
+    },
+    async markPayoutPaid(eventId, playerId, amountCents, paid) {
+      const db = load();
+      const ev = db.events.find((e) => e.id === eventId);
+      if (!ev) throw new Error('no such week');
+      requireCommissioner(db, ev.leagueId);
+      if (ev.status !== 'settled') throw new Error('Settle the week first.');
+      const m = (db.payoutsPaid[eventId] ??= {});
+      if (paid) m[playerId] = { amountCents, paidAt: new Date().toISOString() };
+      else delete m[playerId];
       save(db);
     },
 

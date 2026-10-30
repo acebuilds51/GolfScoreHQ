@@ -13,7 +13,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 // @ts-ignore generated JavaScript bundle of packages/engine (npm run build:functions)
 import { recapText, weeklyRecap, withPostedResults } from '../_shared/engine.js';
-import { buildRecapEmail } from './email.ts';
+import { buildRecapEmail, splitMoney, type MatchMoney } from './email.ts';
 import { pushToUsers } from '../_shared/push.ts';
 import { engineRounds, ROUND_SELECT } from '../_shared/rounds.ts';
 import { senderFrom } from '../_shared/sender.ts';
@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
 
   const [{ data: league }, { data: season }, { data: layout }, { data: players }, { data: rounds }, { data: seasonLedger }, { data: contacts }, { data: prefs }, { data: payment }, { data: sent }] =
     await Promise.all([
-      admin.from('leagues').select('name, slug, logo_url, brand_color, accent_color, show_money').eq('id', event.league_id).single(),
+      admin.from('leagues').select('name, slug, logo_url, brand_color, accent_color, show_money, match_money').eq('id', event.league_id).single(),
       admin.from('seasons').select('rules').eq('id', event.season_id).single(),
       admin.from('layouts').select('id, name, holes').eq('id', event.layout_id).maybeSingle(),
       admin.from('players').select('id, display_name, user_id, active').eq('league_id', event.league_id),
@@ -122,13 +122,22 @@ Deno.serve(async (req) => {
   const handles = { venmo: payment?.venmo_username, paypalMe: payment?.paypal_me, zelle: payment?.zelle_contact };
   const { data: branded } = await admin.rpc('league_has_feature', { lid: event.league_id, feature: 'branding' });
   const brand = branded ? { color: league!.brand_color, accent: league!.accent_color, logoUrl: league!.logo_url } : undefined;
-  const emailFor = (r: { playerId: string; name: string }) =>
-    buildRecapEmail({
+  // What the commissioner pays each golfer, and (when the golfers settle it themselves) their match money.
+  const matchMoney: MatchMoney = league!.match_money === 'commissioner' || rules.format !== 'bestBallMatch' ? 'commissioner' : 'golfers';
+  const allLedger = (seasonLedger ?? []).map(toEntry);
+  const emailFor = (r: { playerId: string; name: string }) => {
+    const week = splitMoney(weekLedger, r.playerId, matchMoney);
+    const season = splitMoney(allLedger, r.playerId, matchMoney);
+    // Season money only when the league shows it to golfers.
+    const showSeason = playsForMoney && league!.show_money !== false;
+    return buildRecapEmail({
       leagueName: league!.name, weekNumber: event.week_number, leagueUrl, recapBody, playerName: r.name, payment: handles, story, brand,
-      weekCents: playsForMoney ? recap.weekBalances[r.playerId] ?? 0 : null,
-      // Season money only when the league shows it to golfers.
-      seasonCents: playsForMoney && league!.show_money !== false ? recap.seasonBalances[r.playerId] ?? 0 : null,
+      weekCents: playsForMoney ? week.commissioner : null,
+      seasonCents: showSeason ? season.commissioner : null,
+      matchCents: playsForMoney ? week.match : null,
+      seasonMatchCents: showSeason ? season.match : null,
     });
+  };
 
   if (!body.send) {
     const sample = emailFor(recipients[0] ?? { playerId: '', name: 'Golfer' });

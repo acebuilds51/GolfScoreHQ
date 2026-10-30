@@ -6,8 +6,9 @@ import { useAction, useAsync, useLeague } from '../lib/hooks';
 import type { FormatRules } from '@golfscorehq/engine';
 import {
   allLayouts, BASIC_FORMATS, describeRules, fmtDate, FORMAT_NAMES, formFromRules, handicapsFromForm, layoutForWeek, nextDate,
-  OCBC_STYLE_FORM, plainRules, rulesFromForm, type FormatKey, type SideGameForm,
+  OCBC_STYLE_FORM, plainRules, playsForMoney, rulesFromForm, type FormatKey, type SideGameForm,
 } from '../lib/scoring';
+import { SeasonDues } from '../components/Payouts';
 
 const FORMAT_HELP: Record<FormatKey, string> = {
   bestBallMatch: 'Two teams of two in each group. Each hole goes to the team with the lowest single score.',
@@ -89,6 +90,7 @@ export function PlayPage() {
       </section>
 
       <SeasonTeeTimes season={season} />
+      {commish && playsForMoney(season.rules) && <SeasonDues season={season} onChanged={data.reload} />}
 
       <section className="card flush">
         <div className="row between pad wrap">

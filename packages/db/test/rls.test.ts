@@ -767,6 +767,70 @@ describe('Pro features: RSVP, sub finder, TV, setup, notifications', () => {
   });
 });
 
+describe('paying out', () => {
+  const call = (user: string | null, sql: string, params: unknown[] = []) => as(db, user, () => rows<any>(db, sql, params));
+
+  it('golfers keep their own Venmo; only they and commissioners see it', async () => {
+    await setPlan(oak, 'pro');
+    const joePlayer = await addPlayer(tony, oak, 'Joe Smith');
+    const alPlayer = await addPlayer(tony, oak, 'Al Green');
+    await db.query('update players set user_id = $2 where id = $1', [joePlayer, joe]);
+
+    await call(joe, `insert into player_pay_handles (player_id, league_id, venmo) values ($1, $2, 'Joe-Smith')`, [joePlayer, oak]);
+    await expect(call(joe, `insert into player_pay_handles (player_id, league_id, venmo) values ($1, $2, 'not-mine')`, [alPlayer, oak])).rejects.toThrow(/row-level security/);
+    await call(tony, `insert into player_pay_handles (player_id, league_id, venmo) values ($1, $2, 'Al-Green')`, [alPlayer, oak]); // commissioner fills it in
+    await expect(call(joe, `update player_pay_handles set venmo = 'bad name!' where player_id = $1`, [joePlayer])).rejects.toThrow(/check constraint/);
+
+    expect((await call(tony, 'select venmo from player_pay_handles order by venmo')).map((r: any) => r.venmo)).toEqual(['Al-Green', 'Joe-Smith']);
+    expect((await call(joe, 'select venmo from player_pay_handles')).map((r: any) => r.venmo)).toEqual(['Joe-Smith']);
+    expect(await call(sam, 'select * from player_pay_handles')).toEqual([]);
+  });
+
+  it('commissioners set season dues and tick who paid; golfers see only their own', async () => {
+    const joePlayer = await addPlayer(tony, oak, 'Joe Smith');
+    const alPlayer = await addPlayer(tony, oak, 'Al Green');
+    await db.query('update players set user_id = $2 where id = $1', [joePlayer, joe]);
+    const [season] = await call(tony, `insert into seasons (league_id, year, rules) values ($1, 2027, $2) returning id`, [oak, FREE_RULES]);
+
+    await expect(call(tony, 'select set_season_dues($1, 15000)', [season.id])).rejects.toThrow(/Pro/); // free plan
+    await setPlan(oak, 'pro');
+    await expect(call(joe, 'select set_season_dues($1, 15000)', [season.id])).rejects.toThrow(/commissioners only/);
+    await call(tony, 'select set_season_dues($1, 15000)', [season.id]);
+    expect(await rows(db, 'select dues_cents from seasons where id = $1', [season.id])).toEqual([{ dues_cents: 15000 }]);
+
+    await call(tony, 'select mark_dues_paid($1, $2, true)', [season.id, joePlayer]);
+    await call(tony, 'select mark_dues_paid($1, $2, true)', [season.id, alPlayer]);
+    await expect(call(joe, 'select mark_dues_paid($1, $2, true)', [season.id, joePlayer])).rejects.toThrow(/commissioners only/);
+    expect((await call(tony, 'select amount_cents from dues_payments')).length).toBe(2);
+    expect(await call(joe, 'select player_id, amount_cents from dues_payments')).toEqual([{ player_id: joePlayer, amount_cents: 15000 }]);
+    await call(tony, 'select mark_dues_paid($1, $2, false)', [season.id, alPlayer]);
+    expect((await call(tony, 'select player_id from dues_payments')).length).toBe(1);
+  });
+
+  it("commissioners tick a settled week's winnings paid, with the amount; golfers see their own", async () => {
+    await setPlan(oak, 'pro');
+    const { eventId, roundId } = await weekWithRound(tony, oak, PRO_RULES);
+    const joePlayer = await addPlayer(tony, oak, 'Joe Smith');
+    await db.query('update players set user_id = $2 where id = $1', [joePlayer, joe]);
+    await call(tony, `insert into round_players (round_id, league_id, player_id, side, position) values ($1, $2, $3, 'A', 1)`, [roundId, oak, joePlayer]);
+
+    await expect(call(tony, 'select mark_payout_paid($1, $2, 3600, true)', [eventId, joePlayer])).rejects.toThrow(/Settle the week first/);
+    await call(tony, 'select settle_event($1, $2::jsonb)', [eventId, JSON.stringify([{ player_id: joePlayer, round_id: roundId, kind: 'ctp', amount_cents: 3600, hole_number: 2 }])]);
+    await expect(call(joe, 'select mark_payout_paid($1, $2, 3600, true)', [eventId, joePlayer])).rejects.toThrow(/commissioners only/);
+    await call(tony, 'select mark_payout_paid($1, $2, 3600, true)', [eventId, joePlayer]);
+    expect(await call(joe, 'select amount_cents from payouts_paid')).toEqual([{ amount_cents: 3600 }]);
+    expect(await call(sam, 'select * from payouts_paid')).toEqual([]);
+    await expect(call(tony, `insert into payouts_paid (event_id, player_id, league_id, amount_cents) values ($1, $2, $3, 1)`, [eventId, joePlayer, oak])).rejects.toThrow(/permission denied/);
+  });
+
+  it('leagues choose who handles match money; golfers can\'t change it', async () => {
+    expect(await rows(db, 'select match_money from leagues where id = $1', [oak])).toEqual([{ match_money: 'golfers' }]);
+    await call(tony, `update leagues set match_money = 'commissioner' where id = $1`, [oak]);
+    await call(joe, `update leagues set match_money = 'golfers' where id = $1`, [oak]); // not a commissioner: no rows change
+    expect(await rows(db, 'select match_money from leagues where id = $1', [oak])).toEqual([{ match_money: 'commissioner' }]);
+  });
+});
+
 describe("upgrade prompts: I'd chip in", () => {
   const call = (user: string | null, sql: string, params: unknown[] = []) => as(db, user, () => rows<any>(db, sql, params));
   const summary = async (user: string) => (await call(user, 'select upgrade_interest_summary($1) as s', [oak]))[0].s;

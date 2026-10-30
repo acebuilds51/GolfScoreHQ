@@ -4,6 +4,7 @@ import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
 import { buildWeekRecap } from '../lib/recap';
 import { ShareWeek } from './ShareWeek';
+import { WeekPayouts } from '../components/Payouts';
 import { STORY_MAX_CHARS } from '../../../../supabase/functions/send-recap/story';
 import type { IndividualRules, PlacedLine, ScrambleTeamLine } from '@golfscorehq/engine';
 import { teamName } from './WeekPage';
@@ -89,6 +90,7 @@ export function WeekResults({ event, season, layout, rounds, names, updating = f
           </div>
         )}
         {totals.length > 0 && <MoneyTable totals={totals} name={name} cols={moneyCols} />}
+        {hasMoney && <WeekPayouts event={event} ledger={ledger} names={names} />}
         <ErrorText>{error}</ErrorText>
         {shareable && <ShareWeek event={event} season={season} layout={layout} rounds={rounds} names={names} />}
         {league.features.includes('weekly_recap') && shareable && (

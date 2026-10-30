@@ -7,6 +7,7 @@ import { isCommissioner, type LeagueEvent, type Player, type RsvpStatus } from '
 import { RsvpButtons } from './WhosPlaying';
 import { PhoneNotifications } from '../components/PhoneNotifications';
 import { UpgradeCard } from '../components/UpgradeCard';
+import { MyDues, MyPayHandles } from '../components/Payouts';
 
 export function OverviewPage() {
   const { league } = useLeague();
@@ -14,11 +15,11 @@ export function OverviewPage() {
     const [players, courses, members, seasons] = await Promise.all([api.players(league.id), api.courses(league.id), api.members(league.id), api.seasons(league.id)]);
     const events = seasons[0] ? await api.events(seasons[0].id) : [];
     const nextWeek = events.find((e) => e.status === 'scheduled') ?? null;
-    return { players, courses, members, nextWeek };
+    return { players, courses, members, nextWeek, season: seasons[0] ?? null };
   }, [league.id]);
 
   if (!data.data) return <PageSkeleton />;
-  const { players, courses, members, nextWeek } = data.data;
+  const { players, courses, members, nextWeek, season } = data.data;
   const active = players.filter((p) => p.active);
   const regulars = active.filter((p) => !p.isSub).length;
   const subs = active.length - regulars;
@@ -63,6 +64,8 @@ export function OverviewPage() {
         <h2>Play</h2>
         <p className="muted">Scoring happens on the <Link to="play">Play</Link> tab: pick the week, start your group, and enter scores hole by hole.</p>
       </section>
+      {season && <MyDues season={season} players={players} />}
+      <MyPayHandles players={players} />
       {league.features.includes('weekly_recap') && <RecapPref players={players} />}
       <PhoneNotifications />
     </div>

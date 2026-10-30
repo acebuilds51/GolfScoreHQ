@@ -1,7 +1,7 @@
 import type { CourseSummary, LookupCourse } from '../../../../supabase/functions/course-lookup/normalize';
 import type { HealthSnapshot } from '../../../../supabase/functions/health-report/report';
 import type {
-  AppErrorReport, UpgradeInterest,
+  AppErrorReport, UpgradeInterest, MatchMoney, PaidMark, PayHandles,
   Club, LeagueBilling,
   Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, LedgerRow, Member, NewCourse, NewPlayer, Player, Role,
   PaymentHandles, RecapPreview, RoundData, RoundPlayer, RsvpStatus, ScoreEntry, Season, SubOffer, SubRequest, TvDisplay, TvFeed, TvSettings, User,
@@ -33,7 +33,7 @@ export interface Api {
   myLeagues(): Promise<LeagueSummary[]>;
   createLeague(name: string, slug: string): Promise<string>;
   league(slug: string): Promise<League | null>;
-  updateLeague(id: string, patch: { name?: string; joinCode?: string | null; timezone?: string; brandColor?: string | null; accentColor?: string | null; sharePhones?: boolean; shareEmails?: boolean; showMoney?: boolean; rsvpReminderDays?: number | null }): Promise<void>;
+  updateLeague(id: string, patch: { name?: string; joinCode?: string | null; timezone?: string; brandColor?: string | null; accentColor?: string | null; sharePhones?: boolean; shareEmails?: boolean; showMoney?: boolean; matchMoney?: MatchMoney; rsvpReminderDays?: number | null }): Promise<void>;
   /** playerId → phone, for texting from the app: commissioners always; golfers when the league shares phone numbers. */
   phoneBook(leagueId: string): Promise<Record<string, string>>;
   /** playerId → email: commissioners always; golfers when the league shares emails. */
@@ -210,6 +210,18 @@ export interface Api {
   /** holeNumber → playerId the commissioner picked for a disputed CTP. */
   ctpDecisions(eventId: string): Promise<Record<number, string>>;
   setCtpDecision(leagueId: string, eventId: string, holeNumber: number, playerId: string | null): Promise<void>;
+
+  /** Golfers' own Venmo / PayPal / Zelle: a golfer sees their own, commissioners everyone's. playerId → handles. */
+  payHandles(leagueId: string): Promise<Record<string, PayHandles>>;
+  savePayHandles(leagueId: string, playerId: string, h: PayHandles): Promise<void>;
+  /** Commissioner: what each golfer pays up front for the season (null: no dues). */
+  setSeasonDues(seasonId: string, cents: number | null): Promise<void>;
+  /** Who has paid the season's dues (a golfer sees their own; commissioners everyone). playerId → mark. */
+  duesPaid(seasonId: string): Promise<Record<string, PaidMark>>;
+  markDuesPaid(seasonId: string, playerId: string, paid: boolean): Promise<void>;
+  /** Whose winnings for a settled week the commissioner has paid (or collected). playerId → mark. */
+  payoutsPaid(eventId: string): Promise<Record<string, PaidMark>>;
+  markPayoutPaid(eventId: string, playerId: string, amountCents: number, paid: boolean): Promise<void>;
 
   /** "I'd chip in": a golfer offers their share of Pro for the season (free leagues); notifies the commissioners. Returns how many have offered. */
   chipIn(leagueId: string, amountCents: number): Promise<number>;

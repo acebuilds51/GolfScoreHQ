@@ -32,6 +32,11 @@ export interface League extends LeagueSummary {
   shareEmails?: boolean;
   /** Golfers see season money (Standings, player pages, awards, the recap's season line). Commissioners always do. */
   showMoney?: boolean;
+  /**
+   * Who handles match and press money: 'golfers' settle it among themselves (the
+   * app only shows what each won or lost), or 'commissioner' with the side games.
+   */
+  matchMoney?: MatchMoney;
   /** "Are you playing?" email this many days before league night (Pro); null: off. */
   rsvpReminderDays?: number | null;
 }
@@ -144,6 +149,23 @@ export interface Season {
   startDate: string | null;
   /** 0 = Sunday … 6 = Saturday */
   leagueDay: number | null;
+  /** What each golfer pays the commissioner up front for the season (e.g. skins and CTP money); null: no dues. */
+  duesCents?: number | null;
+}
+
+export type MatchMoney = 'golfers' | 'commissioner';
+
+/** A golfer's own Venmo / PayPal / Zelle, so the commissioner can pay them. */
+export interface PayHandles {
+  venmo: string | null;
+  paypalMe: string | null;
+  zelle: string | null;
+}
+
+/** Ticked off by the commissioner: season dues received, or a week's winnings paid (negative: collected). */
+export interface PaidMark {
+  amountCents: number;
+  paidAt: string;
 }
 
 export type EventStatus = 'scheduled' | 'in_progress' | 'settled' | 'rainout';

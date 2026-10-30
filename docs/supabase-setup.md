@@ -49,6 +49,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 29. `20261123000000_league_privacy.sql` (what golfers see, set by the commissioner: season money, phones and emails each on their own switch; redeploy `send-recap`)
 30. `20261124000000_diagnostics.sql` (app health: problems the app reports, people online every 5 minutes, plan limits, a daily health email; deploy `health-report` with `--no-verify-jwt`, see step 8)
 31. `20261125000000_upgrade_interest.sql` (free leagues: golfers say they'd chip in their share of Pro; commissioners get a notification and see who)
+32. `20261126000000_payouts.sql` (paying out: golfers' own Venmo/PayPal/Zelle, season dues and who paid, each week's skins/CTP payouts ticked off, who handles match money; redeploy `send-recap`)
 
 **B. Command line**
 
