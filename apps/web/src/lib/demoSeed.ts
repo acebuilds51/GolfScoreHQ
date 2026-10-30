@@ -1,3 +1,4 @@
+import { resizeBanner, resizeLogo } from './brand';
 import type { DemoApi } from './demoApi';
 import { saveDemoTvToken } from './demoSite';
 import { courseHandicapFor } from './handicaps';
@@ -10,6 +11,38 @@ import type { Layout, RoundPlayer, TvPanel } from './types';
 // through the normal demo API, so the same rules apply as for a real league.
 
 export const DEMO_SLUG = 'demo-thursday-league';
+
+/**
+ * A demo dressed up for one course, from the /demo link
+ * (?league=…&course=…&city=…&state=…&color=…&accent=…) plus pictures picked on this device.
+ */
+export interface DemoLook {
+  league?: string;
+  course?: string;
+  city?: string;
+  state?: string;
+  /** League colors as hex, e.g. "0b5d3b" or "#0b5d3b". */
+  color?: string;
+  accent?: string;
+  logo?: File | null;
+  photo?: File | null;
+}
+
+const hex = (s?: string) => (s && /^#?[0-9a-f]{6}$/i.test(s.trim()) ? `#${s.trim().replace(/^#/, '').toLowerCase()}` : null);
+const text = (s: string | undefined, max: number) => s?.trim().replace(/\s+/g, ' ').slice(0, max) || null;
+
+/** Read a personalized demo from the link's query string. */
+export function demoLookFromSearch(search: string): DemoLook {
+  const q = new URLSearchParams(search);
+  return {
+    league: text(q.get('league') ?? undefined, 60) ?? undefined,
+    course: text(q.get('course') ?? undefined, 60) ?? undefined,
+    city: text(q.get('city') ?? undefined, 40) ?? undefined,
+    state: text(q.get('state') ?? undefined, 2)?.toUpperCase() ?? undefined,
+    color: hex(q.get('color') ?? undefined) ?? undefined,
+    accent: hex(q.get('accent') ?? undefined) ?? undefined,
+  };
+}
 
 const GOLFERS: [string, number][] = [
   ['Mike Russo', 6.2], ['Dave Keller', 14.8], ['Tom Brennan', 9.1], ['Gary Lindqvist', 18.4],
@@ -50,18 +83,24 @@ function pairings(week: number): [number, number][] {
  * settled weeks, tonight's week with three groups on the course, and a TV link.
  * Returns the league's slug.
  */
-export async function seedDemoLeague(api: DemoApi, onProgress: (text: string) => void = () => {}): Promise<string> {
+export async function seedDemoLeague(api: DemoApi, onProgress: (text: string) => void = () => {}, look: DemoLook = {}): Promise<string> {
   const rand = rng(2027);
   api.reset();
   await api.signIn('commissioner@demo.golfscorehq.app', '/');
 
   onProgress('Setting up the league…');
-  const leagueId = await api.createLeague("Thursday Men's League", DEMO_SLUG);
+  const leagueId = await api.createLeague(look.league || "Thursday Men's League", DEMO_SLUG);
   await api.setPlan(leagueId, 'pro');
-  await api.updateLeague(leagueId, { timezone: 'America/New_York', showMoney: true });
+  await api.updateLeague(leagueId, {
+    timezone: 'America/New_York', showMoney: true,
+    ...(look.color ? { brandColor: hex(look.color) } : {}), ...(look.accent ? { accentColor: hex(look.accent) } : {}),
+  });
+  // Pictures that can't be read are skipped: the demo still works without them.
+  if (look.logo) await api.uploadLogo(leagueId, await resizeLogo(look.logo)).catch(() => {});
+  if (look.photo) await api.uploadBanner(leagueId, await resizeBanner(look.photo)).catch(() => {});
 
   await api.createCourse(leagueId, {
-    name: 'Demo Golf Club', city: 'Cape Coral', state: 'FL',
+    name: look.course || 'Demo Golf Club', city: look.city || 'Cape Coral', state: look.state || 'FL',
     layouts: [FRONT, BACK].map((n, k) => ({
       name: k ? 'Back 9' : 'Front 9', tees: 'White', rating: n.rating, slope: n.slope,
       holes: n.pars.map((par, i) => ({ number: k * 9 + i + 1, par, strokeIndex: n.si[i]! })),
