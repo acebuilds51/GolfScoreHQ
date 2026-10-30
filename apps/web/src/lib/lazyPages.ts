@@ -14,6 +14,7 @@ function page<M, K extends keyof M>(load: () => Promise<M>, name: K) {
 export const SettingsPage = page(() => import('../pages/SettingsPage'), 'SettingsPage');
 export const AwardsPage = page(() => import('../pages/AwardsPage'), 'AwardsPage');
 export const PlayerPage = page(() => import('../pages/PlayerPage'), 'PlayerPage');
+export const SetupWizardPage = page(() => import('../pages/SetupWizardPage'), 'SetupWizardPage');
 export const SetupServicePage = page(() => import('../pages/SetupServicePage'), 'SetupServicePage');
 export const ImportPage = page(() => import('../pages/ImportPage'), 'ImportPage');
 export const StaffPage = page(() => import('../pages/StaffPage'), 'StaffPage');
