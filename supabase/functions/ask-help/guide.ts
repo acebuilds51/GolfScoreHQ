@@ -19,6 +19,8 @@ export interface GuideChapter {
   intro: string;
   steps: GuideStep[];
   tip?: string;
+  /** Other words people search with. */
+  tags?: string;
 }
 
 export interface Guide {
@@ -42,6 +44,7 @@ export const GUIDES: Guide[] = [
         id: 'set-up',
         title: 'Set up your league',
         intro: 'About ten minutes. You need your course, your league night and a list of your golfers.',
+        tags: 'start begin first new commissioner getting started create step by step how to',
         steps: [
           { text: 'Go to golfscorehq.app, enter your email and tap "Email me a sign-in code". Type the code from the email. There is no password.', help: 'sign-in' },
           { text: 'On Your leagues, fill in "Create a league" with your league\'s name and tap "Create league".', help: 'create-league' },
@@ -159,6 +162,7 @@ export const GUIDES: Guide[] = [
         id: 'join',
         title: 'Join your league',
         intro: 'Two minutes, once.',
+        tags: 'start begin first new golfer player getting started sign up',
         steps: [
           { text: 'Open the invite link your commissioner sent and tap "Email me a code to join". Type the code from the email and you\'re in.', help: 'join-league' },
           { text: 'Got a 6-letter league code instead? On Your leagues, use "Join with a code" and wait for the commissioner to approve you.', help: 'join-league' },

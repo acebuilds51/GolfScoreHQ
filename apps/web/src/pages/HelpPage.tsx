@@ -4,6 +4,7 @@ import { HELP_SECTIONS, searchHelp, type HelpAudience, type HelpItem } from '../
 import { ASK_MAX_CHARS } from '../../../../supabase/functions/ask-help/ask';
 import { api } from '../lib/backend';
 import { reportProblem } from '../lib/diagnostics';
+import { guideHref, searchGuide } from '../lib/guideSearch';
 import { useAuth } from '../lib/hooks';
 
 const AUDIENCES: { key: HelpAudience | 'all'; label: string }[] = [
@@ -17,7 +18,10 @@ export function HelpPage() {
   const { hash, search } = useLocation();
   const [query, setQuery] = useState(() => new URLSearchParams(search).get('q') ?? '');
   const [who, setWho] = useState<HelpAudience | 'all'>('all');
-  const found = useMemo(() => (query.trim().length >= 2 ? searchHelp(query, 12) : null), [query]);
+  const found = useMemo(() => (query.trim().length >= 2 ? searchHelp(query, 6) : null), [query]);
+  const chapters = useMemo(() => (query.trim().length >= 2 ? searchGuide(query) : []), [query]);
+  // "Ask this" under the search results hands the search to Ask a question.
+  const [askSeed, setAskSeed] = useState<{ text: string; n: number } | null>(null);
   const open = hash.slice(1);
 
   // A link like /help#settle-week opens that answer and scrolls to it.
@@ -39,14 +43,32 @@ export function HelpPage() {
         aria-label="Search the help" onChange={(e) => setQuery(e.target.value)}
       />
       {found ? (
-        <section className="card flush">
-          <h2 className="pad">{found.length ? `${found.length} answer${found.length === 1 ? '' : 's'}` : 'Nothing matches that'}</h2>
-          {found.length > 0 ? (
-            <div className="help-list">{found.map((i) => <HelpEntry key={i.id} item={i} open={i.id === open || i === found[0]} />)}</div>
-          ) : (
-            <p className="pad muted small">Try other words, or ask your question below.</p>
-          )}
-        </section>
+        <>
+          <section className="card stack help-ask-this">
+            <p>Want an answer written out for you, step by step?</p>
+            <div>
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => setAskSeed({ text: query.trim(), n: (askSeed?.n ?? 0) + 1 })}>
+                Ask: "{query.trim().length > 60 ? `${query.trim().slice(0, 57)}…` : query.trim()}"
+              </button>
+            </div>
+            {chapters.length > 0 && (
+              <p className="small">
+                Or read it in the user's guide:{' '}
+                {chapters.map((m, n) => (
+                  <span key={`${m.guide.id}-${m.chapter.id}`}>{n > 0 && ' · '}<Link to={guideHref(m)}>{m.guide.id === 'golfers' ? "Golfer's" : "Commissioner's"} guide: {m.chapter.title}</Link></span>
+                ))}
+              </p>
+            )}
+          </section>
+          <section className="card flush">
+            <h2 className="pad">{found.length ? `${found.length} matching question${found.length === 1 ? '' : 's'}` : 'No questions match that'}</h2>
+            {found.length > 0 ? (
+              <div className="help-list">{found.map((i) => <HelpEntry key={i.id} item={i} open={i.id === open || i === found[0]} />)}</div>
+            ) : (
+              <p className="pad muted small">Try other words, or tap Ask above.</p>
+            )}
+          </section>
+        </>
       ) : (
         <>
           <div className="segmented-row" role="tablist" aria-label="Show questions for">
@@ -65,7 +87,7 @@ export function HelpPage() {
           ))}
         </>
       )}
-      <AskQuestion />
+      <AskQuestion seed={askSeed} />
     </div>
   );
 }
@@ -85,20 +107,31 @@ function HelpEntry({ item, open }: { item: HelpItem; open: boolean }) {
 type Msg = { role: 'user' | 'assistant'; content: string; id?: string | null; err?: boolean; rated?: boolean; sent?: boolean };
 
 /** Like Ladle & Spoon's helper: answers come from this page; anything it can't answer goes to a person. */
-function AskQuestion() {
+function AskQuestion({ seed }: { seed: { text: string; n: number } | null }) {
   const { user } = useAuth();
   const { pathname, search } = useLocation();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const log = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLElement>(null);
   // Which league they came from (the More page links here with ?from=slug).
   const leagueSlug = new URLSearchParams(search).get('from');
 
   useEffect(() => { log.current?.scrollTo({ top: log.current.scrollHeight }); }, [msgs, busy]);
 
-  async function ask() {
-    const q = text.trim();
+  // "Ask" under the search results: jump down here and ask it (or show how to sign in first).
+  useEffect(() => {
+    if (!seed) return;
+    // After the question shows in the box, so the page has its final height.
+    window.setTimeout(() => box.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    if (user) void ask(seed.text.slice(0, ASK_MAX_CHARS));
+    else setText(seed.text.slice(0, ASK_MAX_CHARS));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seed?.n]);
+
+  async function ask(question = text) {
+    const q = question.trim();
     if (!q || busy) return;
     const next = [...msgs, { role: 'user' as const, content: q }];
     setMsgs(next);
@@ -125,7 +158,7 @@ function AskQuestion() {
   }
 
   return (
-    <section className="card stack" id="ask">
+    <section className="card stack" id="ask" ref={box}>
       <h2>Ask a question</h2>
       {!user ? (
         <p className="muted">

@@ -368,7 +368,8 @@ const ALL_ITEMS = HELP_SECTIONS.flatMap((s) => s.items);
 const STOP = new Set('a an and are can do does for how i in is it me my of on or our the to we what when where who why with you your'.split(' '));
 // Rough word endings, so "settling", "settled" and "settle" all match.
 const stem = (w: string) => (w.length > 4 ? w.replace(/(ing|ed|es|s)$/, '').replace(/e$/, '') : w);
-const words = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length > 1 && !STOP.has(w)).map(stem);
+/** The words that matter in a search, stemmed. The user's guide search uses them too. */
+export const words = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length > 1 && !STOP.has(w)).map(stem);
 
 /** The questions that best match what someone typed, best first. */
 export function searchHelp(query: string, limit = 10): HelpItem[] {
