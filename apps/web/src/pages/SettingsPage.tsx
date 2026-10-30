@@ -406,7 +406,25 @@ function PaymentLinks() {
         {done && <span className="small good">Saved ✓</span>}
       </div>
       <ErrorText>{error ?? saved.error}</ErrorText>
+      <MatchMoneyChoice disabled={!allowed} />
     </form>
+  );
+}
+
+/** Who handles match and press money: the golfers among themselves (OCBC), or the commissioner with the side games. */
+function MatchMoneyChoice({ disabled }: { disabled: boolean }) {
+  const { league, reloadLeague } = useLeague();
+  const { busy, error, run } = useAction();
+  const value = league.matchMoney ?? 'golfers';
+  const pick = async (v: 'golfers' | 'commissioner') => { const ok = await run(async () => { await api.updateLeague(league.id, { matchMoney: v }); return true; }); if (ok) reloadLeague(); };
+  return (
+    <fieldset className="segmented stack" disabled={disabled || busy}>
+      <legend className="small"><strong>Match and press money</strong></legend>
+      <label className={value === 'golfers' ? 'on' : ''}><input type="radio" name="match-money" checked={value === 'golfers'} onChange={() => pick('golfers')} /> Golfers settle it with each other; the app shows who won and lost</label>
+      <label className={value === 'commissioner' ? 'on' : ''}><input type="radio" name="match-money" checked={value === 'commissioner'} onChange={() => pick('commissioner')} /> It goes through you, with skins and closest to the pin</label>
+      <p className="small muted">Skins, closest to the pin and prizes are always paid by you: each settled week has a Pay out list with Venmo and PayPal filled in. Season dues are on the Play page.</p>
+      <ErrorText>{error}</ErrorText>
+    </fieldset>
   );
 }
 

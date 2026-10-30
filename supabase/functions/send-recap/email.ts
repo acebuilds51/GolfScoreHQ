@@ -15,9 +15,19 @@ export interface RecapEmailInput {
   /** The league-wide recap from the engine's recapText(). */
   recapBody: string;
   playerName: string;
-  /** This golfer's money this week and season to date, in cents (null = league doesn't play for money). */
+  /**
+   * What the commissioner pays this golfer (or, if negative, collects) this
+   * week and season to date, in cents (null = league doesn't play for money).
+   * With match money between golfers this is skins, closest to the pin and prizes.
+   */
   weekCents: number | null;
   seasonCents: number | null;
+  /**
+   * Match and press money settled between the golfers themselves (null: the
+   * league runs it through the commissioner, or plays no match). Shown, never asked for.
+   */
+  matchCents?: number | null;
+  seasonMatchCents?: number | null;
   payment: PaymentHandles;
   /** The commissioner-approved write-up of the week (AI-drafted), shown above the results. */
   story?: string | null;
@@ -46,6 +56,26 @@ const signed = (c: number) => `${c > 0 ? '+' : c < 0 ? '−' : ''}${dollars(c)}`
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const clean = (s: string | null | undefined) => (s ?? '').trim().replace(/^@/, '');
 
+/** Money settled between golfers (when the league plays it that way); everything else goes through the commissioner. */
+export const MATCH_KINDS = ['match', 'press'];
+export type MatchMoney = 'golfers' | 'commissioner';
+
+/**
+ * One golfer's money split the way the league handles it: what the commissioner
+ * pays (or collects), and match money settled within the group (null when it
+ * goes through the commissioner too).
+ */
+export function splitMoney(rows: { playerId: string; kind: string; amount: number }[], playerId: string, matchMoney: MatchMoney) {
+  let commissioner = 0;
+  let match = 0;
+  for (const r of rows) {
+    if (r.playerId !== playerId) continue;
+    if (matchMoney === 'golfers' && MATCH_KINDS.includes(r.kind)) match += r.amount;
+    else commissioner += r.amount;
+  }
+  return { commissioner, match: matchMoney === 'golfers' ? match : null };
+}
+
 /** Ways to pay the commissioner, with an amount filled in where the app supports it. */
 export function paymentOptions(p: PaymentHandles, owedCents: number): { label: string; url: string | null }[] {
   const amount = (owedCents / 100).toFixed(2);
@@ -61,19 +91,31 @@ export function buildRecapEmail(i: RecapEmailInput): RecapEmail {
   const first = i.playerName.split(' ')[0] || i.playerName;
 
   const personal: string[] = [];
-  if (i.weekCents !== null) {
+  const matchApart = i.matchCents !== undefined && i.matchCents !== null;
+  if (i.weekCents !== null && matchApart) {
+    // Match money between golfers: say what the commissioner pays, and the match result on its own.
+    if (i.weekCents > 0) personal.push(`The commissioner owes you ${dollars(i.weekCents)} this week.`);
+    else if (i.weekCents < 0) personal.push(`You owe the commissioner ${dollars(i.weekCents)} this week.`);
+    const m = i.matchCents!;
+    personal.push(m > 0 ? `You won ${dollars(m)} on your match and presses.` : m < 0 ? `You lost ${dollars(m)} on your match and presses.` : i.weekCents === 0 ? 'No money changed hands for you this week.' : '');
+    if (i.seasonCents !== null) {
+      const sm = i.seasonMatchCents ?? 0;
+      personal.push(`Season to date: ${signed(i.seasonCents)} from the commissioner${sm ? `, ${signed(sm)} on matches` : ''}.`);
+    }
+  } else if (i.weekCents !== null) {
     personal.push(
       i.weekCents > 0 ? `You won ${dollars(i.weekCents)} this week.` : i.weekCents < 0 ? `You owe ${dollars(i.weekCents)} this week.` : 'No money changed hands for you this week.',
     );
     if (i.seasonCents !== null) personal.push(`Season to date: ${signed(i.seasonCents)}.`);
   }
+  const personalText = personal.filter(Boolean).join(' ');
   const pay = i.weekCents !== null && i.weekCents < 0 ? paymentOptions(i.payment, -i.weekCents) : [];
   const story = (i.story ?? '').trim().split(/\n\s*\n/).map((p) => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
 
   const text = [
     `Hi ${first},`,
     '',
-    ...(personal.length ? [personal.join(' '), ''] : []),
+    ...(personalText ? [personalText, ''] : []),
     ...(pay.length ? ['Pay the commissioner:', ...pay.map((p) => `  ${p.label}${p.url ? ` — ${p.url}` : ''}`), ''] : []),
     ...story.flatMap((p) => [p, '']),
     i.recapBody,
@@ -117,7 +159,7 @@ export function buildRecapEmail(i: RecapEmailInput): RecapEmail {
   </div>
   <div style="background:#fff;border:1px solid #dde1de;border-top:0;border-radius:0 0 10px 10px;padding:20px;font-size:15px;line-height:1.5">
     <p style="margin:0 0 12px">Hi ${esc(first)},</p>
-    ${personal.length ? `<p style="margin:0 0 12px;font-size:16px"><strong>${esc(personal.join(' '))}</strong></p>` : ''}
+    ${personalText ? `<p style="margin:0 0 12px;font-size:16px"><strong>${esc(personalText)}</strong></p>` : ''}
     ${pay.length ? `<div style="background:#e1f5ee;border-radius:8px;padding:12px;margin:0 0 16px"><div style="font-weight:700;margin-bottom:6px">Pay the commissioner</div>${pay
       .map((p) => (p.url ? `<div><a href="${esc(p.url)}" style="color:#0b6247">${esc(p.label)}</a></div>` : `<div>${esc(p.label)}</div>`))
       .join('')}</div>` : ''}

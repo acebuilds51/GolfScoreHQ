@@ -138,7 +138,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
     },
     async league(slug) {
       const me = await uid();
-      const l = check(await sb.from('leagues').select('id, name, slug, plan, join_code, timezone, logo_url, banner_url, brand_color, accent_color, share_phones, share_emails, show_money, rsvp_reminder_days').eq('slug', slug).maybeSingle()) as Row | null;
+      const l = check(await sb.from('leagues').select('id, name, slug, plan, join_code, timezone, logo_url, banner_url, brand_color, accent_color, share_phones, share_emails, show_money, match_money, rsvp_reminder_days').eq('slug', slug).maybeSingle()) as Row | null;
       if (!l) return null;
       // All at once: the plans list is tiny, so fetch it rather than wait for the plan first.
       const [member, eff, plans] = await Promise.all([
@@ -153,7 +153,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
         role: ((check(member) as Row | null)?.role ?? 'player') as Role,
         effectivePlan, features: plan?.features ?? [],
         logoUrl: l.logo_url, bannerUrl: l.banner_url, brandColor: l.brand_color, accentColor: l.accent_color, sharePhones: !!l.share_phones,
-        shareEmails: !!l.share_emails, showMoney: l.show_money !== false,
+        shareEmails: !!l.share_emails, showMoney: l.show_money !== false, matchMoney: l.match_money === 'commissioner' ? 'commissioner' : 'golfers',
         rsvpReminderDays: l.rsvp_reminder_days ?? null,
       };
       return league;
@@ -168,6 +168,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
       if (patch.sharePhones !== undefined) row.share_phones = patch.sharePhones;
       if (patch.shareEmails !== undefined) row.share_emails = patch.shareEmails;
       if (patch.showMoney !== undefined) row.show_money = patch.showMoney;
+      if (patch.matchMoney !== undefined) row.match_money = patch.matchMoney;
       if (patch.rsvpReminderDays !== undefined) row.rsvp_reminder_days = patch.rsvpReminderDays;
       check(await sb.from('leagues').update(row).eq('id', id));
     },
@@ -308,7 +309,7 @@ export function supabaseApi(url: string, anonKey: string): Api {
     },
 
     async seasons(leagueId) {
-      const rows = check(await sb.from('seasons').select('id, league_id, year, name, rules, start_date, league_day').eq('league_id', leagueId).order('year', { ascending: false }).order('created_at', { ascending: false })) as Row[];
+      const rows = check(await sb.from('seasons').select('id, league_id, year, name, rules, start_date, league_day, dues_cents').eq('league_id', leagueId).order('year', { ascending: false }).order('created_at', { ascending: false })) as Row[];
       return rows.map(toSeason);
     },
     async createSeason(leagueId, s) {
@@ -684,6 +685,33 @@ export function supabaseApi(url: string, anonKey: string): Api {
       check(await sb.from('ctp_decisions').upsert({ event_id: eventId, league_id: leagueId, hole_number: holeNumber, player_id: playerId, decided_by: await uid(), decided_at: new Date().toISOString() }));
     },
 
+    async payHandles(leagueId) {
+      const rows = check(await sb.from('player_pay_handles').select('player_id, venmo, paypal_me, zelle').eq('league_id', leagueId)) as Row[];
+      return Object.fromEntries(rows.map((r) => [r.player_id, { venmo: r.venmo, paypalMe: r.paypal_me, zelle: r.zelle }]));
+    },
+    async savePayHandles(leagueId, playerId, h) {
+      check(await sb.from('player_pay_handles').upsert({
+        player_id: playerId, league_id: leagueId, venmo: h.venmo, paypal_me: h.paypalMe, zelle: h.zelle, updated_at: new Date().toISOString(),
+      }));
+    },
+    async setSeasonDues(seasonId, cents) {
+      check(await sb.rpc('set_season_dues', { p_season: seasonId, p_cents: cents }));
+    },
+    async duesPaid(seasonId) {
+      const rows = check(await sb.from('dues_payments').select('player_id, amount_cents, paid_at').eq('season_id', seasonId)) as Row[];
+      return Object.fromEntries(rows.map((r) => [r.player_id, { amountCents: r.amount_cents, paidAt: r.paid_at }]));
+    },
+    async markDuesPaid(seasonId, playerId, paid) {
+      check(await sb.rpc('mark_dues_paid', { p_season: seasonId, p_player: playerId, p_paid: paid }));
+    },
+    async payoutsPaid(eventId) {
+      const rows = check(await sb.from('payouts_paid').select('player_id, amount_cents, paid_at').eq('event_id', eventId)) as Row[];
+      return Object.fromEntries(rows.map((r) => [r.player_id, { amountCents: r.amount_cents, paidAt: r.paid_at }]));
+    },
+    async markPayoutPaid(eventId, playerId, amountCents, paid) {
+      check(await sb.rpc('mark_payout_paid', { p_event: eventId, p_player: playerId, p_amount_cents: amountCents, p_paid: paid }));
+    },
+
     async chipIn(leagueId, amountCents) {
       return check(await sb.rpc('say_would_chip_in', { p_league: leagueId, p_amount_cents: amountCents })) as number;
     },
@@ -721,7 +749,7 @@ const ROUND_SELECT =
   'id, event_id, tee_slot, status, current_hole, submitted_at, round_players(player_id, side, position, course_handicap), hole_scores(player_id, hole_number, strokes), presses(id, start_hole_number, called_by, created_at), ctp_reports(hole_number, player_id, beat_player_id)';
 
 function toSeason(r: Row): Season {
-  return { id: r.id, leagueId: r.league_id, year: r.year, name: r.name, rules: r.rules, startDate: r.start_date, leagueDay: r.league_day };
+  return { id: r.id, leagueId: r.league_id, year: r.year, name: r.name, rules: r.rules, startDate: r.start_date, leagueDay: r.league_day, duesCents: r.dues_cents ?? null };
 }
 
 function teeTimeRow(r: Row): TeeTime {
