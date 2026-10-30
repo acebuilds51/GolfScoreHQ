@@ -651,3 +651,38 @@ input.limit-input { width: 90px; padding: 2px 6px; margin: 0 4px 0 8px; font-siz
   body { background: #fff; }
   .guide-page .card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
 }
+
+/* Lessons */
+.lesson-tiles { display: flex; flex-direction: column; gap: 10px; }
+.lesson-tile { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); }
+.lesson-tile.done { opacity: 0.85; }
+.lesson-icon { font-size: 1.8rem; line-height: 1; }
+.lesson-title { font-size: 1.3rem; margin: 0; }
+.lesson-say { font-size: 1.08rem; line-height: 1.5; margin: 0; }
+.lesson-progress { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.lesson-progress span { display: block; height: 100%; background: var(--accent); transition: width 0.25s; }
+.lesson-opt { text-align: left; font: inherit; font-size: 1rem; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.lesson-opt:disabled { cursor: default; }
+.lesson-opt.right { border-color: var(--accent); background: var(--accent-bg); }
+.lesson-opt.wrong { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
+.lesson-feel { display: flex; gap: 10px; }
+.lesson-feel button { flex: 1; font: inherit; padding: 10px 4px; border-radius: 14px; border: 2px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.lesson-feel button b { display: block; font-size: 1.8rem; }
+.lesson-feel button.on { border-color: var(--accent); background: var(--accent-bg); }
+.lesson textarea { font-size: 16px; }
+/* The pretend phone */
+.pretend { border: 3px solid var(--chrome); border-radius: 22px; overflow: hidden; background: var(--bg, var(--surface)); max-width: 400px; width: 100%; margin: 0 auto; box-shadow: 0 6px 20px rgb(16 42 30 / 0.15); }
+.pretend-bar { background: var(--chrome); color: var(--on-chrome); padding: 8px 14px; font-weight: 700; font-size: 0.9rem; }
+.pretend-body { padding: 12px; }
+.pretend .score-list .step { pointer-events: auto; }
+.pretend-off { opacity: 0.45; pointer-events: none; }
+span.step { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
+.pretend-field { display: flex; flex-direction: column; gap: 2px; }
+.pretend-input { border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; background: var(--surface); }
+.pretend-check { font-size: 0.95rem; }
+.pretend-lines { display: flex; flex-direction: column; gap: 6px; }
+.pretend-option { text-align: left; font: inherit; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); }
+.pretend-option.on { border-color: var(--accent); background: var(--accent-bg); font-weight: 600; }
+.tap-glow { position: relative; z-index: 1; animation: tap-glow 1.2s ease-in-out infinite; outline: 3px solid #f2b632; outline-offset: 2px; cursor: pointer; }
+@keyframes tap-glow { 0%, 100% { box-shadow: 0 0 0 0 rgb(242 182 50 / 0.7); } 50% { box-shadow: 0 0 0 10px rgb(242 182 50 / 0); } }
+@media (prefers-reduced-motion: reduce) { .tap-glow { animation: none; } }
