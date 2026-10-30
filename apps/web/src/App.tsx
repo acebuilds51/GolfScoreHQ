@@ -6,8 +6,8 @@ import { PageSkeleton } from './components/ui';
 import { SiteFooter } from './components/SiteFooter';
 import { AuthContext, useAuth, useAuthState } from './lib/hooks';
 import {
-  AwardsPage, CoursesPage, HelpPage, ImportPage, JoinInvitePage, PilotPage, PlayerPage, prefetchPages, PricingPage, PrivacyPage, RefundsPage,
-  RosterPage, RsvpLinkPage, SettingsPage, SetupServicePage, StaffPage, TermsPage, TvPage,
+  AwardsPage, CoursesPage, ForCoursesPage, HelpPage, ImportPage, JoinInvitePage, PilotPage, PlayerPage, prefetchPages, PricingPage, PrivacyPage, RefundsPage,
+  RosterPage, RsvpLinkPage, SettingsPage, SetupServicePage, SetupWizardPage, StaffPage, TermsPage, TvPage,
 } from './lib/lazyPages';
 // League night's pages are in the first download.
 import { LeagueLayout } from './pages/LeagueLayout';
@@ -60,6 +60,7 @@ export function App() {
             <Route path="awards" element={<AwardsPage />} />
             <Route path="player/:playerId" element={<PlayerPage />} />
             <Route path="setup" element={<SetupServicePage />} />
+            <Route path="start" element={<SetupWizardPage />} />
             <Route path="import" element={<ImportPage />} />
             <Route path="live" element={<LivePage />} />
             <Route path="live/:eventId" element={<LivePage />} />
@@ -70,6 +71,7 @@ export function App() {
           </Route>
           <Route path="/help" element={<HelpPage />} />
           <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/courses" element={<ForCoursesPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/refunds" element={<RefundsPage />} />

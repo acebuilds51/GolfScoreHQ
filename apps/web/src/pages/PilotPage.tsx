@@ -86,7 +86,7 @@ function StartPilotLeague({ code }: { code: string }) {
       const finalSlug = cleanSlugInput(effectiveSlug);
       if (!SLUG_RE.test(finalSlug)) return setError('League link: use 2 to 41 letters, numbers or dashes, like shepherds-hollow.');
       const id = await run(() => api.createPilotLeague(code, name.trim(), finalSlug));
-      if (id) nav(`/l/${finalSlug}`);
+      if (id) nav(`/l/${finalSlug}/start`);
     }}>
       <h2>Start your pilot league</h2>
       <label>League name<input placeholder="Oak Creek Thursday League" value={name} onChange={(e) => { setName(e.target.value); setError(null); }} /></label>

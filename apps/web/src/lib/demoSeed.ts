@@ -90,7 +90,8 @@ export async function seedDemoLeague(api: DemoApi, onProgress: (text: string) =>
 
   onProgress('Setting up the league…');
   const leagueId = await api.createLeague(look.league || "Thursday Men's League", DEMO_SLUG);
-  await api.setPlan(leagueId, 'pro');
+  // The Course plan, so the TV shows the sponsor screen a course can sell.
+  await api.setPlan(leagueId, 'club');
   await api.updateLeague(leagueId, {
     timezone: 'America/New_York', showMoney: true,
     ...(look.color ? { brandColor: hex(look.color) } : {}), ...(look.accent ? { accentColor: hex(look.accent) } : {}),
@@ -176,7 +177,10 @@ export async function seedDemoLeague(api: DemoApi, onProgress: (text: string) =>
   // Tonight: three groups out on the course, the last one about to tee off.
   await playWeek(WEEKS_PLAYED + 1, [6, 4, 2, 0]);
 
-  const tv = await api.createTvDisplay(leagueId, 'Grill room TV', { hideMoney: false, secondsPerPanel: 12, panels: TV_PANELS });
+  const tv = await api.createTvDisplay(leagueId, 'Grill room TV', {
+    hideMoney: false, secondsPerPanel: 12, panels: TV_PANELS,
+    sponsor: { name: `${look.course || 'Demo Golf Club'} Pro Shop`.slice(0, 60), message: 'League members: 10% off balls and gloves this week', logoUrl: null },
+  });
   saveDemoTvToken(tv);
   return DEMO_SLUG;
 }

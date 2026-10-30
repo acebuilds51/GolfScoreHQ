@@ -14,6 +14,7 @@ function page<M, K extends keyof M>(load: () => Promise<M>, name: K) {
 export const SettingsPage = page(() => import('../pages/SettingsPage'), 'SettingsPage');
 export const AwardsPage = page(() => import('../pages/AwardsPage'), 'AwardsPage');
 export const PlayerPage = page(() => import('../pages/PlayerPage'), 'PlayerPage');
+export const SetupWizardPage = page(() => import('../pages/SetupWizardPage'), 'SetupWizardPage');
 export const SetupServicePage = page(() => import('../pages/SetupServicePage'), 'SetupServicePage');
 export const ImportPage = page(() => import('../pages/ImportPage'), 'ImportPage');
 export const StaffPage = page(() => import('../pages/StaffPage'), 'StaffPage');
@@ -25,6 +26,7 @@ export const CoursesPage = page(() => import('../pages/CoursesPage'), 'CoursesPa
 export const RosterPage = page(() => import('../pages/RosterPage'), 'RosterPage');
 export const HelpPage = page(() => import('../pages/HelpPage'), 'HelpPage');
 export const PricingPage = page(() => import('../pages/LegalPages'), 'PricingPage');
+export const ForCoursesPage = page(() => import('../pages/ForCoursesPage'), 'ForCoursesPage');
 export const TermsPage = page(() => import('../pages/LegalPages'), 'TermsPage');
 export const PrivacyPage = page(() => import('../pages/LegalPages'), 'PrivacyPage');
 export const RefundsPage = page(() => import('../pages/LegalPages'), 'RefundsPage');

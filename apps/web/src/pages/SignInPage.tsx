@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ErrorText } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction } from '../lib/hooks';
@@ -87,6 +88,10 @@ export function SignInPage() {
           <li>Golfers don't need an account to be on the roster</li>
           <li>Free to start. Pro adds side games, money and more.</li>
         </ul>
+        <div className="row wrap">
+          <a className="btn btn-primary" href="/demo">See a live demo</a>
+          <Link className="btn" to="/courses">Run a golf course?</Link>
+        </div>
       </section>
       <SignInForm />
     </div>

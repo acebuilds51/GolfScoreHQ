@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { PRICE, PRO_PERKS } from '../lib/plans';
+import { COURSE_OFFER, PRICE, PRO_PERKS } from '../lib/plans';
 
 // Public pages Stripe and customers expect: pricing, terms, privacy, refunds.
 // Plain-language drafts; have them reviewed by a lawyer before relying on them.
@@ -52,13 +52,17 @@ export function PricingPage() {
           </ul>
         </section>
         <section className="card stack">
-          <h2>Club</h2>
-          <p><span className="num upgrade-price">{PRICE.club}</span> <span className="small muted">per year, up to 5 leagues</span></p>
+          <h2>Course plan</h2>
+          <p><span className="num upgrade-price">{PRICE.course}</span> <span className="small muted">per year, every league at your course</span></p>
           <ul className="ticks small">
-            <li>Everything in Pro, for up to 5 of your leagues</li>
-            <li>Add or remove leagues anytime</li>
-            <li>Priority support</li>
+            <li>For golf courses</li>
+            <li>Everything in Pro, for every league at the course</li>
+            <li>Clubhouse TV with a sponsor screen</li>
+            <li>Every league set up for you</li>
+            <li>Billed to the course by invoice</li>
           </ul>
+          <p className="small"><strong>{COURSE_OFFER}</strong> No cost through January 31, 2027.</p>
+          <div><Link className="btn" to="/courses">For golf courses</Link></div>
         </section>
       </div>
       <p className="small muted">
@@ -86,7 +90,7 @@ export function TermsPage() {
       <p>GolfScoreHQ records amounts that golfers win or owe within their league and can show links to the commissioner's Venmo, PayPal or Zelle. <strong>We never hold, send or receive league money</strong>, and we are not a party to any arrangement between golfers. Leagues are responsible for making sure any games or wagers they play follow the laws where they play.</p>
 
       <h2>Paid plans</h2>
-      <p>Pro and Club are yearly subscriptions billed in advance through our payment processor, Stripe. They <strong>renew automatically each year</strong> at the then-current price until cancelled. You can cancel anytime from <strong>Settings → Plan → Manage billing</strong>; the plan stays active until the end of the paid year and then the league returns to Free. Nothing in your league is deleted when a plan ends. Refunds are covered by our <Link to="/refunds">Refund Policy</Link>. We'll give at least 30 days' notice of any price change before it applies to your renewal.</p>
+      <p>Pro is a yearly subscription billed in advance through our payment processor, Stripe. They <strong>renew automatically each year</strong> at the then-current price until cancelled. You can cancel anytime from <strong>Settings → Plan → Manage billing</strong>; the plan stays active until the end of the paid year and then the league returns to Free. Nothing in your league is deleted when a plan ends. Refunds are covered by our <Link to="/refunds">Refund Policy</Link>. We'll give at least 30 days' notice of any price change before it applies to your renewal. The Course plan for golf courses is billed to the course by invoice on the terms we agree with the course.</p>
 
       <h2>Your content</h2>
       <p>Your league's information (rosters, scores, results, logos and photos) stays yours. You give us permission to store, process and display it only to run the Service for you, including sharing pictures or emails you choose to send. Don't upload anything you don't have the right to use, or anything unlawful or abusive.</p>
@@ -173,7 +177,7 @@ export function PrivacyPage() {
 export function RefundsPage() {
   return (
     <LegalPage title="Refund Policy">
-      <p><strong>Full refund within {LEGAL.refundDays} days.</strong> If you're not happy with a Pro or Club plan, email <Mail /> within {LEGAL.refundDays} days of being charged (for a new plan or a yearly renewal) and we'll refund that charge in full. No questions asked.</p>
+      <p><strong>Full refund within {LEGAL.refundDays} days.</strong> If you're not happy with a Pro plan, email <Mail /> within {LEGAL.refundDays} days of being charged (for a new plan or a yearly renewal) and we'll refund that charge in full. No questions asked.</p>
       <h2>After {LEGAL.refundDays} days</h2>
       <p>Charges older than {LEGAL.refundDays} days aren't refunded. You can still cancel anytime from <strong>Settings → Plan → Manage billing</strong>: your plan stays on until the end of the year you paid for, and it won't renew.</p>
       <h2>How refunds are paid</h2>

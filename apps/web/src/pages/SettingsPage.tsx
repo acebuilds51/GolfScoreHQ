@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CopyField, ErrorText, ProLock } from '../components/ui';
+import { CopyField, ErrorText, PLAN_LABEL, ProLock } from '../components/ui';
 import { api } from '../lib/backend';
 import { brandBanner, brandLogo, brandStyle, PALETTES, parseHex, resizeBanner, resizeLogo } from '../lib/brand';
 import type { DemoApi } from '../lib/demoApi';
@@ -580,7 +580,7 @@ function TvDisplayEditor({ display, onChanged }: { display: TvDisplay; onChanged
   );
 }
 
-/** Club plan: a sponsor's screen in the TV rotation and a line along the bottom. */
+/** Course plan: a sponsor's screen in the TV rotation and a line along the bottom. */
 function TvSponsorEditor({ settings, busy, save }: { settings: TvSettings; busy: boolean; save: (s: TvSettings) => Promise<void> }) {
   const { league } = useLeague();
   const club = league.features.includes('multi_league');
@@ -588,7 +588,7 @@ function TvSponsorEditor({ settings, busy, save }: { settings: TvSettings; busy:
   const [draft, setDraft] = useState<TvSponsor>(saved ?? { name: '', message: '', logoUrl: '' });
   const [open, setOpen] = useState(false);
   if (!club) {
-    return <p className="small muted">Club plan: add a sponsor (the pro shop, a local business) with their own screen in the rotation.</p>;
+    return <p className="small muted">Course plan: add a sponsor (the pro shop, a local business) with their own screen in the rotation.</p>;
   }
   if (!open) {
     return (
@@ -623,7 +623,7 @@ function DemoPlan({ onChanged }: { onChanged: () => void }) {
       <div className="row wrap">
         {(['free', 'pro', 'club', 'pilot'] as Plan[]).map((p) => (
           <button key={p} className={`btn btn-sm ${league.plan === p ? 'btn-primary' : ''}`} onClick={async () => { await (api as DemoApi).setPlan(league.id, p); onChanged(); }}>
-            {p[0]!.toUpperCase() + p.slice(1)}
+            {PLAN_LABEL[p]}
           </button>
         ))}
       </div>

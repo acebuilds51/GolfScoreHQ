@@ -60,7 +60,8 @@ function CreateLeague() {
         const finalSlug = cleanSlugInput(effectiveSlug);
         if (!SLUG_RE.test(finalSlug)) return setError('League link: use 2 to 41 letters, numbers or dashes, like shepherds-hollow.');
         const id = await run(() => api.createLeague(name.trim(), finalSlug));
-        if (id) nav(`/l/${finalSlug}`);
+        // Straight into the setup questions; they can skip any of it.
+        if (id) nav(`/l/${finalSlug}/start`);
       }}
     >
       <h2>Create a league</h2>

@@ -197,7 +197,7 @@ function CourseFinder({ onPick }: { onPick: (course: LookupCourse, tee: LookupTe
   );
 }
 
-function AddCourse({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
+export function AddCourse({ onDone, onCancel, cancelLabel = 'Cancel' }: { onDone: () => void; onCancel: () => void; cancelLabel?: string }) {
   const { league } = useLeague();
   const [name, setName] = useState('');
   const [city, setCity] = useState('');
@@ -326,7 +326,7 @@ function AddCourse({ onDone, onCancel }: { onDone: () => void; onCancel: () => v
       <ErrorText>{error}</ErrorText>
       <div className="row">
         <button className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save course'}</button>
-        <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>{cancelLabel}</button>
       </div>
     </form>
   );

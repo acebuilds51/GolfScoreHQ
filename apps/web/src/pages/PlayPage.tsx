@@ -10,7 +10,7 @@ import {
 } from '../lib/scoring';
 import { SeasonDues } from '../components/Payouts';
 
-const FORMAT_HELP: Record<FormatKey, string> = {
+export const FORMAT_HELP: Record<FormatKey, string> = {
   bestBallMatch: 'Two teams of two in each group. Each hole goes to the team with the lowest single score.',
   strokePlay: 'Everyone plays their own ball against the whole league. Lowest total wins the week.',
   stableford: 'Points on every hole: 2 for par, 3 for birdie, 1 for bogey, 0 for double or worse. Most points wins, and one bad hole never ruins the night.',

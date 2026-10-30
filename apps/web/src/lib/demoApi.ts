@@ -736,7 +736,7 @@ export function demoApi(): DemoApi {
         requireCommissioner(db, target.leagueId);
         const l = db.leagues.find((x) => x.id === target.leagueId)!;
         if (l.plan === 'pilot' || l.plan === 'comp') throw new Error('This league already has GolfScoreHQ Pro free.');
-        if (l.plan === 'club') throw new Error('This league is covered by a Club plan.');
+        if (l.plan === 'club') throw new Error('This league is covered by a Course plan.');
         Object.assign(l, { plan: 'pro', planExpiresAt: yearOut, demoSub: { status: 'active', renewsAt: yearOut, cancelAtPeriodEnd: false, paidByMe: true } });
         save(db);
         return `/l/${l.slug}/settings?billing=done`;
@@ -779,10 +779,9 @@ export function demoApi(): DemoApi {
       }
       const c = db.clubs.find((x) => x.id === clubId && x.ownerId === db.session);
       if (!c) throw new Error("That club isn't yours.");
-      if (!c.expiresAt || new Date(c.expiresAt) < new Date()) throw new Error('Start the Club plan first.');
+      if (!c.expiresAt || new Date(c.expiresAt) < new Date()) throw new Error('Start the Course plan first.');
       if (l.plan === 'pilot' || l.plan === 'comp') throw new Error("This league already has GolfScoreHQ free; it doesn't need the Club.");
       if (l.demoSub && !l.demoSub.cancelAtPeriodEnd) throw new Error("This league pays for its own Pro plan. Cancel it under Manage billing first, so you aren't charged twice.");
-      if (db.leagues.filter((x) => x.clubId === clubId && x.id !== leagueId).length >= 5) throw new Error('A Club covers up to 5 leagues.');
       Object.assign(l, { clubId, plan: 'club', planExpiresAt: null });
       save(db);
     },
@@ -1069,7 +1068,7 @@ export function demoApi(): DemoApi {
       // Same rule as enforce_tv_sponsor() in the database.
       const sp = patch.settings?.sponsor;
       if (sp && JSON.stringify(sp) !== JSON.stringify(d.settings.sponsor ?? null)) {
-        if (!has(db, d.leagueId, 'multi_league')) throw new Error('plan_feature: A TV sponsor needs the Club plan');
+        if (!has(db, d.leagueId, 'multi_league')) throw new Error('plan_feature: A TV sponsor needs the Course plan');
         if (!sp.name || sp.name.length > 60 || (sp.message ?? '').length > 140 || (sp.logoUrl && !/^https:\/\//.test(sp.logoUrl))) {
           throw new Error('Sponsor: a name (up to 60 characters), a line up to 140, and a logo link starting with https://.');
         }

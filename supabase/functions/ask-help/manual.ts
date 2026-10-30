@@ -12,7 +12,7 @@ export interface HelpItem {
   /** Plain text; a line break starts a new paragraph. */
   a: string;
   who: HelpAudience;
-  /** Needs Pro (or Club, or a pilot league). */
+  /** Needs Pro (or the Course plan, or a pilot league). */
   pro?: boolean;
   /** Other words people search with. */
   tags?: string;
@@ -47,7 +47,12 @@ export const HELP_SECTIONS: HelpSection[] = [
       {
         id: 'create-league', who: 'commissioner', tags: 'new league start setup',
         q: 'How do I start a league?',
-        a: 'Sign in, then on Your leagues fill in "Create a league": the league name (the league link fills itself in) and tap "Create league".\nThe league\'s Home page then shows a "Set up your league" checklist: add your course, add your golfers, invite them, and set a league code. Then set up the season on the Play tab.',
+        a: 'Sign in, then on Your leagues fill in "Create a league": the league name (the league link fills itself in) and tap "Create league".\nYou go straight to a few setup questions (your course, how you play, when you play, your golfers), and GolfScoreHQ builds the season, weeks and roster from your answers. Skip any of it and do it later from the "Set up your league" checklist on the league\'s Home page.',
+      },
+      {
+        id: 'setup-questions', who: 'commissioner', tags: 'set up build wizard questions season weeks quick',
+        q: 'Can the app set up my league from my answers?',
+        a: 'Yes. Home → "Answer a few questions and we\'ll build it" (new leagues start there). Five short steps: your course, how you play (format, side games, match money), when you play (league night, first week, how many weeks, nights off), your golfers (paste a list), then "Check and build" shows what will be made before you tap "Build my league". Tee times and season dues need Pro. Change anything later on the Play, Roster and Settings tabs.\nRather have us do it? "Send my answers to GolfScoreHQ" on the last step sends them to "We set up your league" (Pro).',
       },
       {
         id: 'demo', who: 'everyone', tags: 'try test practice sample',
@@ -312,7 +317,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       {
         id: 'free-vs-pro', who: 'everyone', tags: 'free pro price cost plan what do i get',
         q: 'What\'s free and what needs Pro?',
-        a: 'Free: scoring on phones, the live leaderboard, standings, roster, invites, handicaps, best ball match and stroke play, and the current season.\nPro ($149 per league, per year) adds skins, closest to the pin, presses and match money, payouts and dues, Stableford and scramble, the tee sheet, RSVPs and the sub finder, the recap email, awards, past seasons, co-commissioners, your logo and colors, Clubhouse TV, and "We set up your league".\nClub ($299 a year) covers up to 5 leagues and adds a sponsor on the clubhouse TV.',
+        a: 'Free: scoring on phones, the live leaderboard, standings, roster, invites, handicaps, best ball match and stroke play, and the current season.\nPro ($149 per league, per year) adds skins, closest to the pin, presses and match money, payouts and dues, Stableford and scramble, the tee sheet, RSVPs and the sub finder, the recap email, awards, past seasons, co-commissioners, your logo and colors, Clubhouse TV, and "We set up your league".\nGolf courses: the Course plan ($990 a year) covers every league at the course and adds a pro shop sponsor on the clubhouse TV. It\'s set up by GolfScoreHQ and invoiced; see golfscorehq.app/courses.',
       },
       {
         id: 'upgrade', who: 'commissioner', tags: 'upgrade buy pay subscribe stripe',

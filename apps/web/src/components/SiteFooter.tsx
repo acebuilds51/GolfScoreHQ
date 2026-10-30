@@ -8,6 +8,7 @@ export function SiteFooter() {
       <nav aria-label="About GolfScoreHQ">
         <Link to="/help">Help</Link>
         <Link to="/pricing">Pricing</Link>
+        <Link to="/courses">For golf courses</Link>
         <Link to="/terms">Terms</Link>
         <Link to="/privacy">Privacy</Link>
         <Link to="/refunds">Refunds</Link>
