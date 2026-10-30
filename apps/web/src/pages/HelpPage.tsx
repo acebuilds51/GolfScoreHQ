@@ -32,6 +32,7 @@ export function HelpPage() {
       <div>
         <h1>Help</h1>
         <p className="muted">How to run league night with GolfScoreHQ, for commissioners and golfers. Can't find it? Ask at the bottom of the page.</p>
+        <p className="small">New to GolfScoreHQ? The <Link to="/guide">commissioner's guide</Link> and <Link to="/guide?for=golfers">golfer's guide</Link> walk through the season step by step.</p>
       </div>
       <input
         type="search" className="help-search" placeholder="Search: settle a week, add a sub, Venmo, handicaps…" value={query}

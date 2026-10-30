@@ -7,6 +7,7 @@ export function SiteFooter() {
     <footer className="site-footer">
       <nav aria-label="About GolfScoreHQ">
         <Link to="/help">Help</Link>
+        <Link to="/guide">User's guide</Link>
         <Link to="/pricing">Pricing</Link>
         <Link to="/courses">For golf courses</Link>
         <Link to="/terms">Terms</Link>

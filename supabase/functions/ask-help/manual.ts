@@ -212,7 +212,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       {
         id: 'next-season', who: 'commissioner', tags: 'new season next year',
         q: 'How do I start next season?',
-        a: 'Play tab → "Start the next season". It copies your format, side games, league night and tee times; change anything after. Last season stays in Standings and Awards (looking back at past seasons needs Pro).',
+        a: 'Play tab → "Start the … season" (the button names next year, like "Start the 2028 season"). It copies your format, side games, league night and tee times; change anything after. Last season stays in Standings and Awards (looking back at past seasons needs Pro).',
       },
       {
         id: 'setup-service', who: 'commissioner', pro: true, tags: 'set up for me spreadsheet help import',

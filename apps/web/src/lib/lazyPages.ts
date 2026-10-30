@@ -25,6 +25,7 @@ export const JoinInvitePage = page(() => import('../pages/JoinInvitePage'), 'Joi
 export const CoursesPage = page(() => import('../pages/CoursesPage'), 'CoursesPage');
 export const RosterPage = page(() => import('../pages/RosterPage'), 'RosterPage');
 export const HelpPage = page(() => import('../pages/HelpPage'), 'HelpPage');
+export const GuidePage = page(() => import('../pages/GuidePage'), 'GuidePage');
 export const PricingPage = page(() => import('../pages/LegalPages'), 'PricingPage');
 export const ForCoursesPage = page(() => import('../pages/ForCoursesPage'), 'ForCoursesPage');
 export const TermsPage = page(() => import('../pages/LegalPages'), 'TermsPage');
