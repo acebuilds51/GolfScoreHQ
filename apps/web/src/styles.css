@@ -618,7 +618,8 @@ input.limit-input { width: 90px; padding: 2px 6px; margin: 0 4px 0 8px; font-siz
 .help-msg.err { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); }
 .help-msg-actions { margin-top: 6px; gap: 6px; }
 .help-ask { display: flex; gap: 8px; align-items: stretch; }
-.help-ask textarea { flex: 1; resize: none; font: inherit; }
+/* 16px: smaller and iPhones zoom the page in when you tap the box. */
+.help-ask textarea { flex: 1; resize: none; font: inherit; font-size: 16px; }
 
 /* Setup questions */
 .wizard-steps { display: flex; flex-wrap: wrap; gap: 4px 14px; list-style: none; margin: 0; padding: 0; font-size: 0.9rem; }
@@ -651,3 +652,31 @@ input.limit-input { width: 90px; padding: 2px 6px; margin: 0 4px 0 8px; font-siz
   body { background: #fff; }
   .guide-page .card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
 }
+
+/* The ? on every screen, and its Ask panel */
+.help-fab {
+  position: fixed; right: 16px; bottom: calc(18px + env(safe-area-inset-bottom)); z-index: 30;
+  width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font: 800 1.2rem/1 inherit; cursor: pointer; color: var(--on-chrome); background: var(--chrome);
+  border: 2px solid color-mix(in srgb, var(--accent) 70%, transparent); box-shadow: 0 4px 14px rgb(16 42 30 / 0.25);
+}
+.help-fab:hover { filter: brightness(1.15); }
+@media (max-width: 700px) {
+  /* Above the bottom bar in a league. */
+  .help-fab.in-league { bottom: calc(80px + env(safe-area-inset-bottom)); }
+}
+.help-sheet-backdrop { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / 0.5); display: flex; align-items: flex-end; justify-content: center; }
+.help-sheet-backdrop[hidden] { display: none; }
+.help-sheet {
+  width: 100%; max-width: 520px; max-height: 80vh; overflow-y: auto; background: var(--surface); color: var(--text);
+  border-radius: 20px 20px 0 0; padding: 18px 16px calc(20px + env(safe-area-inset-bottom)); box-shadow: 0 -8px 30px rgb(0 0 0 / 0.25);
+}
+.help-sheet h2 { margin: 0 0 2px; }
+.help-sheet .help-chat { max-height: 45vh; }
+.help-sheet-close { font-size: 1rem; }
+@media (min-width: 701px) {
+  /* On a computer: a panel in the corner rather than across the bottom. */
+  .help-sheet-backdrop { align-items: flex-end; justify-content: flex-end; padding: 0 16px 76px; background: rgb(0 0 0 / 0.25); }
+  .help-sheet { border-radius: 16px; max-width: 420px; }
+}
+@media print { .help-fab, .help-sheet-backdrop { display: none !important; } }
