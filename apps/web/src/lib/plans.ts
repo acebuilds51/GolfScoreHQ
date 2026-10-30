@@ -1,6 +1,8 @@
 // What we sell, in words for the upgrade screens. Prices must match the
 // Stripe prices (and the plans table).
-export const PRICE = { pro: '$149', club: '$299' } as const;
+export const PRICE = { pro: '$149', club: '$299', course: '$990' } as const;
+/** The Course plan is sold to golf courses directly and billed by invoice, not through Stripe Checkout. */
+export const COURSE_OFFER = 'Founding Course price, for the first 5 Florida courses.';
 /** Pro for one league, one year (the "I'd chip in" limit in the database matches). */
 export const PRO_CENTS = 14900;
 
@@ -15,7 +17,7 @@ export function shareDollars(golfers: number): number | null {
 export const PRO_PERKS = [
   'Skins, closest to the pin, presses and match money, settled for you',
   'Tee sheet: tee times, captains, groups and partners',
-  'Weekly recap email with an AI write-up and pay links',
+  'Weekly recap email with a story of the week and pay links',
   'RSVP and sub finder',
   'Clubhouse TV leaderboard',
   'Your logo, colors and course photo',
