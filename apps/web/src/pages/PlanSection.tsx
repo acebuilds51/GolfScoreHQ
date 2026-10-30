@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ErrorText } from '../components/ui';
+import { ErrorText, PLAN_LABEL } from '../components/ui';
 import { namesLine } from '../components/UpgradeCard';
 import { fmtMoney } from '../lib/scoring';
 import { api } from '../lib/backend';
@@ -65,7 +65,7 @@ export function PlanSection() {
     <section className="card stack plan-card" id="plan">
       <div className="row between wrap">
         <h2>Plan</h2>
-        <span className={`badge ${plan === 'free' ? 'badge-neutral' : 'badge-pro'}`}>{{ free: 'Free', pro: 'Pro', club: 'Club', pilot: 'Pilot', comp: 'Complimentary' }[plan]}</span>
+        <span className={`badge ${plan === 'free' ? 'badge-neutral' : 'badge-pro'}`}>{PLAN_LABEL[plan]}</span>
       </div>
 
       {waiting && <p className="notice">Payment received. Turning on Pro… this takes a few seconds.</p>}
@@ -75,8 +75,8 @@ export function PlanSection() {
       {plan === 'comp' && <p>Every Pro feature is on for your league, free.</p>}
       {plan === 'club' && (
         <p>
-          Covered by the <strong>{b?.clubName ?? 'Club'}</strong> plan{b?.expiresAt ? `, paid through ${fmtDay(b.expiresAt)}` : ''}.
-          {b?.isOwner && <> Manage it on <Link to="/leagues">Your leagues</Link>.</>}
+          Covered by the Course plan for <strong>{b?.clubName ?? 'your course'}</strong>{b?.expiresAt ? `, paid through ${fmtDay(b.expiresAt)}` : ''}.
+          {b?.isOwner && <> See it on <Link to="/leagues">Your leagues</Link>.</>}
         </p>
       )}
 
@@ -119,7 +119,7 @@ export function PlanSection() {
               By upgrading you agree to the <Link to="/terms">Terms</Link> and <Link to="/refunds">Refund Policy</Link>.
             </p>
           </div>
-          <p className="small muted">Running several leagues? A <strong>Club</strong> covers up to 5 of your leagues for {PRICE.club} a year. Set it up on <Link to="/leagues">Your leagues</Link>.</p>
+          <p className="small muted">Run a golf course? The <strong>Course plan</strong> covers every league at your course. <Link to="/courses">For golf courses</Link></p>
           <PilotCodeEntry />
         </>
       )}

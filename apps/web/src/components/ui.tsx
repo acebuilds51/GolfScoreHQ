@@ -5,7 +5,8 @@ export function ErrorText({ children }: { children: ReactNode }) {
   return children ? <p className="error" role="alert">{children}</p> : null;
 }
 
-const PLAN_LABEL: Record<Plan, string> = { free: 'Free', pro: 'Pro', club: 'Club', pilot: 'Pilot', comp: 'Complimentary' };
+/** The 'club' plan is sold as the Course plan. */
+export const PLAN_LABEL: Record<Plan, string> = { free: 'Free', pro: 'Pro', club: 'Course', pilot: 'Pilot', comp: 'Complimentary' };
 
 export function PlanBadge({ plan }: { plan: Plan }) {
   return <span className={`badge ${plan === 'free' ? 'badge-neutral' : 'badge-pro'}`}>{PLAN_LABEL[plan]}</span>;

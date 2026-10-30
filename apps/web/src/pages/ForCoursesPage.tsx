@@ -2,8 +2,6 @@ import { Link } from 'react-router-dom';
 import { COURSE_OFFER, PRICE } from '../lib/plans';
 import { LEGAL } from './LegalPages';
 
-const PHONE = '248-767-5318';
-
 /** golfscorehq.app/courses: the pitch for golf course pro shops (every league at the facility). */
 export function ForCoursesPage() {
   return (
@@ -16,7 +14,7 @@ export function ForCoursesPage() {
         </p>
         <div className="row wrap">
           <a className="btn btn-primary" href="/demo">See a live demo</a>
-          <a className="btn" href={`tel:${PHONE}`}>Call or text Tony: {PHONE}</a>
+          <a className="btn" href={`mailto:${LEGAL.email}?subject=GolfScoreHQ%20for%20our%20course`}>Email Tony</a>
         </div>
       </section>
 
@@ -56,7 +54,7 @@ export function ForCoursesPage() {
           <li>Billed to the course by invoice, with the price locked for as long as you stay</li>
           <li>Direct line to the person who built it</li>
         </ul>
-        <p className="small muted">A commissioner running a few leagues on their own can use the <Link to="/pricing">Pro or Club plans</Link> instead.</p>
+        <p className="small muted">A commissioner running a league on their own can use the <Link to="/pricing">Free or Pro plans</Link> instead.</p>
       </section>
 
       <section className="card stack">
@@ -74,7 +72,7 @@ export function ForCoursesPage() {
           15 league nights and 102 matches, scored live with the skins and side money settled every week. Now I'm bringing it to a
           few Florida courses. You deal with me directly, and I set up every league myself.
         </p>
-        <p>Tony Edmonds · <a href={`tel:${PHONE}`}>{PHONE}</a> (call or text) · <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a></p>
+        <p>Tony Edmonds · <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a></p>
       </section>
     </div>
   );
