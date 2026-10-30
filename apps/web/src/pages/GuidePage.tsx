@@ -19,6 +19,7 @@ export function GuidePage() {
       <div>
         <h1>User's guide</h1>
         <p className="muted">{guide.intro}</p>
+        <p className="small no-print">Rather practise? Try the <Link to={which === 'golfers' ? '/lessons' : '/lessons?for=commissioners'}>lessons</Link>: league night on pretend screens, a few minutes each.</p>
       </div>
       <div className="row between wrap no-print">
         <div className="segmented-row" role="tablist" aria-label="Guide for">

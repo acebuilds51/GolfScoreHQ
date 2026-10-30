@@ -66,6 +66,13 @@ export function MorePage() {
               <Icon name="chevron" size={18} />
             </Link>
           </li>
+          <li>
+            <Link to={isCommissioner(league.role) ? '/lessons?for=commissioners' : '/lessons'}>
+              <Icon name="flag" />
+              <span className="grow">Lessons: practise league night</span>
+              <Icon name="chevron" size={18} />
+            </Link>
+          </li>
         </ul>
       </nav>
       <ReportProblem />

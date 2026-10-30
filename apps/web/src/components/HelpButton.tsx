@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { AskChat } from './AskChat';
 
-/** Screens where a floating button would get in the way: the scorecard's + and − buttons, and the Help page, which has its own Ask box. */
-const HIDDEN = [/^\/l\/[^/]+\/round\//, /^\/help(\/|$)/];
+/** Screens where a floating button would get in the way: the scorecard's + and − buttons (real, or pretend in a lesson), and the Help page, which has its own Ask box. */
+const HIDDEN = [/^\/l\/[^/]+\/round\//, /^\/help(\/|$)/, /^\/lessons\/[^/]+/];
 
 /**
  * The ? in the corner of every screen, like Upset Special's: opens "Ask about
