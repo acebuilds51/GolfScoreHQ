@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Icon } from '../components/Icon';
 import { EmptyState, ErrorText, PageSkeleton, ProLock } from '../components/ui';
 import { api } from '../lib/backend';
@@ -118,7 +118,9 @@ function NewRequest({ onSent, onCancel }: { onSent: (emailError: string | null) 
   const { league } = useLeague();
   const [wants, setWants] = useState<SetupWant[]>(['roster', 'handicaps', 'course']);
   const [files, setFiles] = useState<SetupFile[]>([]);
-  const [notes, setNotes] = useState('');
+  // Answers from the setup questions ("Send my answers to GolfScoreHQ") start the notes.
+  const fromQuestions = (useLocation().state as { notes?: string } | null)?.notes ?? '';
+  const [notes, setNotes] = useState(fromQuestions.slice(0, 4000));
   const [phone, setPhone] = useState('');
   const [consent, setConsent] = useState(false);
   const { busy, error, setError, run } = useAction();

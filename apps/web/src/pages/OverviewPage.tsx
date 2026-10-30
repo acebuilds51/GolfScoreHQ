@@ -28,6 +28,7 @@ export function OverviewPage() {
 
   const steps = [
     { done: courses.some((c) => c.leagueId === league.id), label: 'Add your course', to: 'courses' },
+    { done: !!season, label: 'Set up the season', to: 'play' },
     { done: active.length > 0, label: 'Add your golfers', to: 'roster' },
     { done: joined > 0 || members.length > 1, label: 'Invite golfers to join', to: 'roster' },
     { done: !!league.joinCode, label: 'Set a league code', to: 'settings' },
@@ -48,6 +49,8 @@ export function OverviewPage() {
       {commish && steps.some((s) => !s.done) && (
         <section className="card">
           <h2>Set up your league</h2>
+          <p><Link className="btn btn-primary btn-sm" to="start">Answer a few questions and we'll build it</Link></p>
+          <p className="small muted">Or do it a step at a time:</p>
           <ol className="checklist">
             {steps.map((s) => (
               <li key={s.label} className={s.done ? 'done' : ''}>
