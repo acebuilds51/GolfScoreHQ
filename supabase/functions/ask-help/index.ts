@@ -3,10 +3,11 @@
 //   POST { messages: [{ role, content }, …], leagueSlug? } → { answer, id }
 //
 // Signed-in people only, 20 questions an hour each. Claude answers from the
-// Help page's questions and answers; every question is saved for staff to see
+// Help page's questions and answers and the user's guide; every question is saved for staff to see
 // what people get stuck on. Secrets: ANTHROPIC_API_KEY, HELP_AI_MODEL (optional).
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { answerFromResponse, cleanConversation, HELP_BETA, helpRequest } from './ask.ts';
+import { guideText } from './guide.ts';
 import { manualText } from './manual.ts';
 
 const cors = {
@@ -17,7 +18,8 @@ const cors = {
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 const env = (k: string) => Deno.env.get(k) ?? '';
 const PER_HOUR = 20;
-const MANUAL = manualText();
+// The Help page's answers, then the user's guide.
+const MANUAL = `${manualText()}\n\n${guideText()}`;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });

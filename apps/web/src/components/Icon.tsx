@@ -13,6 +13,7 @@ const PATHS = {
   trophy: 'M8 21h8M12 17v4M7 4h10M17 4v8a5 5 0 0 1-10 0V4M5 9m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M19 9m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0',
   install: 'M12 3v12M8 11l4 4 4-4M5 21h14',
   help: 'M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0-18 0M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4.5M12 17.5h.01',
+  book: 'M3 5a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v16a2 2 0 0 0-2-2H3zM21 5a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v16a2 2 0 0 1 2-2h7z',
 } as const;
 
 export type IconName = keyof typeof PATHS;

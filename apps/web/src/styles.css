@@ -634,3 +634,20 @@ input.limit-input { width: 90px; padding: 2px 6px; margin: 0 4px 0 8px; font-siz
 .prefixed.dollars { max-width: 160px; }
 .review-list { margin: 0; padding-left: 22px; line-height: 1.5; }
 .review-list li + li { margin-top: 6px; }
+
+/* User's guide */
+.page.narrow.guide-page { max-width: 720px; }
+.guide-contents { margin: 0; padding-left: 22px; line-height: 1.8; }
+.guide-contents a { color: var(--brand-2); font-weight: 600; text-decoration: none; }
+.guide-num { margin: 0 0 2px; text-transform: uppercase; letter-spacing: 0.06em; }
+.guide-chapter h2 { margin: 0 0 4px; }
+.guide-steps { margin: 0; padding-left: 24px; line-height: 1.55; display: flex; flex-direction: column; gap: 10px; }
+.guide-steps li::marker { font-weight: 700; color: var(--brand-2); }
+.guide-tip { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--accent-bg); line-height: 1.5; }
+.print-only { display: none; }
+@media print {
+  .topbar, .demo-bar, .bottom-bar, .site-footer, .no-print { display: none !important; }
+  .print-only { display: block; }
+  body { background: #fff; }
+  .guide-page .card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
+}
