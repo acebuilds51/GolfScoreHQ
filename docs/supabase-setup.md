@@ -51,6 +51,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 31. `20261125000000_upgrade_interest.sql` (free leagues: golfers say they'd chip in their share of Pro; commissioners get a notification and see who)
 32. `20261126000000_payouts.sql` (paying out: golfers' own Venmo/PayPal/Zelle, season dues and who paid, each week's skins/CTP payouts ticked off, who handles match money; redeploy `send-recap`)
 33. `20261127000000_course_plan.sql` (the Club plan becomes the Course plan for golf courses, with no 5-league cap)
+34. `20261128000000_help_questions.sql` (Help page "Ask a question": saves each question and its answer for staff; deploy `ask-help`, see step 9)
 
 **B. Command line**
 
@@ -173,3 +174,15 @@ npx supabase functions deploy health-report --no-verify-jwt --use-api
 ```
 
 When you upgrade a plan (Supabase Pro, Resend Pro), raise its limit with **Change limit** under Capacity so the warnings stay meaningful.
+
+## 9. Help page "Ask a question"
+
+The Help page (`/help`) lists questions and answers for commissioners and golfers. Signed-in people can also type a question: Claude answers from those same questions and answers (`supabase/functions/ask-help/manual.ts`), and every question shows on `/staff` under **Help questions**, so you can see what people get stuck on and add answers. "Send it to us" lands under App health as a golfer report, with their email, and in the daily email.
+
+It uses the same `ANTHROPIC_API_KEY` secret as the recap write-up; `HELP_AI_MODEL` changes the model (default `claude-opus-5-5`). Each person can ask 20 questions an hour.
+
+```bash
+npx supabase functions deploy ask-help --use-api
+```
+
+When the app changes, update `manual.ts` so the Help page and the answers stay right.

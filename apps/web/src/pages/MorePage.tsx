@@ -50,6 +50,17 @@ export function MorePage() {
           )}
         </section>
       )}
+      <nav className="card flush" aria-label="Help">
+        <ul className="list more-list">
+          <li>
+            <Link to={`/help?from=${encodeURIComponent(league.slug)}`}>
+              <Icon name="help" />
+              <span className="grow">Help and questions</span>
+              <Icon name="chevron" size={18} />
+            </Link>
+          </li>
+        </ul>
+      </nav>
       <ReportProblem />
     </div>
   );

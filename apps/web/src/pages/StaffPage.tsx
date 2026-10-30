@@ -23,6 +23,7 @@ export function StaffPage() {
   return (
     <div className="page stack">
       <Health />
+      <HelpQuestions />
       <PilotCodes />
       <div className="row between wrap">
         <div>
@@ -42,6 +43,46 @@ const ago = (iso: string) => {
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
   return m < 60 ? `${m} min ago` : m < 48 * 60 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
 };
+
+/** What people asked on the Help page: gaps to fill in the answers. Unanswered and "didn't help" first. */
+function HelpQuestions() {
+  const [days, setDays] = useState(30);
+  const [all, setAll] = useState(false);
+  const qs = useAsync(() => api.staffHelpQuestions(days), [days], { fresh: true });
+  const list = qs.data ?? [];
+  const missed = list.filter((q) => !q.answer || q.helpful === false);
+  const shown = all ? list : missed;
+  return (
+    <section className="card stack">
+      <div className="row between wrap">
+        <h2>Help questions</h2>
+        <select value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="How far back">
+          <option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={90}>Last 90 days</option>
+        </select>
+      </div>
+      <ErrorText>{qs.error}</ErrorText>
+      <p className="small muted">
+        {list.length} asked · {list.filter((q) => !q.answer).length} not answered · {list.filter((q) => q.helpful === false).length} said it didn't help · {list.filter((q) => q.helpful).length} said it did.
+        Questions sent to us also show above as golfer reports.
+      </p>
+      <label className="check-row small"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Show every question, not just the missed ones</label>
+      {shown.length === 0 ? <p className="small muted">{qs.data ? 'Nothing to look at.' : 'Loading…'}</p> : (
+        <ul className="list">
+          {shown.slice(0, 100).map((q) => (
+            <li key={q.id} className="list-row">
+              <div className="grow stack" style={{ gap: 4 }}>
+                <strong>{q.question}</strong>
+                <span className="small muted">{[q.email, q.leagueName, ago(q.createdAt), q.turn > 1 ? 'follow-up' : null].filter(Boolean).join(' · ')}</span>
+                {q.answer ? <details className="small"><summary>{q.helpful === false ? "Answer (didn't help)" : q.helpful ? 'Answer (helped)' : 'Answer'}</summary><p className="pre-wrap">{q.answer}</p></details>
+                  : <span className="small warn">Not answered</span>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 /** App health: problems the app reported, failed timers and calls, and capacity against the plan limits. */
 function Health() {

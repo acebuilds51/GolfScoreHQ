@@ -1,7 +1,7 @@
 import type { CourseSummary, LookupCourse } from '../../../../supabase/functions/course-lookup/normalize';
 import type { HealthSnapshot } from '../../../../supabase/functions/health-report/report';
 import type {
-  AppErrorReport, UpgradeInterest, MatchMoney, PaidMark, PayHandles,
+  AppErrorReport, HelpQuestion, UpgradeInterest, MatchMoney, PaidMark, PayHandles,
   Club, LeagueBilling,
   Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, LedgerRow, Member, NewCourse, NewPlayer, Player, Role,
   PaymentHandles, RecapPreview, RoundData, RoundPlayer, RsvpStatus, ScoreEntry, Season, SubOffer, SubRequest, TvDisplay, TvFeed, TvSettings, User,
@@ -228,6 +228,13 @@ export interface Api {
   takeBackChipIn(leagueId: string): Promise<void>;
   /** How many offered and how much; your own offer; names for commissioners. */
   upgradeInterest(leagueId: string): Promise<UpgradeInterest>;
+
+  /** Help page "Ask a question": an answer from the Help page's own Q&A (the question is saved for staff). */
+  askHelp(messages: { role: 'user' | 'assistant'; content: string }[], leagueSlug: string | null): Promise<{ answer: string; id: string | null }>;
+  /** "Did this help?" on an answer. */
+  rateHelpAnswer(id: string, helpful: boolean): Promise<void>;
+  /** Staff: questions people asked on the Help page, newest first. */
+  staffHelpQuestions(days: number): Promise<HelpQuestion[]>;
 
   /** Diagnostics: the app reports a crash, a failed action, or a golfer's "Report a problem" note. Never throws. */
   logAppError(report: AppErrorReport): Promise<void>;
