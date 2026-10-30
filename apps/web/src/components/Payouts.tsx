@@ -186,16 +186,18 @@ export function SeasonDues({ season, onChanged }: { season: Season; onChanged: (
         {season.duesCents && !editing && <button className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}>Change amount</button>}
       </div>
       {editing ? (
-        <form className="row wrap" onSubmit={async (e) => {
+        <form className="stack" onSubmit={async (e) => {
           e.preventDefault();
           const n = amount.trim() ? Number(amount) : 0;
           if (!(n >= 0 && n <= 10000)) return setError('Enter dues in dollars, up to $10,000.');
           const ok = await run(async () => { await api.setSeasonDues(season.id, Math.round(n * 100) || null); return true; });
           if (ok) { setEditing(false); onChanged(); }
         }}>
-          <label className="inline">Each golfer pays up front<span className="prefixed"><span>$</span><input inputMode="decimal" value={amount} placeholder="e.g. 150" onChange={(e) => { setAmount(e.target.value.replace(/[^\d.]/g, '')); setError(null); }} /></span></label>
-          <button className="btn btn-sm" disabled={busy}>Save</button>
-          <span className="small muted grow">For example the season's skins and closest-to-the-pin money. Leave blank for no dues.</span>
+          <p className="small muted">What each golfer pays you up front, for example the season's skins and closest-to-the-pin money. Leave blank for no dues.</p>
+          <div className="row wrap bottom">
+            <label className="inline">Each golfer pays<span className="prefixed dollars"><span>$</span><input inputMode="decimal" value={amount} placeholder="150" onChange={(e) => { setAmount(e.target.value.replace(/[^\d.]/g, '')); setError(null); }} /></span></label>
+            <button className="btn btn-sm" disabled={busy}>Save</button>
+          </div>
         </form>
       ) : season.duesCents ? (
         <>
