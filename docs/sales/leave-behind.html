@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GolfScoreHQ for golf courses</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* One US Letter page. Print to PDF from Edge/Chrome with margins "None". */
+  @page { size: letter; margin: 0; }
+  :root { --navy: #0f2a47; --brand: #14365c; --accent: #1d9e75; --accent-bg: #e1f5ee; --text: #1d2321; --text-2: #56615c; --border: #d6e0d8; --under: #c0392b; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #fff; color: var(--text); font: 10.5pt/1.4 Inter, Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sheet { width: 8.5in; height: 11in; padding: 0.5in 0.55in; display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
+  h1, h2, .display { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; letter-spacing: 0.01em; }
+  header { background: var(--navy); color: #fff; border-radius: 14px; padding: 20px 24px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+  .brand { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 15pt; opacity: 0.85; }
+  header h1 { margin: 2px 0 6px; font-size: 30pt; line-height: 1; }
+  header p { margin: 0; font-size: 11pt; opacity: 0.9; max-width: 4.6in; }
+  .tv { background: #0b2238; border: 3px solid #26405c; border-radius: 10px; padding: 8px 10px; width: 2.3in; flex: none; font-size: 8pt; }
+  .tv .top { display: flex; justify-content: space-between; color: #9fb3c8; margin-bottom: 4px; }
+  .tv .live { background: #c0392b; color: #fff; border-radius: 4px; padding: 0 5px; font-weight: 600; }
+  .tv table { width: 100%; border-collapse: collapse; color: #fff; }
+  .tv td { padding: 2px 0; border-top: 1px solid #1d3a57; }
+  .tv td.n { text-align: right; font-weight: 600; }
+  .tv .u { color: #ff8a7a; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .card h2 { margin: 0 0 6px; font-size: 16pt; color: var(--brand); }
+  ul { margin: 0; padding-left: 18px; }
+  li { margin: 3px 0; }
+  li b { color: var(--brand); }
+  .formats { color: var(--text-2); font-size: 9.5pt; margin-top: 8px; }
+  .offer { background: var(--accent-bg); border: 2px solid var(--accent); border-radius: 14px; padding: 16px 20px; display: flex; gap: 20px; align-items: center; }
+  .offer h2 { margin: 0 0 4px; font-size: 20pt; color: #0b6247; }
+  .offer .price { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 34pt; color: #0b6247; line-height: 1; text-align: center; flex: none; }
+  .offer .price small { display: block; font-size: 11pt; font-weight: 600; }
+  .offer ul { padding-left: 16px; }
+  .try { display: flex; gap: 18px; align-items: center; border: 1px dashed var(--border); border-radius: 12px; padding: 14px 18px; }
+  .try img { width: 1.35in; height: 1.35in; flex: none; }
+  .try h2 { margin: 0 0 4px; font-size: 18pt; color: var(--brand); }
+  .try p { margin: 2px 0; }
+  .url { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 16pt; color: var(--brand); }
+  footer { margin-top: auto; display: flex; justify-content: space-between; color: var(--text-2); font-size: 9.5pt; border-top: 1px solid var(--border); padding-top: 10px; }
+  footer b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header>
+    <div>
+      <div class="brand">GolfScoreHQ</div>
+      <h1>Every league at your course, run for you.</h1>
+      <p>Golfers score on their phones. The leaderboard goes live on your grill-room TV. Skins, closest to the pin and match money settle themselves. No spreadsheets, no arguments.</p>
+    </div>
+    <div class="tv" aria-label="Clubhouse TV example">
+      <div class="top"><span>Thursday Men's League · Wk 7</span><span class="live">LIVE</span></div>
+      <table>
+        <tr><td>1 Tom Brennan</td><td class="n">thru 4</td><td class="n u">-1</td></tr>
+        <tr><td>T2 Mike Russo</td><td class="n">thru 6</td><td class="n">E</td></tr>
+        <tr><td>T2 Joe Castellano</td><td class="n">thru 6</td><td class="n">E</td></tr>
+        <tr><td>T2 Ron Baxter</td><td class="n">thru 6</td><td class="n">E</td></tr>
+        <tr><td>T2 Steve Ortiz</td><td class="n">thru 2</td><td class="n">E</td></tr>
+        <tr><td>6 Larry Novak</td><td class="n">thru 4</td><td class="n">+1</td></tr>
+      </table>
+    </div>
+  </header>
+
+  <div class="cols">
+    <div class="card">
+      <h2>For the pro shop</h2>
+      <ul>
+        <li><b>Clubhouse TV.</b> A live leaderboard keeps golfers in the grill room after the round.</li>
+        <li><b>Every league in one place.</b> Men's, ladies', couples, twilight. One login, no paper.</li>
+        <li><b>Sponsor screen.</b> Sell the TV slot to a local business.</li>
+        <li><b>Your staff does nothing.</b> Golfers and commissioners run it from their phones.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>For the league commissioner</h2>
+      <ul>
+        <li><b>Scores on phones,</b> hole by hole, live for everyone.</li>
+        <li><b>Handicaps:</b> GHIN index or calculated from league rounds.</li>
+        <li><b>Money done:</b> skins, CTP, matches and presses, with Venmo / PayPal / Zelle links. The app never holds money.</li>
+        <li><b>RSVPs, sub finder, weekly recap email</b> and season awards.</li>
+      </ul>
+      <div class="formats">Formats: best-ball match play · stroke play · Stableford · scramble</div>
+    </div>
+  </div>
+
+  <div class="offer">
+    <div class="price">$0<small>through Jan 31, 2027</small></div>
+    <div>
+      <h2>Founding Course offer: first 5 courses only</h2>
+      <ul>
+        <li>Every league at your course free through <b>January 31, 2027</b>. We set them up for you.</li>
+        <li>Keep it after that for <b>$990 a year, all your leagues</b>, with the price locked for as long as you stay.</li>
+        <li>No contract. Not for you? Just stop. Nothing to cancel before February.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="try">
+    <img src="demo-qr.svg" alt="QR code for golfscorehq.app/demo">
+    <div>
+      <h2>See it in 30 seconds</h2>
+      <p>Point your phone camera at the code, or go to</p>
+      <p class="url">golfscorehq.app/demo</p>
+      <p>A sample league with tonight's groups out on the course. Tap around: live scores, standings, money, the TV screen. Nothing to sign up for.</p>
+    </div>
+  </div>
+
+  <footer>
+    <span><b>Tony Edmonds</b>, founder · <b>248-767-5318</b> (call or text) · support@golfscorehq.app</span>
+    <span>golfscorehq.app</span>
+  </footer>
+
+</div>
+</body>
+</html>
