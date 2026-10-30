@@ -2,6 +2,7 @@ import { Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Header } from './components/Header';
+import { HelpButton } from './components/HelpButton';
 import { PageSkeleton } from './components/ui';
 import { SiteFooter } from './components/SiteFooter';
 import { AuthContext, useAuth, useAuthState } from './lib/hooks';
@@ -84,6 +85,7 @@ export function App() {
         </ErrorBoundary>
         <SiteFooter />
       </main>
+      <HelpButton />
     </AuthContext.Provider>
   );
 }
