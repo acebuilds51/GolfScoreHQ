@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { api, demoSite } from '../lib/backend';
 import type { DemoApi } from '../lib/demoApi';
-import { demoTvToken, setDemoSite } from '../lib/demoSite';
+import { demoLink, demoTvToken, setDemoSite } from '../lib/demoSite';
 import { useAuth } from '../lib/hooks';
 
 /** The public demo's bar: made-up data, the TV screen, start over, and the way back to the real site. */
@@ -12,7 +12,7 @@ function DemoSiteBar() {
       Demo league with made-up golfers. Nothing you do here is saved anywhere.{' '}
       {tv && <a href={`/tv/${tv}`} target="_blank" rel="noreferrer">Open the clubhouse TV</a>}
       {tv && ' · '}
-      <a href="/demo">Start over</a>
+      <a href={demoLink()}>Start over</a>
       {' · '}
       <a
         href="/"

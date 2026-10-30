@@ -4,6 +4,24 @@
 const SITE_KEY = 'gshq-demo-site';
 /** The demo league's TV link token, so the demo bar can open the TV screen. */
 const TV_KEY = 'gshq-demo-tv';
+/** The last /demo link's query (a course's personalized demo), so "Start over" keeps it. */
+const LINK_KEY = 'gshq-demo-link';
+
+export function demoLink(): string {
+  try {
+    return `/demo${localStorage.getItem(LINK_KEY) ?? ''}`;
+  } catch {
+    return '/demo';
+  }
+}
+
+export function saveDemoLink(search: string) {
+  try {
+    localStorage.setItem(LINK_KEY, search);
+  } catch {
+    /* "Start over" opens the plain demo */
+  }
+}
 
 export function inDemoSite(): boolean {
   try {
@@ -19,6 +37,7 @@ export function setDemoSite(on: boolean) {
     else {
       localStorage.removeItem(SITE_KEY);
       localStorage.removeItem(TV_KEY);
+      localStorage.removeItem(LINK_KEY);
     }
   } catch {
     /* storage blocked: the demo page says so */
