@@ -443,6 +443,24 @@ export interface HelpQuestion {
   leagueName: string | null;
 }
 
+export type FeedbackKind = 'idea' | 'question';
+export type FeedbackStatus = 'new' | 'planned' | 'done' | 'not_now' | 'answered';
+
+/** An idea or a question someone sent GolfScoreHQ, and our reply. */
+export interface Feedback {
+  id: string;
+  kind: FeedbackKind;
+  message: string;
+  status: FeedbackStatus;
+  reply: string | null;
+  repliedAt: string | null;
+  createdAt: string;
+  leagueName: string | null;
+  /** Staff view only. */
+  email?: string | null;
+  path?: string | null;
+}
+
 export const COMMISSIONER_ROLES: Role[] = ['owner', 'commissioner'];
 export const isCommissioner = (role: Role | undefined) => !!role && COMMISSIONER_ROLES.includes(role);
 

@@ -350,6 +350,11 @@ export const HELP_SECTIONS: HelpSection[] = [
         a: 'More → "Report a problem": say what happened and what you were trying to do, and tap "Send". The page you were on and your phone type go with it so we can find it. Or ask at the bottom of this page and tap "Send it to us".',
       },
       {
+        id: 'ideas', who: 'everyone', tags: 'idea suggestion feature request wish ask a person contact support question setup',
+        q: 'How do I suggest an idea, or ask a person a question?',
+        a: 'More → "Ideas and questions for us" (or "Send us an idea" under the ? popup). Pick "I have an idea" or "I have a question for you", type it, and tap "Send". We read every one. Our answer, and whether an idea is planned or in the app, shows on that page, with a notification on your phone if you\'ve turned them on.',
+      },
+      {
         id: 'cant-see-league', who: 'golfer', tags: 'missing league not showing',
         q: 'I joined but don\'t see my league.',
         a: 'If you asked to join with a code, your commissioner has to approve it first. Also check you signed in with the same email the commissioner invited.',

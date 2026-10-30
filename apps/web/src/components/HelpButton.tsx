@@ -53,6 +53,8 @@ export function HelpButton() {
               <Link to="/guide">Commissioner's guide</Link>
               {' · '}
               <Link to="/guide?for=golfers">Golfer's guide</Link>
+              {' · '}
+              <Link to={`/feedback${slug ? `?from=${encodeURIComponent(slug)}` : ''}`} state={{ back: pathname }}>Send us an idea</Link>
             </p>
           </div>
         </div>

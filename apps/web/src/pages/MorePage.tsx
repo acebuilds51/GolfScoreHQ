@@ -73,6 +73,13 @@ export function MorePage() {
               <Icon name="chevron" size={18} />
             </Link>
           </li>
+          <li>
+            <Link to={`/feedback?from=${encodeURIComponent(league.slug)}`}>
+              <Icon name="idea" />
+              <span className="grow">Ideas and questions for us</span>
+              <Icon name="chevron" size={18} />
+            </Link>
+          </li>
         </ul>
       </nav>
       <ReportProblem />

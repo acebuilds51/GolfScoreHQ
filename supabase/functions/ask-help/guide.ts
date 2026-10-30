@@ -144,10 +144,11 @@ export const GUIDES: Guide[] = [
       {
         id: 'help',
         title: 'When you\'re stuck',
-        intro: 'Three ways to get an answer.',
+        intro: 'Four ways to get an answer.',
         steps: [
           { text: 'The Help page (golfscorehq.app/help) has answers to the common questions, with search.' },
-          { text: '"Ask a question" at the bottom of the Help page answers in plain English. If it isn\'t sure, tap "Send it to us" and a person emails you back.' },
+          { text: 'Tap the ? in the corner of any screen to ask in your own words. If it isn\'t sure, tap "Send it to us" and a person answers.' },
+          { text: 'A setup question for a person, or an idea for the app? More → "Ideas and questions for us". Our answer shows there, with a notification.', help: 'ideas' },
           { text: 'Something broken? More → "Report a problem".', help: 'report' },
         ],
       },

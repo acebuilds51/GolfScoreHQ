@@ -1199,3 +1199,56 @@ describe('help questions', () => {
     expect(list).toEqual([expect.objectContaining({ question: 'Can we play a shamble?', answer: null, email: 'joe@example.com', league_name: 'Oak Creek Men', turn: 1 })]);
   });
 });
+
+describe('ideas and questions', () => {
+  const call = (user: string | null, sql: string, params: unknown[] = []) => as(db, user, () => rows<any>(db, sql, params));
+  const send = async (user: string, kind: string, message: string, slug: string | null = 'oak-creek') =>
+    (await call(user, 'select send_feedback($1, $2, $3, $4) as id', [kind, message, slug, '/l/oak-creek/more']))[0].id as string;
+  const pushes = () => rows<{ user_ids: string[]; title: string; url: string }>(db, 'select user_ids, title, url from push_outbox order by id');
+  let staff: string;
+  beforeEach(async () => {
+    staff = await createUser(db, 'staff@golfscorehq.app');
+    await db.query('insert into staff_users (user_id) values ($1)', [staff]);
+  });
+
+  it('a golfer sends an idea; staff get a notification and see it with who sent it', async () => {
+    await send(joe, 'idea', '  Show the skins pot on the TV  ');
+    expect(await pushes()).toEqual([{ user_ids: [staff], title: 'New idea', url: '/staff#feedback' }]);
+    await expect(call(tony, 'select staff_feedback(90)')).rejects.toThrow(/staff only/);
+    const list = (await call(staff, 'select staff_feedback(90) as f'))[0].f;
+    expect(list).toEqual([expect.objectContaining({ kind: 'idea', message: 'Show the skins pot on the TV', status: 'new', email: 'joe@example.com', league_name: 'Oak Creek Men', path: '/l/oak-creek/more' })]);
+  });
+
+  it('checks what is sent', async () => {
+    await expect(call(null, `select send_feedback('idea', 'Hello there')`)).rejects.toThrow(/permission denied/);
+    await expect(call(joe, `select send_feedback('rant', 'Hello there')`)).rejects.toThrow(/idea or question/);
+    await expect(call(joe, `select send_feedback('idea', ' hi ')`)).rejects.toThrow(/a little more/);
+    await expect(call(joe, 'select * from feedback')).rejects.toThrow(/permission denied/);
+    // Not a member of that league: sent without it.
+    await send(sam, 'question', 'Can my league use this?', 'oak-creek');
+    expect(await rows(db, 'select league_id from feedback')).toEqual([{ league_id: null }]);
+  });
+
+  it('each person sees only their own, with the reply; replies and plans notify them', async () => {
+    const q = await send(joe, 'question', 'How do I split the front and back nine?');
+    const idea = await send(joe, 'idea', 'A weather line on the week page');
+    await send(tony, 'idea', 'Dark mode for the TV');
+    await db.query('delete from push_outbox');
+
+    await expect(call(tony, `select staff_answer_feedback($1, 'answered', 'x')`, [q])).rejects.toThrow(/staff only/);
+    await call(staff, `select staff_answer_feedback($1, 'answered', 'Settings, then Nines.')`, [q]);
+    await call(staff, `select staff_answer_feedback($1, 'planned', '')`, [idea]);
+    await call(staff, `select staff_answer_feedback($1, 'planned', '')`, [idea]); // no change: no second notification
+    expect(await pushes()).toEqual([
+      { user_ids: [joe], title: 'GolfScoreHQ answered your question', url: '/feedback' },
+      { user_ids: [joe], title: 'Your idea is on the list', url: '/feedback' },
+    ]);
+
+    const mine = (await call(joe, 'select my_feedback() as f'))[0].f;
+    expect(mine.map((f: any) => [f.message, f.status, f.reply])).toEqual([
+      ['A weather line on the week page', 'planned', null],
+      ['How do I split the front and back nine?', 'answered', 'Settings, then Nines.'],
+    ]);
+    expect(mine[1].replied_at).not.toBeNull();
+  });
+});

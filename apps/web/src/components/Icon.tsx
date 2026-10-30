@@ -14,6 +14,7 @@ const PATHS = {
   install: 'M12 3v12M8 11l4 4 4-4M5 21h14',
   help: 'M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0-18 0M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4.5M12 17.5h.01',
   book: 'M3 5a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v16a2 2 0 0 0-2-2H3zM21 5a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v16a2 2 0 0 1 2-2h7z',
+  idea: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.8 10.6c.6.6.8 1.4.8 2.4h6c0-1 .2-1.8.8-2.4A6 6 0 0 0 12 3z',
 } as const;
 
 export type IconName = keyof typeof PATHS;

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CopyField, ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync } from '../lib/hooks';
-import type { SetupStatus, StaffSetupRequest } from '../lib/types';
+import type { Feedback, FeedbackStatus, SetupStatus, StaffSetupRequest } from '../lib/types';
+import { FEEDBACK_STATUS } from './FeedbackPage';
 import type { ErrorGroup } from '../lib/api';
 import { capacityLines, WARN_AT } from '../../../../supabase/functions/health-report/report';
 import { FileLinks, NoRequests, SETUP_STATUS, SETUP_WANTS } from './SetupServicePage';
@@ -23,6 +24,7 @@ export function StaffPage() {
   return (
     <div className="page stack">
       <Health />
+      <IdeasAndQuestions />
       <HelpQuestions />
       <PilotCodes />
       <div className="row between wrap">
@@ -44,6 +46,71 @@ const ago = (iso: string) => {
   return m < 60 ? `${m} min ago` : m < 48 * 60 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
 };
 
+/** Ideas and questions people sent (/feedback): new ones first; set a status and reply, and they get a notification. */
+function IdeasAndQuestions() {
+  const [showClosed, setShowClosed] = useState(false);
+  const list = useAsync(() => api.staffFeedback(365), [], { fresh: true });
+  const all = list.data ?? [];
+  const open = (f: Feedback) => f.status === 'new' || f.status === 'planned';
+  const shown = all.filter((f) => showClosed || open(f));
+  // The "New idea" notification opens /staff#feedback.
+  useEffect(() => {
+    if (list.data && window.location.hash === '#feedback') document.getElementById('feedback')?.scrollIntoView({ block: 'start' });
+  }, [list.data]);
+  return (
+    <section className="card stack" id="feedback">
+      <div className="row between wrap">
+        <h2>Ideas and questions</h2>
+        <label className="check-row small"><input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} /> Show answered and closed</label>
+      </div>
+      <p className="small muted">
+        {all.filter((f) => f.status === 'new').length} new · {all.filter((f) => f.status === 'planned').length} planned · {all.length} in the last year.
+        A reply, or marking an idea planned or done, sends them a notification.
+      </p>
+      <ErrorText>{list.error}</ErrorText>
+      {shown.length === 0 ? <p className="small muted">{list.data ? 'Nothing waiting.' : 'Loading…'}</p>
+        : shown.map((f) => <FeedbackItem key={f.id} f={f} onSaved={list.reload} />)}
+    </section>
+  );
+}
+
+function FeedbackItem({ f, onSaved }: { f: Feedback; onSaved: () => void }) {
+  const [status, setStatus] = useState<FeedbackStatus>(f.status === 'new' ? (f.kind === 'question' ? 'answered' : 'planned') : f.status);
+  const [reply, setReply] = useState(f.reply ?? '');
+  const { busy, error, run } = useAction();
+  return (
+    <div className="subcard stack">
+      <div className="row between wrap small">
+        <span>
+          {f.kind === 'idea' ? '💡 Idea' : '🙋 Question'} · {f.email ? <a href={`mailto:${f.email}`}>{f.email}</a> : 'unknown'}
+          {f.leagueName && <> · {f.leagueName}</>} · {ago(f.createdAt)}{f.path && <span className="muted"> · {f.path}</span>}
+        </span>
+        <span className={`badge ${FEEDBACK_STATUS[f.status].badge}`}>{FEEDBACK_STATUS[f.status].label}</span>
+      </div>
+      <p className="pre-wrap">{f.message}</p>
+      <div className="row wrap">
+        <label className="inline">
+          Status
+          <select value={status} onChange={(e) => setStatus(e.target.value as FeedbackStatus)}>
+            {(Object.keys(FEEDBACK_STATUS) as FeedbackStatus[]).map((s) => <option key={s} value={s}>{s === 'new' ? 'New' : FEEDBACK_STATUS[s].label}</option>)}
+          </select>
+        </label>
+      </div>
+      <label>
+        Reply
+        <textarea rows={3} maxLength={4000} value={reply} placeholder={f.kind === 'idea' ? "e.g. Good one. It's on the list for the spring." : 'Your answer'} onChange={(e) => setReply(e.target.value)} />
+      </label>
+      <ErrorText>{error}</ErrorText>
+      <div>
+        <button className="btn btn-primary btn-sm" disabled={busy}
+          onClick={async () => { const ok = await run(async () => { await api.staffAnswerFeedback(f.id, status, reply); return true; }); if (ok) onSaved(); }}>
+          {busy ? 'Saving…' : 'Save and notify'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** What people asked on the Help page: gaps to fill in the answers. Unanswered and "didn't help" first. */
 function HelpQuestions() {
   const [days, setDays] = useState(30);
@@ -63,7 +130,7 @@ function HelpQuestions() {
       <ErrorText>{qs.error}</ErrorText>
       <p className="small muted">
         {list.length} asked · {list.filter((q) => !q.answer).length} not answered · {list.filter((q) => q.helpful === false).length} said it didn't help · {list.filter((q) => q.helpful).length} said it did.
-        Questions sent to us also show above as golfer reports.
+        Questions sent to us show above under Ideas and questions.
       </p>
       <label className="check-row small"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Show every question, not just the missed ones</label>
       {shown.length === 0 ? <p className="small muted">{qs.data ? 'Nothing to look at.' : 'Loading…'}</p> : (

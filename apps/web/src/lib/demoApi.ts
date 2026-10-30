@@ -1,5 +1,5 @@
 import type { Api, ErrorGroup, HealthSnapshot } from './api';
-import type { AppErrorReport, HelpQuestion, MatchMoney as LeagueMatchMoney, PaidMark, PayHandles } from './types';
+import type { AppErrorReport, Feedback, HelpQuestion, MatchMoney as LeagueMatchMoney, PaidMark, PayHandles } from './types';
 import { searchHelp } from '../../../../supabase/functions/ask-help/manual';
 import type { Contact, Course, JoinRequest, League, LeagueBilling, LeagueEvent, LedgerRow, PaymentHandles, PilotCode, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SetupRequest, SubRequest, TeeSheet, TeeTime, TvDisplay, User } from './types';
 import { isCommissioner } from './types';
@@ -84,6 +84,7 @@ const demoFiles = new Map<string, string>();
 /** Demo diagnostics: problems reported during this page view, and the free plans' limits. */
 const demoErrors: (AppErrorReport & { at: string; resolved: boolean })[] = [];
 const demoQuestions: HelpQuestion[] = [];
+const demoFeedback: (Feedback & { userId: string })[] = [];
 const demoLimits: HealthSnapshot['limits'] = {
   online: { label: 'People with the app open at once (Supabase live connections)', value: 200 },
   emails_day: { label: 'Emails a day (Resend)', value: 100 },
@@ -1431,6 +1432,36 @@ export function demoApi(): DemoApi {
     async staffHelpQuestions() {
       me(load());
       return demoQuestions.map((q) => ({ ...q }));
+    },
+
+    // Ideas and questions: same checks as send_feedback() (demo sends no notifications).
+    async sendFeedback(kind, message, leagueSlug, path) {
+      const db = load();
+      const u = me(db);
+      const msg = message.trim();
+      if (msg.length < 5) throw new Error('Write a little more so we know what you mean.');
+      const league = db.leagues.find((l) => l.slug === leagueSlug);
+      demoFeedback.unshift({
+        id: `fb-${demoFeedback.length + 1}`, kind, message: msg.slice(0, 4000), status: 'new', reply: null, repliedAt: null,
+        createdAt: new Date().toISOString(), leagueName: league?.name ?? null, email: u.email, path, userId: u.id,
+      });
+    },
+    async myFeedback() {
+      const u = me(load());
+      return demoFeedback.filter((f) => f.userId === u.id).map(({ userId: _, email: __, path: ___, ...f }) => ({ ...f }));
+    },
+    async staffFeedback() {
+      me(load());
+      return demoFeedback.map(({ userId: _, ...f }) => ({ ...f }));
+    },
+    async staffAnswerFeedback(id, status, reply) {
+      me(load());
+      const f = demoFeedback.find((x) => x.id === id);
+      if (!f) throw new Error('Not found.');
+      const r = reply.trim() || null;
+      if (r !== f.reply) f.repliedAt = r ? new Date().toISOString() : null;
+      f.status = status;
+      f.reply = r;
     },
 
     async logAppError(r) {

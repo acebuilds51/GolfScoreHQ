@@ -118,8 +118,9 @@ function AskQuestion({ seed }: { seed: { text: string; n: number } | null }) {
   return (
     <section className="card stack" id="ask" ref={box}>
       <h2>Ask a question</h2>
-      <p className="small muted">Answers come from the questions on this page and the user's guide. If it isn't sure, tap Send it to us and a person will email you back.</p>
+      <p className="small muted">Answers come from the questions on this page and the user's guide. If it isn't sure, tap Send it to us and a person will answer.</p>
       <AskChat leagueSlug={leagueSlug} seed={seed} />
+      <p className="small muted">Have an idea for the app, or a setup question for a person? <Link to={`/feedback${leagueSlug ? `?from=${encodeURIComponent(leagueSlug)}` : ''}`}>Send it to us</Link>.</p>
     </section>
   );
 }
