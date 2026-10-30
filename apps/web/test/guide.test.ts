@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GUIDES, guideText } from '../../../supabase/functions/ask-help/guide';
 import { HELP_SECTIONS } from '../../../supabase/functions/ask-help/manual';
+import { guideHref, searchGuide } from '../src/lib/guideSearch';
 
 const helpIds = new Set(HELP_SECTIONS.flatMap((s) => s.items.map((i) => i.id)));
 
@@ -20,6 +21,12 @@ describe("user's guide", () => {
       expect(new Set(ids).size).toBe(ids.length);
       for (const c of g.chapters) expect(c.steps.length).toBeGreaterThan(0);
     }
+  });
+
+  it('finds the guide chapter for a "what do I do first" search', () => {
+    const top = searchGuide("I'm a new commissioner. What do I do first, step by step?")[0];
+    expect(top && guideHref(top)).toBe('/guide#set-up');
+    expect(guideHref(searchGuide('how do I keep the card on league night')[0]!)).toBe('/guide?for=golfers#night');
   });
 
   it('hands the helper both guides as plain text, with Pro marked', () => {
