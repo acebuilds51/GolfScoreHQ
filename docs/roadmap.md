@@ -26,7 +26,7 @@ Plans and features live in the `plans` table, so prices and feature lists can ch
 - **Roster:** paste or add golfers, contact details (phones and emails shared with golfers only if the commissioner turns each on), merge duplicates, subs section, text one golfer or many from the phone's Messages, invite by text with personal join links.
 - **Phone notifications:** free web push for reminders and "results are in" (iPhone: from the home-screen app).
 - **Clubhouse TV (Pro):** rotating panels on any screen from a private link. Course plan adds a sponsor screen.
-- **Course plan:** a course's leagues under one club record (database cap still 5 leagues; raise `plans.max_leagues` for 'club' before a course needs more), with this week across all of them on the Leagues page. Set up by staff, not self-serve.
+- **Course plan:** a course's leagues under one club record (no league cap since migration 20261127), with this week across all of them on the Leagues page. Set up by staff, not self-serve.
 - **Branding (Pro):** league logo and colors in the app, TV and emails.
 - **Getting started:** "We set up your league" uploads with a staff queue; import past rounds from Excel (.xlsx), CSV, pasted cells or the old OCBC app's export.
 - **Sales tax:** Stripe Tax is wired in, off until the `STRIPE_AUTOMATIC_TAX` secret is `on`.

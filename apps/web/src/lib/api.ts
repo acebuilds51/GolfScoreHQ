@@ -101,7 +101,7 @@ export interface Api {
   leagueBilling(leagueId: string): Promise<LeagueBilling | null>;
   startCheckout(target: { leagueId: string } | { clubId: string }): Promise<string>;
   billingPortal(returnPath: string): Promise<string>;
-  /** Clubs you own (one Club plan covers up to 5 of your leagues). */
+  /** Clubs you own (a club is a course on the Course plan, covering any number of your leagues). */
   myClubs(): Promise<Club[]>;
   createClub(name: string): Promise<string>;
   /** Put one of your leagues under your paid club, or take it out (clubId null). */

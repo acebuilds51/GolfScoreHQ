@@ -777,10 +777,9 @@ export function demoApi(): DemoApi {
       }
       const c = db.clubs.find((x) => x.id === clubId && x.ownerId === db.session);
       if (!c) throw new Error("That club isn't yours.");
-      if (!c.expiresAt || new Date(c.expiresAt) < new Date()) throw new Error('Start the Club plan first.');
+      if (!c.expiresAt || new Date(c.expiresAt) < new Date()) throw new Error('Start the Course plan first.');
       if (l.plan === 'pilot' || l.plan === 'comp') throw new Error("This league already has GolfScoreHQ free; it doesn't need the Club.");
       if (l.demoSub && !l.demoSub.cancelAtPeriodEnd) throw new Error("This league pays for its own Pro plan. Cancel it under Manage billing first, so you aren't charged twice.");
-      if (db.leagues.filter((x) => x.clubId === clubId && x.id !== leagueId).length >= 5) throw new Error('A Club covers up to 5 leagues.');
       Object.assign(l, { clubId, plan: 'club', planExpiresAt: null });
       save(db);
     },

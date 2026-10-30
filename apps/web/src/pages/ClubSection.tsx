@@ -6,8 +6,6 @@ import { fmtDay } from '../lib/plans';
 import { fmtDate } from '../lib/scoring';
 import type { Club, LeagueEvent, LeagueSummary } from '../lib/types';
 
-const MAX_LEAGUES = 5;
-
 interface LeagueWeek {
   id: string; name: string; slug: string;
   next: LeagueEvent | null;
@@ -82,7 +80,6 @@ export function ClubSection({ leagues, onChanged }: { leagues: LeagueSummary[]; 
       <h2>Course plan</h2>
       {clubs.data.map((c) => {
           const isPaid = paid(c.expiresAt);
-          const full = c.leagues.length >= MAX_LEAGUES;
           return (
             <div key={c.id} className="stack">
               <div className="row between wrap">
@@ -94,7 +91,7 @@ export function ClubSection({ leagues, onChanged }: { leagues: LeagueSummary[]; 
               ) : (
                 <>
                   {c.leagues.length > 0 && <ClubWeek leagues={c.leagues} />}
-                  <p className="small muted">Leagues on this Course plan ({c.leagues.length} of {MAX_LEAGUES}). Only leagues you own can be added; email us for more.</p>
+                  <p className="small muted">Leagues on this Course plan ({c.leagues.length}). Add every league you own; email us to add one someone else runs.</p>
                   <ul className="list">
                     {owned.map((l) => {
                       const inClub = c.leagues.some((x) => x.id === l.id);
@@ -105,7 +102,7 @@ export function ClubSection({ leagues, onChanged }: { leagues: LeagueSummary[]; 
                           {inClub ? (
                             <button className="btn btn-ghost btn-sm" disabled={busy} onClick={async () => { const ok = await run(async () => { await api.setLeagueClub(l.id, null); return true; }); if (ok) { clubs.reload(); onChanged(); } }}>Remove</button>
                           ) : (
-                            <button className="btn btn-sm" disabled={busy || full || free} onClick={async () => { const ok = await run(async () => { await api.setLeagueClub(l.id, c.id); return true; }); if (ok) { clubs.reload(); onChanged(); } }}>Add</button>
+                            <button className="btn btn-sm" disabled={busy || free} onClick={async () => { const ok = await run(async () => { await api.setLeagueClub(l.id, c.id); return true; }); if (ok) { clubs.reload(); onChanged(); } }}>Add</button>
                           )}
                         </li>
                       );

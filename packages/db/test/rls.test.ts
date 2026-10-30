@@ -284,7 +284,7 @@ describe('plans (by feature, never by size)', () => {
     expect(await roundsSeen()).toHaveLength(2);
   });
 
-  it('lets one Club cover up to 5 leagues, each with Pro features', async () => {
+  it('lets one Course plan (club) cover any number of leagues, each with Pro features', async () => {
     const [club] = await rows<{ id: string }>(db, `insert into clubs (name, owner_id) values ('Crystal Lake Golf', $1) returning id`, [tony]);
     const ids = [oak];
     await setPlan(oak, 'club');
@@ -292,8 +292,8 @@ describe('plans (by feature, never by size)', () => {
       await db.query(`insert into leagues (name, slug, owner_id, plan) values ($1, $2, $3, 'club') returning id`, [`League ${i}`, `league-${i}`, tony]);
       ids.push((await rows<{ id: string }>(db, 'select id from leagues where slug = $1', [`league-${i}`]))[0]!.id);
     }
-    for (const id of ids.slice(0, 5)) await db.query('update leagues set club_id = $1 where id = $2', [club!.id, id]);
-    await expect(db.query('update leagues set club_id = $1 where id = $2', [club!.id, ids[5]])).rejects.toThrow(/plan_limit: a Club covers up to 5/);
+    for (const id of ids) await db.query('update leagues set club_id = $1 where id = $2', [club!.id, id]);
+    expect(await rows(db, 'select count(*)::int as n from leagues where club_id = $1', [club!.id])).toEqual([{ n: 6 }]);
 
     await weekWithRound(tony, oak, PRO_RULES); // club league has Pro features
     await db.query(`update clubs set plan_expires_at = '2020-01-01' where id = $1`, [club!.id]);
