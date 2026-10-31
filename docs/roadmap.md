@@ -43,11 +43,11 @@ Plans and features live in the `plans` table, so prices and feature lists can ch
 - **Selling the Course plan (staff):** set up a course for its manager on /staff, add its leagues, and send the yearly Stripe invoice (Founding offer: the first invoice goes out Jan 1, 2027 and is due Jan 31; Pro switches off 3 days after an unpaid due date; pay by card or bank, or mark paid by check). Renews every year with a new invoice. Reminder emails to the manager two weeks and one week before an unpaid invoice is due; the final one lists what switches off and when.
 - **Course summary:** one printable page per course with every league's golfers, golfers on the app, league nights played, rounds brought to the course and average turnout.
 - **Post to GHIN:** golfers add their GHIN number; after a finished round the week page shows their scorecard and an Open GHIN button (no USGA license needed, so the golfer still enters the score). See [ghin.md](ghin.md).
+- **No signal on the course:** the app opens with no signal (its files are kept on the phone), every group's round is saved on the phone from the week page so it opens and scores offline, screens keep what they last loaded instead of an error, golfers stay signed in, waiting scores send from any screen or the next time the app opens, and a card submitted with no signal goes in by itself once every score has. A "No signal" bar says what's happening.
 
 ## Next
 
-- **Before pilots play (spring 2027):** upgrade Resend from the free plan (100 emails a day); switch Stripe to live for Pro and Course invoices; a practice league night on real phones; test the ideas box with a second person.
-- Offline scoring improvements for courses with no signal.
+- **Before pilots play (spring 2027):** upgrade Resend from the free plan (100 emails a day); a practice league night on real phones (including a round in airplane mode); test the ideas box with a second person.
 - An official GHIN connection only if paying customers ever cover the USGA fee (see [ghin.md](ghin.md)).
 - Lesson results saved to the database instead of the phone, so staff can see where people get stuck.
 - Paid text messages only if leagues ask.

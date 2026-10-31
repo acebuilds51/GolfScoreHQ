@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Api, CourseSummary, HealthSnapshot, LookupCourse } from './api';
 import type { CourseInvoice, CourseReport, Feedback, LeagueBilling, PilotCode, StaffCourse, PilotCodeStatus, RecapPreview, ReminderPreview, RsvpLinkInfo, SetupRequest, SubOffer, TeeTime } from './types';
 import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, TvFeed, User } from './types';
+import { isNetworkError } from './offline';
 import { randomToken, sha256Hex } from './util';
 
 type Row = Record<string, any>;
@@ -69,6 +70,10 @@ const toUser =(u: { id: string; email?: string | null } | null | undefined): Use
 
 export function supabaseApi(url: string, anonKey: string): Api {
   const sb: SupabaseClient = createClient(url, anonKey, { auth: { persistSession: true, detectSessionInUrl: true } });
+  // Where supabase-js keeps the sign-in on this phone (its default name).
+  const storedSession = (): { user?: { id: string; email?: string } } | null => {
+    try { return JSON.parse(localStorage.getItem(`sb-${new URL(url).hostname.split('.')[0]}-auth-token`) ?? 'null'); } catch { return null; }
+  };
 
   /** Tidy up replaced logo or banner files. Best effort: a leftover file is harmless. */
   async function removeOldFiles(leagueId: string, kind: 'logo' | 'banner', keep: string | null) {
@@ -111,11 +116,20 @@ export function supabaseApi(url: string, anonKey: string): Api {
     mode: 'supabase',
 
     async currentUser() {
-      const { data } = await sb.auth.getSession();
-      return toUser(data.session?.user);
+      const { data, error } = await sb.auth.getSession();
+      if (data.session) return toUser(data.session.user);
+      // The sign-in lasts an hour between renewals. If it ran out while the phone had no
+      // signal, it can't renew until signal comes back, but the golfer is still signed in:
+      // keep them in the app (scores wait on the phone) and the sign-in renews itself later.
+      if (error && isNetworkError(error)) return toUser(storedSession()?.user);
+      return null;
     },
     onAuthChange(cb) {
-      const { data } = sb.auth.onAuthStateChange((_e, session) => cb(toUser(session?.user)));
+      const { data } = sb.auth.onAuthStateChange((event, session) => {
+        // currentUser() answers the first check, including the no-signal case above.
+        if (event === 'INITIAL_SESSION' && !session) return;
+        cb(toUser(session?.user));
+      });
       return () => data.subscription.unsubscribe();
     },
     async signIn(email, redirectTo) {

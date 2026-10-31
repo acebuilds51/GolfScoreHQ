@@ -8,7 +8,9 @@ import { ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { reportProblem } from '../lib/diagnostics';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
-import { applyQueue, compact, enqueue, flush, readQueue, type FlushResult, type PendingOp } from '../lib/pendingQueue';
+import { isNetworkError } from '../lib/offline';
+import { applyQueue, compact, enqueue, flush, readQueue, scoringOpen, submitWaiting, type FlushResult, type PendingOp } from '../lib/pendingQueue';
+import { rememberRound, scoringCacheKey } from '../lib/scoringCache';
 import { asBestBall, currentMarker, fmtMoney, handicapRules, holesCompleted, individualRules, isScramble, matchSoFar, scoreMark, toEngineRound } from '../lib/scoring';
 import { fmtToPar } from '../lib/standings';
 import type { CtpEntry, Layout, Player, RoundData, Season } from '../lib/types';
@@ -25,17 +27,20 @@ export function ScoreRoundPage() {
     if (!r) return null;
     const week = await loadWeek(league.id, r.eventId);
     return week ? { ...week, round: r } : null;
-  }, [league.id, roundId], { fresh: true });
+    // The week page fills this in ahead of time, so the round opens with no signal.
+  }, [league.id, roundId], { fresh: true, cacheAs: scoringCacheKey(roundId) });
 
   if (data.error) return <div className="page"><ErrorText>{data.error}</ErrorText></div>;
   if (!data.data) return (data.loading ? <PageSkeleton cards={1} /> : <div className="page muted">Round not found.</div>);
   const { round, layout, season, players, rounds, event } = data.data;
   if (!layout || !season) return <div className="page"><p className="muted">This week has no course or season set up yet.</p></div>;
   const locked = event.status === 'settled' || event.status === 'rainout';
-  return <Scorer key={round.id} initial={round} layout={layout} season={season} players={players} others={rounds.filter((r) => r.id !== round.id)} eventId={event.id} locked={locked} />;
+  return <Scorer key={round.id} week={data.data} initial={round} layout={layout} season={season} players={players} others={rounds.filter((r) => r.id !== round.id)} eventId={event.id} locked={locked} />;
 }
 
-function Scorer({ initial, layout, season, players, others, eventId, locked }: { initial: RoundData; layout: Layout; season: Season; players: Player[]; others: RoundData[]; eventId: string; locked: boolean }) {
+function Scorer({ week, initial, layout, season, players, others, eventId, locked }: {
+  week: unknown; initial: RoundData; layout: Layout; season: Season; players: Player[]; others: RoundData[]; eventId: string; locked: boolean;
+}) {
   const { league } = useLeague();
   const nav = useNavigate();
   const rules = season.rules;
@@ -71,12 +76,18 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [holeIdx]);
 
+  // This screen sends its own queue; the app-wide sender leaves it alone while it's open.
+  useEffect(() => scoringOpen(initial.id), [initial.id]);
+  // Keep the copy on the phone up to date, so reopening with no signal shows every hole entered.
+  useEffect(() => { if (week && typeof week === 'object') rememberRound(week, round); }, [week, round]);
+
   const sendQueue = useCallback(async () => {
     if (!queueRef.current.length) return;
     setSaving(true);
     const r = await flush(league.id, round.id, queueRef.current);
     setQueue(r.left);
     setProblem(r.problem);
+    if (r.submitted) setRound((x) => ({ ...x, status: 'submitted' }));
     // The server refused a score (not just no signal): staff should know.
     if (r.problem && r.problem !== 'offline') reportProblem('failed_action', `Score didn't save: ${r.problem}`, `${r.left.length} change(s) still waiting on this phone`);
     setSaving(false);
@@ -90,7 +101,7 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
     return () => { clearInterval(t); window.removeEventListener('online', online); };
   }, [sendQueue]);
 
-  const push = (op: PendingOp) => setQueue((q) => (queueRef.current = enqueue(round.id, op, q)));
+  const push = (op: PendingOp) => setQueue((q) => (queueRef.current = enqueue(league.id, round.id, op, q)));
 
   // CTP answers for this hole
   const saved = round.ctp[hole.number];
@@ -168,19 +179,26 @@ function Scorer({ initial, layout, season, players, others, eventId, locked }: {
     return (
       <Review
         round={round} layout={layout} season={season} names={names} queueLength={queue.length} busy={busy} error={error} locked={locked} eventId={eventId}
+        submitLater={submitWaiting(queue)}
         onEditHole={(i) => { setReviewing(false); go(i); }}
         onSubmit={async () => {
+          // No signal: the card goes in by itself once every score has.
+          const later = () => { push({ kind: 'submit' }); setError(null); };
           const r = await flush(league.id, round.id, queueRef.current);
           setQueue(r.left);
           setProblem(r.problem);
-          if (r.left.length) {
-            return setError(
-              r.problem && r.problem !== 'offline'
-                ? r.problem
-                : 'No connection right now. Your scores are saved on this phone. Try again when you have signal.',
-            );
-          }
-          const ok = await run(async () => { await api.submitRound(round.id); return true; });
+          if (r.problem === 'offline') return later();
+          if (r.left.length) return setError(r.problem);
+          const ok = await run(async () => {
+            try {
+              await api.submitRound(round.id);
+              return true;
+            } catch (e) {
+              if (!isNetworkError(e)) throw e;
+              later();
+              return false;
+            }
+          });
           if (ok) nav(`../week/${eventId}`);
         }}
       />
@@ -386,9 +404,9 @@ function Presses({ round, layout, holeNumber, names, rules, onChange }: { round:
   );
 }
 
-function Review({ round, layout, season, names, queueLength, busy, error, locked, eventId, onEditHole, onSubmit }: {
+function Review({ round, layout, season, names, queueLength, busy, error, locked, eventId, submitLater, onEditHole, onSubmit }: {
   round: RoundData; layout: Layout; season: Season; names: Map<string, string>; queueLength: number; busy: boolean; error: string | null;
-  locked: boolean; eventId: string; onEditHole: (i: number) => void; onSubmit: () => void;
+  locked: boolean; eventId: string; submitLater: boolean; onEditHole: (i: number) => void; onSubmit: () => void;
 }) {
   const rules = asBestBall(season.rules);
   const ind = individualRules(season.rules);
@@ -490,8 +508,13 @@ function Review({ round, layout, season, names, queueLength, busy, error, locked
       )}
 
       <ErrorText>{error}</ErrorText>
-      {queueLength > 0 && <p className="warn small">Some scores are saved on this phone but haven't reached the league yet.</p>}
-      {!locked && <div className="row wrap">
+      {submitLater ? (
+        <p className="card warn small">
+          <strong>No signal.</strong> Your card is saved on this phone and will be submitted by itself as soon as the phone gets signal.
+          You can put the phone away; opening the app later sends it too.
+        </p>
+      ) : queueLength > 0 && <p className="warn small">Some scores are saved on this phone but haven't reached the league yet.</p>}
+      {!locked && !submitLater && <div className="row wrap">
         <button type="button" className="btn btn-primary" disabled={busy || !complete} onClick={onSubmit}>
           {busy ? 'Submitting…' : round.status === 'submitted' ? 'Submit corrections' : 'Submit scores'}
         </button>
