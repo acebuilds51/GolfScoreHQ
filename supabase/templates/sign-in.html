@@ -1,0 +1,46 @@
+<!-- The sign-in email. Paste it into Supabase: Authentication → Emails → Templates, both "Magic link"
+     (people who've signed in before) and "Confirm signup" (first time). Subject: Your GolfScoreHQ sign-in code
+     The code is what the iPhone home-screen app needs (it can't receive links); the button works in a browser. -->
+<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:0;background:#f3f1ea;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f1ea;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:460px;background:#ffffff;border-radius:14px;overflow:hidden;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#1d2127;">
+            <tr>
+              <td align="center" style="background:#0b0c0e;padding:22px 16px;font:900 26px 'Arial Black',Arial,sans-serif;letter-spacing:0.5px;">
+                <span style="color:#e9c467;">Golf</span><span style="color:#f4f1e8;">Score</span><span style="color:#e9c467;">HQ</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 28px 8px;font-size:16px;line-height:1.5;">
+                Here's your sign-in code. Type it in the app:
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:10px 28px 18px;">
+                <div style="display:inline-block;padding:14px 22px;border:2px solid #e9c467;border-radius:10px;font:700 34px 'Courier New',monospace;letter-spacing:8px;color:#1d2127;">{{ .Token }}</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 28px 8px;font-size:15px;line-height:1.5;color:#4a5059;">
+                On a computer, you can tap this instead:
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:6px 28px 26px;">
+                <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#0b0c0e;color:#f4d98a;text-decoration:none;font-weight:700;font-size:16px;padding:13px 26px;border-radius:10px;">Sign in to GolfScoreHQ</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:16px 28px 24px;border-top:1px solid #ece9df;font-size:13px;line-height:1.5;color:#8a8f96;">
+                The code works once and expires in an hour. If you didn't ask to sign in, you can ignore this email.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

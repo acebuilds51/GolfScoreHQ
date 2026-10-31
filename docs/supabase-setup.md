@@ -74,7 +74,23 @@ npx supabase db push
 - Site URL: `http://localhost:5173` (change to the real domain at launch)
 - Redirect URLs: add `http://localhost:5173/**`
 
-Email sign-in links are on by default. Supabase's built-in email sender allows only a few emails per hour, which is fine for testing. Before the pilots, connect a real email provider (Resend) under **Authentication → Emails → SMTP**.
+Email sign-in links are on by default. Supabase's built-in email sender allows only a few emails per hour, which is fine for testing. Before the pilots, send sign-in emails through Resend (step 3b).
+
+## 3b. Sign-in emails for real use
+
+People sign in with a code from an email (the iPhone home-screen app can't receive links), so the email must show the code. Supabase's own sender only manages a few emails an hour; this sends them through Resend from golfscorehq.app.
+
+1. **Resend → Domains**: `golfscorehq.app` says **Verified**. (Its DNS records are on Cloudflare: `resend._domainkey`, and the `send` subdomain's MX and SPF.)
+2. **Resend → API Keys → Create API key**: name it `Supabase sign-in`, permission **Sending access**, domain `golfscorehq.app`. Copy it straight into the next step. Keep it out of chat, email and the code.
+3. **Supabase → Authentication → Emails → SMTP Settings**: turn on **Enable custom SMTP**:
+   - Sender email: `signin@golfscorehq.app`; sender name: `GolfScoreHQ`
+   - Host: `smtp.resend.com`; port: `465`; username: `resend`; password: the key from step 2
+4. **Authentication → Rate Limits**: custom SMTP starts at 30 emails an hour; raise it to 100. Resend's free plan sends 100 emails a day across everything (sign-ins, recaps, reminders): move to Resend's paid plan before pilot leagues play.
+5. **Authentication → URL Configuration**:
+   - Site URL: `https://golfscorehq.app`
+   - Redirect URLs: `https://golfscorehq.app/**` (keep `http://localhost:5173/**` for testing on your computer)
+6. **Authentication → Emails → Templates**: in both **Magic link** and **Confirm signup**, set the subject to `Your GolfScoreHQ sign-in code` and replace the body with `supabase/templates/sign-in.html`.
+7. Try it with an email you haven't signed in with: the email comes from GolfScoreHQ, lands in the inbox (not spam), and both the code and the button sign you in.
 
 ## 4. Connect the app
 
