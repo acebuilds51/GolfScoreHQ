@@ -59,7 +59,7 @@ export function ForCoursesPage() {
 
       <section className="card stack">
         <h2>Straight answers</h2>
-        <p><strong>Does it post scores to GHIN?</strong> No. Golfers post their rounds in the GHIN app as they do now; we use their GHIN index for net matches and skins.</p>
+        <p><strong>Does it post scores to GHIN?</strong> Golfers still post in GHIN themselves, but after each round GolfScoreHQ shows their scorecard with a Post to GHIN button, so it takes a few seconds. We use their GHIN index for net matches and skins.</p>
         <p><strong>Do golfers need to download an app?</strong> No. It runs in the phone's browser, and they can add it to their home screen.</p>
         <p><strong>What does the TV need?</strong> Any screen with a web browser: a smart TV, a streaming stick or a laptop. You open a private link once.</p>
         <p><strong>What about tournaments?</strong> GolfScoreHQ is built for weekly leagues, not one-day tournaments or member-guests.</p>

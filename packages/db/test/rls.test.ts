@@ -1277,3 +1277,54 @@ describe('results are in', () => {
     expect(await rows(db, `select billing from plans where code = 'pro'`)).toEqual([{ billing: 'per_league_year' }]);
   });
 });
+
+describe('selling the Course plan', () => {
+  it('lets staff set up a course for a manager who has signed in, and put leagues on it', async () => {
+    const staff = await createUser(db, 'staff@golfscorehq.app');
+    await db.query('insert into staff_users (user_id) values ($1)', [staff]);
+    const call = (user: string, sql: string, params: unknown[] = []) => as(db, user, () => rows<any>(db, sql, params));
+
+    await expect(call(tony, `select staff_create_course('Crystal Lake', 'sam@example.com')`)).rejects.toThrow(/staff only/);
+    await expect(call(staff, `select staff_create_course('Crystal Lake', 'nobody@example.com')`)).rejects.toThrow(/sign in at golfscorehq.app once/);
+    const [{ id: club }] = await call(staff, `select staff_create_course('Crystal Lake', ' Sam@Example.com ') as id`);
+    expect(await rows(db, 'select owner_id from clubs where id = $1', [club])).toEqual([{ owner_id: sam }]);
+
+    await call(staff, `select staff_set_course_league($1, 'oak-creek', true)`, [club]);
+    expect(await rows(db, 'select plan, club_id from leagues where id = $1', [oak])).toEqual([{ plan: 'club', club_id: club }]);
+    await expect(call(staff, `select staff_set_course_league($1, 'no-such', true)`, [club])).rejects.toThrow(/No league/);
+    const [{ c }] = await call(staff, 'select staff_courses() as c');
+    expect(c).toMatchObject([{ name: 'Crystal Lake', ownerEmail: 'sam@example.com', leagues: [{ slug: 'oak-creek' }], billing: null }]);
+
+    await call(staff, `select staff_set_course_league($1, 'oak-creek', false)`, [club]);
+    expect(await rows(db, 'select plan, club_id from leagues where id = $1', [oak])).toEqual([{ plan: 'free', club_id: null }]);
+  });
+
+  it('shows the course summary to its manager and staff only', async () => {
+    const staff = await createUser(db, 'staff@golfscorehq.app');
+    await db.query('insert into staff_users (user_id) values ($1)', [staff]);
+    const [{ id: club }] = await as(db, staff, () => rows<{ id: string }>(db, `select staff_create_course('Crystal Lake', 'sam@example.com') as id`));
+    await as(db, staff, () => db.query(`select staff_set_course_league($1, 'oak-creek', true)`, [club]));
+    const [al, bo] = [await addPlayer(tony, oak, 'Al'), await addPlayer(tony, oak, 'Bo')];
+    await addPlayer(tony, oak, 'Cy Sub', true);
+    const { eventId, roundId } = await weekWithRound(tony, oak);
+    await as(db, tony, () => db.query(`insert into round_players (round_id, player_id, league_id, side) values ($1, $2, $4, 'A'), ($1, $3, $4, 'B')`, [roundId, al, bo, oak]));
+    await as(db, tony, () => db.query(`select settle_event($1, '[]'::jsonb)`, [eventId]));
+
+    const [{ s }] = await as(db, sam, () => rows<{ s: any }>(db, 'select course_summary($1) as s', [club]));
+    expect(s).toMatchObject({ name: 'Crystal Lake', leagues: [{ slug: 'oak-creek', golfers: 2, subs: 1, onApp: 0, season: '2027', weeksPlayed: 1, weeksLeft: 0, rounds: 2 }] });
+    await as(db, staff, () => db.query('select course_summary($1)', [club]));
+    await expect(as(db, tony, () => db.query('select course_summary($1)', [club]))).rejects.toThrow(/wasn't found/);
+  });
+
+  it('lets a golfer set only their own GHIN number', async () => {
+    const mine = await addPlayer(tony, oak, 'Joe');
+    const other = await addPlayer(tony, oak, 'Other');
+    await db.query('update players set user_id = $1 where id = $2', [joe, mine]);
+    await as(db, joe, () => db.query(`select set_my_ghin($1, '123 4567')`, [mine]));
+    expect(await rows(db, 'select ghin_number from players where id = $1', [mine])).toEqual([{ ghin_number: '1234567' }]);
+    await expect(as(db, joe, () => db.query(`select set_my_ghin($1, '12')`, [mine]))).rejects.toThrow(/5 to 10 digits/);
+    await expect(as(db, joe, () => db.query(`select set_my_ghin($1, '1234567')`, [other]))).rejects.toThrow(/your own/);
+    await as(db, joe, () => db.query(`select set_my_ghin($1, '')`, [mine]));
+    expect(await rows(db, 'select ghin_number from players where id = $1', [mine])).toEqual([{ ghin_number: null }]);
+  });
+});

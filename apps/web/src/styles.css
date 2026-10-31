@@ -723,3 +723,7 @@ span.step { display: inline-flex; align-items: center; justify-content: center; 
 @media (min-width: 701px) {
   .help-sheet-backdrop:has(.pro-sheet) { align-items: center; justify-content: center; padding: 16px; }
 }
+
+/* Post to GHIN: a small scorecard, nine holes fit a phone without scrolling. */
+table.ghin-card th, table.ghin-card td { padding: 4px 5px; text-align: center; white-space: nowrap; }
+table.ghin-card th { text-align: left; }

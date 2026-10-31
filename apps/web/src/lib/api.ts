@@ -2,7 +2,7 @@ import type { CourseSummary, LookupCourse } from '../../../../supabase/functions
 import type { HealthSnapshot } from '../../../../supabase/functions/health-report/report';
 import type {
   AppErrorReport, Feedback, FeedbackKind, FeedbackStatus, HelpQuestion, UpgradeInterest, MatchMoney, PaidMark, PayHandles,
-  Club, LeagueBilling,
+  Club, CourseInvoice, CourseReport, LeagueBilling, StaffCourse,
   Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, LedgerRow, Member, NewCourse, NewPlayer, Player, Role,
   PaymentHandles, RecapPreview, RoundData, RoundPlayer, RsvpStatus, ScoreEntry, Season, SubOffer, SubRequest, TvDisplay, TvFeed, TvSettings, User,
   NewSetupRequest, SetupFile, SetupRequest, SetupStatus, StaffSetupRequest, LineupStatus, TeeSheet, TeeTime, ReminderPreview, RsvpLinkInfo, PilotCode, PilotCodeStatus,
@@ -195,6 +195,18 @@ export interface Api {
   staffPilotCodes(): Promise<PilotCode[]>;
   createPilotCode(note: string, maxUses: number): Promise<string>;
   revokePilotCode(code: string): Promise<void>;
+  /** Staff: courses on the Course plan. Making one needs the manager to have signed in once; returns its id. */
+  staffCourses(): Promise<StaffCourse[]>;
+  staffCreateCourse(name: string, managerEmail: string): Promise<string>;
+  /** Put a league (by its web address name) on a course, or take it off. */
+  staffSetCourseLeague(clubId: string, slug: string, on: boolean): Promise<void>;
+  /** Start the course's yearly invoice; Stripe can email it to the manager. */
+  courseInvoice(clubId: string, o: { priceCents: number; daysUntilDue: number; email: boolean; freeUntil: string | null }): Promise<CourseInvoice>;
+  courseInvoiceLink(clubId: string): Promise<CourseInvoice>;
+  /** The open invoice was paid by check. */
+  courseMarkPaid(clubId: string): Promise<CourseInvoice>;
+  /** The course summary, for the course's manager and staff. */
+  courseReport(clubId: string): Promise<CourseReport>;
   /** Join the request's league as a commissioner (with the commissioner's consent); returns its slug. */
   staffJoinLeague(requestId: string): Promise<string>;
   /** Change status and reply; emails the commissioner. 'done' removes staff's access to the league. */
@@ -214,6 +226,8 @@ export interface Api {
   /** Golfers' own Venmo / PayPal / Zelle: a golfer sees their own, commissioners everyone's. playerId → handles. */
   payHandles(leagueId: string): Promise<Record<string, PayHandles>>;
   savePayHandles(leagueId: string, playerId: string, h: PayHandles): Promise<void>;
+  /** A golfer's own GHIN number (null clears it). */
+  setMyGhin(playerId: string, ghin: string | null): Promise<void>;
   /** Commissioner: what each golfer pays up front for the season (null: no dues). */
   setSeasonDues(seasonId: string, cents: number | null): Promise<void>;
   /** Who has paid the season's dues (a golfer sees their own; commissioners everyone). playerId → mark. */

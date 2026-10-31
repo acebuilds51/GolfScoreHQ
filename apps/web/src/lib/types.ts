@@ -237,6 +237,42 @@ export interface Club {
   leagues: { id: string; name: string; slug: string }[];
 }
 
+/** Staff's view of a course on the Course plan. */
+export interface StaffCourse extends Club {
+  createdAt: string;
+  ownerEmail: string | null;
+  /** The course's Stripe invoice subscription, null until it's invoiced. */
+  billing: { status: string; periodEnd: string | null } | null;
+}
+
+/** A course's Stripe invoice: the page where they pay it, and where it stands. */
+export interface CourseInvoice {
+  url: string | null;
+  /** draft, open, paid, void or uncollectible */
+  status: string;
+  amountDue: number;
+  dueDate: string | null;
+  /** While the course is in its free period: when the first invoice goes out. */
+  freeUntil: string | null;
+}
+
+/** The course summary: each league at the course this season. */
+export interface CourseReport {
+  id: string;
+  name: string;
+  expiresAt: string | null;
+  leagues: {
+    id: string; name: string; slug: string;
+    /** Active regulars, active subs, and golfers using the app. */
+    golfers: number; subs: number; onApp: number;
+    season: string | null;
+    weeksPlayed: number; weeksLeft: number;
+    /** Golfer-rounds in settled weeks this season. */
+    rounds: number;
+    nextWeek: string | null; lastWeek: string | null;
+  }[];
+}
+
 export interface RecapPreview {
   subject: string;
   /** A sample of what golfers receive. */

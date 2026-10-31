@@ -30,7 +30,7 @@ There is no public GHIN API. The USGA licenses access through two programs:
 
 ## Plan
 
-1. **Now (no license, no cost):** add a GHIN number on each golfer, a "Check on GHIN" link that opens the official app or ghin.com, the date each Index was last updated, and a "Post this round to GHIN by midnight" reminder after rounds that count.
+1. **Now (no license, no cost) — built:** golfers add their own GHIN number on the league home page (commissioners can on the Roster). After a finished round that counts (not a scramble), the week page shows **Post to GHIN**: the scorecard hole by hole and an Open GHIN button (ghin.com, which may open the GHIN app on a phone), with "by midnight tonight" on the day. The golfer still enters the score in GHIN.
 2. **Once paying customers cover the fee:** email hdcpquestions@usga.org and ask:
    - whether a league app is GPA or VASP;
    - what the current fee is;

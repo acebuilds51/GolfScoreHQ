@@ -1,6 +1,7 @@
 import { teamHandicap } from '@golfscorehq/engine';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { PostToGhin } from '../components/Ghin';
 import { EmptyState, ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useAuth, useLeague, useLiveRefresh } from '../lib/hooks';
@@ -67,6 +68,8 @@ export function WeekPage() {
 
       {event.status === 'scheduled' && rounds.length === 0 && <TeeSheetPanel event={event} players={players} />}
       {event.status === 'scheduled' && <WhosPlaying eventId={event.id} weekNumber={event.weekNumber} players={players} />}
+
+      {layout && season && <PostToGhin event={event} season={season} layout={layout} rounds={rounds} players={players} />}
 
       {layout && season && <WeekResults event={event} season={season} layout={layout} rounds={rounds} names={names} updating={data.stale} onChanged={data.reload} />}
 

@@ -91,6 +91,7 @@ export function ClubSection({ leagues, onChanged }: { leagues: LeagueSummary[]; 
               ) : (
                 <>
                   {c.leagues.length > 0 && <ClubWeek leagues={c.leagues} />}
+                  {c.leagues.length > 0 && <Link className="small" to={`/course/${c.id}`}>Season summary for the course →</Link>}
                   <p className="small muted">Leagues on this Course plan ({c.leagues.length}). Add every league you own; email us to add one someone else runs.</p>
                   <ul className="list">
                     {owned.map((l) => {

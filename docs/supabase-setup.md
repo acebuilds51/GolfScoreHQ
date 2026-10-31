@@ -54,6 +54,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 34. `20261128000000_help_questions.sql` (Help page "Ask a question": saves each question and its answer for staff; deploy `ask-help`, see step 9)
 35. `20261129000000_feedback.sql` (ideas and questions box with staff replies; redeploy `ask-help`)
 36. `20261130000000_fix_mismatches.sql` (Course plan $990 a year, plans billed per year, Scorers become golfers, "results are in" notification when a week is settled; redeploy `send-recap`)
+37. `20261201000000_course_billing.sql` (staff set up courses and send the yearly invoice from /staff, the course summary page, golfers add their own GHIN number; redeploy `billing`)
 
 **B. Command line**
 
