@@ -9,6 +9,7 @@ import type { ErrorGroup } from '../lib/api';
 import { capacityLines, WARN_AT } from '../../../../supabase/functions/health-report/report';
 import { FileLinks, NoRequests, SETUP_STATUS, SETUP_WANTS } from './SetupServicePage';
 import { StaffCourses } from './StaffCourses';
+import { StaffLessons } from './StaffLessons';
 
 /** GolfScoreHQ staff: every "We set up your league" request. */
 export function StaffPage() {
@@ -27,6 +28,7 @@ export function StaffPage() {
       <Health />
       <IdeasAndQuestions />
       <HelpQuestions />
+      <StaffLessons />
       <PilotCodes />
       <StaffCourses />
       <div className="row between wrap">

@@ -2,7 +2,7 @@ import type { CourseSummary, LookupCourse } from '../../../../supabase/functions
 import type { HealthSnapshot } from '../../../../supabase/functions/health-report/report';
 import type {
   AppErrorReport, Feedback, FeedbackKind, FeedbackStatus, HelpQuestion, UpgradeInterest, MatchMoney, PaidMark, PayHandles,
-  Club, CourseInvoice, CourseReport, LeagueBilling, StaffCourse,
+  Club, CourseInvoice, CourseReport, LeagueBilling, StaffCourse, LessonProgress, LessonResult, LessonsDone,
   Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, LedgerRow, Member, NewCourse, NewPlayer, Player, Role,
   PaymentHandles, RecapPreview, RoundData, RoundPlayer, RsvpStatus, ScoreEntry, Season, SubOffer, SubRequest, TvDisplay, TvFeed, TvSettings, User,
   NewSetupRequest, SetupFile, SetupRequest, SetupStatus, StaffSetupRequest, LineupStatus, TeeSheet, TeeTime, ReminderPreview, RsvpLinkInfo, PilotCode, PilotCodeStatus,
@@ -249,6 +249,13 @@ export interface Api {
   rateHelpAnswer(id: string, helpful: boolean): Promise<void>;
   /** Staff: questions people asked on the Help page, newest first. */
   staffHelpQuestions(days: number): Promise<HelpQuestion[]>;
+
+  /** Lessons: save a try as it goes (anyone, signed in or not). */
+  saveLessonProgress(p: LessonProgress): Promise<void>;
+  /** The signed-in person's finished lessons, from any phone. */
+  myLessons(): Promise<LessonsDone>;
+  /** Staff: every lesson try in the last `days` days, newest first. */
+  staffLessonResults(days: number): Promise<LessonResult[]>;
 
   /** "Ideas and questions": send GolfScoreHQ an idea, or a question for a person. Staff get a notification. */
   sendFeedback(kind: FeedbackKind, message: string, leagueSlug: string | null, path: string | null): Promise<void>;

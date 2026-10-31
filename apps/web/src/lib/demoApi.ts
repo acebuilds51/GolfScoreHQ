@@ -1,5 +1,5 @@
 import type { Api, ErrorGroup, HealthSnapshot } from './api';
-import type { AppErrorReport, CourseInvoice, CourseReport, Feedback, HelpQuestion, MatchMoney as LeagueMatchMoney, PaidMark, PayHandles } from './types';
+import type { AppErrorReport, CourseInvoice, CourseReport, Feedback, HelpQuestion, LessonResult, LessonsDone, MatchMoney as LeagueMatchMoney, PaidMark, PayHandles } from './types';
 import { searchHelp } from '../../../../supabase/functions/ask-help/manual';
 import type { Contact, Course, JoinRequest, League, LeagueBilling, LeagueEvent, LedgerRow, PaymentHandles, PilotCode, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SetupRequest, SubRequest, TeeSheet, TeeTime, TvDisplay, User } from './types';
 import { isCommissioner } from './types';
@@ -84,6 +84,7 @@ const demoFiles = new Map<string, string>();
 /** Demo diagnostics: problems reported during this page view, and the free plans' limits. */
 const demoErrors: (AppErrorReport & { at: string; resolved: boolean })[] = [];
 const demoQuestions: HelpQuestion[] = [];
+const demoLessons = new Map<string, LessonResult>();
 const demoFeedback: (Feedback & { userId: string })[] = [];
 const demoLimits: HealthSnapshot['limits'] = {
   online: { label: 'People with the app open at once (Supabase live connections)', value: 200 },
@@ -1529,6 +1530,27 @@ export function demoApi(): DemoApi {
     async staffHelpQuestions() {
       me(load());
       return demoQuestions.map((q) => ({ ...q }));
+    },
+
+    // Lessons: kept for this visit only, like the help questions.
+    async saveLessonProgress(p) {
+      const signedIn = !!load().session;
+      const now = new Date().toISOString();
+      const old = demoLessons.get(p.id);
+      demoLessons.set(p.id, {
+        lessonId: p.lessonId, steps: p.steps, reached: Math.max(old?.reached ?? 0, Math.min(p.reached, p.steps)), finished: !!old?.finished || p.finished,
+        missed: [...p.missed], right: p.right ?? old?.right ?? null, total: p.total ?? old?.total ?? null, feel: p.feel ?? old?.feel ?? null,
+        idea: p.idea?.trim() || old?.idea || null, signedIn, email: null, startedAt: old?.startedAt ?? now, updatedAt: now,
+      });
+    },
+    async myLessons() {
+      const done: LessonsDone = {};
+      for (const r of demoLessons.values()) if (r.finished && r.signedIn) done[r.lessonId] = { right: r.right ?? 0, total: r.total ?? 0, at: r.updatedAt };
+      return done;
+    },
+    async staffLessonResults() {
+      me(load());
+      return [...demoLessons.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((r) => ({ ...r, missed: [...r.missed] }));
     },
 
     // Ideas and questions: same checks as send_feedback() (demo sends no notifications).
