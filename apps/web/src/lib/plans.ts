@@ -73,6 +73,7 @@ export const PRO_FEATURES = {
   setup: { name: 'We set up your league', what: 'Send us your spreadsheet and we’ll load your golfers, courses and history.' },
   specialWeek: { name: 'Special weeks', what: 'Make any week a scramble or a special event without changing the season’s rules.' },
   teeSheet: { name: 'Tee sheet', what: 'Tee times, groups and partners. Golfers join groups themselves, and captains run their own.' },
+  export: { name: 'Download your league', what: 'Spreadsheets of every season: scores hole by hole, money and standings, to keep or open in Excel.' },
   whosPlaying: { name: 'Who’s playing', what: 'One-tap RSVPs, and a sub finder when a group is short.' },
 } as const;
 export type ProFeature = keyof typeof PRO_FEATURES;

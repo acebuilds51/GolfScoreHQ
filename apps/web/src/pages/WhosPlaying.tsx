@@ -169,7 +169,7 @@ function SubFinder({ eventId, players, rsvps, requests, onChanged }: { eventId: 
             }}>Ask {ask.size || ''} golfer{ask.size === 1 ? '' : 's'}</button>
             <button className="btn btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
           </div>
-          <p className="small muted">They'll see the request in the app. Email and text alerts come with the weekly recap emails.</p>
+          <p className="small muted">Golfers with notifications on get a ping on their phone, and everyone sees the request in the app. First to say yes gets the spot.</p>
         </div>
       )}
       {!open && <ErrorText>{error}</ErrorText>}

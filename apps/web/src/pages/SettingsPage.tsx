@@ -6,6 +6,7 @@ import type { DemoApi } from '../lib/demoApi';
 import { useAction, useAsync, useAuth, useLeague } from '../lib/hooks';
 import { isCommissioner, type PaymentHandles, type Plan, type Role, type TvDisplay, type TvPanel, type TvSettings, type TvSponsor } from '../lib/types';
 import { randomJoinCode } from '../lib/util';
+import { ExportSection } from './ExportSection';
 import { PlanSection } from './PlanSection';
 import { ContactSharing } from './RosterPage';
 
@@ -26,6 +27,7 @@ export function SettingsPage() {
       <GolfersSee />
       <Reminders />
       <ClubhouseTv />
+      <ExportSection />
       {api.mode === 'demo' && <DemoPlan onChanged={reloadLeague} />}
     </div>
   );
@@ -315,7 +317,6 @@ function JoinRequests({ onApproved }: { onApproved: () => void }) {
 
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: 'player', label: 'Golfer' },
-  { value: 'scorer', label: 'Scorer' },
   { value: 'commissioner', label: 'Co-commissioner' },
 ];
 

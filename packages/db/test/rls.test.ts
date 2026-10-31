@@ -200,9 +200,9 @@ describe('roles', () => {
 });
 
 describe('plans (by feature, never by size)', () => {
-  it('publishes Free $0, Pro $149 and Club $299 with every golfer allowed', async () => {
+  it('publishes Free $0, Pro $149 and Course $990 with every golfer allowed', async () => {
     const plans = await as(db, null, () => rows<{ code: string; price_cents: number }>(db, `select code, price_cents from plans where code in ('free','pro','club') order by price_cents`));
-    expect(plans).toEqual([{ code: 'free', price_cents: 0 }, { code: 'pro', price_cents: 14900 }, { code: 'club', price_cents: 29900 }]);
+    expect(plans).toEqual([{ code: 'free', price_cents: 0 }, { code: 'pro', price_cents: 14900 }, { code: 'club', price_cents: 99000 }]);
     for (let i = 1; i <= 45; i++) await addPlayer(tony, oak, `Player ${i}`); // no size cap on Free
     expect(await rows(db, 'select count(*)::int as n from players where league_id = $1', [oak])).toEqual([{ n: 45 }]);
   });
@@ -1250,5 +1250,30 @@ describe('ideas and questions', () => {
       ['How do I split the front and back nine?', 'answered', 'Settings, then Nines.'],
     ]);
     expect(mine[1].replied_at).not.toBeNull();
+  });
+});
+
+describe('results are in', () => {
+  it('tells golfers with the app when a week is settled, once, minus anyone who turned results off', async () => {
+    const { eventId } = await weekWithRound(tony, oak);
+    const yan = await createUser(db, 'yan@example.com');
+    await db.query(`insert into league_members (league_id, user_id, role) values ($1, $2, 'player')`, [oak, yan]);
+    const [me, j, y] = await Promise.all([addPlayer(tony, oak, 'Tony'), addPlayer(tony, oak, 'Joe'), addPlayer(tony, oak, 'Yan')]);
+    for (const [p, u] of [[me, tony], [j, joe], [y, yan]]) await db.query('update players set user_id = $2 where id = $1', [p, u]);
+    await db.query('insert into notification_prefs (player_id, league_id, weekly_recap) values ($1, $2, false)', [y, oak]);
+    await db.query('delete from push_outbox');
+
+    await as(db, tony, () => db.query(`select settle_event($1, '[]'::jsonb)`, [eventId]));
+    const pushes = await rows<{ user_ids: string[]; title: string; body: string; url: string }>(db, 'select user_ids, title, body, url from push_outbox');
+    // Free leagues too; not the commissioner who settled it, not Yan (results off).
+    expect(pushes).toEqual([{ user_ids: [joe], title: 'Oak Creek Men: week 1 results', body: 'Results, skins and standings are in.', url: '/l/oak-creek/standings' }]);
+
+    await db.query(`update events set rules_override = null where id = $1`, [eventId]); // other edits: no second notice
+    expect(await rows(db, 'select count(*)::int as n from push_outbox')).toEqual([{ n: 1 }]);
+  });
+
+  it('bills plans by the year, with the Course plan at $990', async () => {
+    expect(await rows(db, `select billing, price_cents from plans where code = 'club'`)).toEqual([{ billing: 'per_club_year', price_cents: 99000 }]);
+    expect(await rows(db, `select billing from plans where code = 'pro'`)).toEqual([{ billing: 'per_league_year' }]);
   });
 });
