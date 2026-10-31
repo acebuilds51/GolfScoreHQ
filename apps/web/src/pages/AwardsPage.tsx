@@ -22,7 +22,7 @@ export function AwardsPage() {
   if (!pro) {
     return (
       <div className="page stack">
-        <div className="row between"><h2>Season awards</h2><ProLock /></div>
+        <div className="row between"><h2>Season awards</h2><ProLock feature="awards" /></div>
         <p className="muted">Pro leagues get an awards page that updates every week: low average, best round, skins leader, CTP king, birdie machine, most improved and more, plus a picture to share and the course's hardest and easiest holes.</p>
         <div><Link className="btn" to="../settings">See plans</Link></div>
       </div>

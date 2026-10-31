@@ -142,7 +142,7 @@ function HowYouPlay({ a, plan, set, setForm, onBack, onNext }: StepProps & { set
             return (
               <label key={k} className={`format-pick${f.format === k ? ' on' : ''}${needsPro ? ' locked' : ''}`}>
                 <input type="radio" name="format" checked={f.format === k} disabled={needsPro} onChange={() => setForm({ format: k })} />
-                <span className="grow"><strong>{FORMAT_NAMES[k]}</strong>{needsPro && <> <ProLock /></>}<span className="small muted block">{FORMAT_HELP[k]}</span></span>
+                <span className="grow"><strong>{FORMAT_NAMES[k]}</strong>{needsPro && <> <ProLock feature="formats" /></>}<span className="small muted block">{FORMAT_HELP[k]}</span></span>
               </label>
             );
           })}
@@ -164,7 +164,7 @@ function HowYouPlay({ a, plan, set, setForm, onBack, onNext }: StepProps & { set
       </div>
 
       <div className="subcard stack">
-        <div className="row between wrap"><strong>Side games and money</strong>{locked && <ProLock />}</div>
+        <div className="row between wrap"><strong>Side games and money</strong>{locked && <ProLock feature="sideGames" />}</div>
         {locked && <p className="small muted">Skins, closest to the pin and money need Pro. Answer anyway: we'll show them in your review, and you can turn them on after upgrading.</p>}
         {match && (
           <>
@@ -256,7 +256,7 @@ function WhenYouPlay({ a, plan, set, onBack, onNext }: StepProps) {
       )}
 
       <div className="subcard stack">
-        <div className="row between wrap"><strong>Tee times</strong>{!plan.teeSheet && <ProLock />}</div>
+        <div className="row between wrap"><strong>Tee times</strong>{!plan.teeSheet && <ProLock feature="teeSheet" />}</div>
         <div className="grid three">
           <label>First group tees off<input type="time" value={a.teeFirst} disabled={!plan.teeSheet} onChange={(e) => set({ teeFirst: e.target.value })} /></label>
           <label>Minutes apart<input inputMode="numeric" value={a.teeEvery} disabled={!plan.teeSheet} onChange={(e) => set({ teeEvery: e.target.value.replace(/\D/g, '') })} /></label>

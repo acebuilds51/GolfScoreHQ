@@ -37,7 +37,7 @@ export function WhosPlaying({ eventId, weekNumber, players }: { eventId: string;
   if (!allowed) {
     return (
       <section className="card stack">
-        <div className="row between"><h2>Who's playing</h2><ProLock /></div>
+        <div className="row between"><h2>Who's playing</h2><ProLock feature="whosPlaying" /></div>
         <p className="small muted">Pro leagues get "Are you playing?" replies from every golfer and a sub finder: ask your subs, and the first to accept gets the spot.</p>
       </section>
     );

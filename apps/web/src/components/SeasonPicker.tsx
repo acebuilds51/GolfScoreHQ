@@ -11,7 +11,7 @@ export function SeasonPicker({ seasons, current }: { seasons: Season[]; current:
   const [params, setParams] = useSearchParams();
   if (seasons.length < 2) return null;
   if (!league.features.includes('history')) {
-    return <span className="small muted row" style={{ gap: 6 }}>Past seasons <ProLock /></span>;
+    return <span className="small muted row" style={{ gap: 6 }}>Past seasons <ProLock feature="seasons" /></span>;
   }
   return (
     <select aria-label="Season" value={current.id} onChange={(e) => {

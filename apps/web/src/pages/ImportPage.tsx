@@ -43,7 +43,7 @@ export function ImportPage() {
   if (!pro) {
     return (
       <div className="page stack">
-        <div className="row between"><h2>Import past rounds</h2><ProLock /></div>
+        <div className="row between"><h2>Import past rounds</h2><ProLock feature="import" /></div>
         <p className="muted">Bring last season's scores in from a spreadsheet so standings, stats and handicaps start with history. Included with GolfScoreHQ Pro, or <Link to="../setup">we can do it for you</Link>.</p>
       </div>
     );

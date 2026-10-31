@@ -129,7 +129,7 @@ function PlayerStats({ data, playerId }: { data: SeasonData; playerId: string })
             </>
           ) : (
             <section className="card stack">
-              <div className="row between"><h3>More stats</h3><ProLock /></div>
+              <div className="row between"><h3>More stats</h3><ProLock feature="stats" /></div>
               <p className="small muted">Pro leagues see each golfer's week-by-week chart, birdie and bogey mix, par-3/4/5 scoring, best and worst holes, and head-to-head records.</p>
             </section>
           )}

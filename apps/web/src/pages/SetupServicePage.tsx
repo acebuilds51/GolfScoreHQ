@@ -39,7 +39,7 @@ export function SetupServicePage() {
   if (!pro) {
     return (
       <div className="page stack">
-        <div className="row between"><h2>We set up your league</h2><ProLock /></div>
+        <div className="row between"><h2>We set up your league</h2><ProLock feature="setup" /></div>
         <p className="muted">Send us your roster spreadsheet, handicaps, scorecard and last season's results, and we'll enter it all for you. Included with GolfScoreHQ Pro.</p>
         <div><Link className="btn btn-primary" to="../settings">See plans</Link></div>
       </div>

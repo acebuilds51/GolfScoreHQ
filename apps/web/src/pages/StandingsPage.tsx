@@ -108,7 +108,7 @@ export function StandingsPage() {
       <section className="card stack">
         <div className="row between">
           <h2>{season.id === seasons[0]?.id ? 'Season awards so far' : 'Season awards'}</h2>
-          {showAwards ? <Link className="small" to={`../awards${query}`}>Awards and course stats →</Link> : <ProLock />}
+          {showAwards ? <Link className="small" to={`../awards${query}`}>Awards and course stats →</Link> : <ProLock feature="awards" />}
         </div>
         {showAwards ? (
           standings.awards.length ? (

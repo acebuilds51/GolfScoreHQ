@@ -81,7 +81,7 @@ function LeagueLook() {
     <section className="card stack">
       <div className="row between">
         <h2>League look</h2>
-        {!allowed && <ProLock />}
+        {!allowed && <ProLock feature="look" />}
       </div>
       <p className="small muted">Your logo and colors show at the top of your league's pages, on Clubhouse TV and in the weekly recap email.</p>
 
@@ -358,7 +358,7 @@ function Members({ version }: { version: number }) {
         ))}
       </ul>
       <div className="pad stack">
-        {!canCoCommish && <p className="small muted"><ProLock /> Co-commissioners come with Pro.</p>}
+        {!canCoCommish && <p className="small muted"><ProLock feature="coCommish" /> Co-commissioners come with Pro.</p>}
         <ErrorText>{error}</ErrorText>
       </div>
     </section>
@@ -393,7 +393,7 @@ function PaymentLinks() {
     >
       <div className="row between">
         <h2>How golfers pay you</h2>
-        {!allowed && <ProLock />}
+        {!allowed && <ProLock feature="payLinks" />}
       </div>
       <p className="small muted">
         Golfers who owe money get a tap-to-pay link in their weekly recap email, with the amount filled in. Money goes straight to you; GolfScoreHQ never holds it. Leave any of these blank.
@@ -438,7 +438,7 @@ function Reminders() {
     <section className="card stack">
       <div className="row between">
         <h2>"Are you playing?" emails</h2>
-        {!allowed && <ProLock />}
+        {!allowed && <ProLock feature="rsvpEmails" />}
       </div>
       <p className="small muted">
         Golfers who haven't answered or joined a group get an email at 9 AM with one-tap "I'm in" and "I'm out" buttons (no sign-in needed) and a link to the tee sheet. Golfers can turn them off.
@@ -497,7 +497,7 @@ function ClubhouseTv() {
     <section className="card stack">
       <div className="row between">
         <h2>Clubhouse TV</h2>
-        {!allowed && <ProLock />}
+        {!allowed && <ProLock feature="tv" />}
       </div>
       <p className="small muted">
         Put the live leaderboard on a TV at the course. Open the link on a smart TV's browser, a Fire Stick, a Chromecast or a laptop plugged into the TV. No sign-in needed on the TV; the link only shows this league's scores.

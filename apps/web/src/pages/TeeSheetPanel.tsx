@@ -33,7 +33,7 @@ export function TeeSheetPanel({ event, players }: { event: LeagueEvent; players:
   if (!allowed) {
     return (
       <section className="card stack">
-        <div className="row between"><h2>Tee sheet</h2><ProLock /></div>
+        <div className="row between"><h2>Tee sheet</h2><ProLock feature="teeSheet" /></div>
         <p className="small muted">Pro leagues post tee times and captains, golfers fill the groups themselves, and everyone sees who needs a partner or a match, with one tap to text them.</p>
       </section>
     );
@@ -444,7 +444,7 @@ export function SeasonTeeTimes({ season }: { season: Season }) {
   if (!allowed) {
     return commish ? (
       <section className="card stack">
-        <div className="row between"><h2>Tee times</h2><ProLock /></div>
+        <div className="row between"><h2>Tee times</h2><ProLock feature="teeSheet" /></div>
         <p className="small muted">Pro leagues set tee times once for the season. Every week gets them, golfers fill their own groups, and everyone sees who needs a partner or a match.</p>
       </section>
     ) : null;
