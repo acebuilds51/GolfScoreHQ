@@ -26,15 +26,14 @@
         -webkit-mask-image: radial-gradient(ellipse 50% 50% at center, #000 72%, transparent 100%); mask-image: radial-gradient(ellipse 50% 50% at center, #000 72%, transparent 100%);
       }
       #splash .sp-brand { position: absolute; top: 9vh; left: 0; right: 0; z-index: 2; text-align: center; animation: splash-up 0.7s 0.1s ease-out both; }
-      #splash .sp-w1 {
-        font-size: clamp(56px, 19vw, 104px); line-height: 0.9; letter-spacing: 0.04em; color: transparent;
+      #splash .sp-name { font-size: clamp(30px, 11vw, 76px); line-height: 1; letter-spacing: 0.01em; white-space: nowrap; color: #f4f1e8; filter: drop-shadow(0 3px 10px rgb(0 0 0 / 0.7)); }
+      #splash .sp-gold {
+        color: transparent;
         background: linear-gradient(110deg, transparent 40%, rgb(255 255 255 / 0.8) 50%, transparent 60%), linear-gradient(180deg, #fff6d2 0%, #f0cf73 38%, #b8862a 62%, #f7dc8e 100%);
         background-size: 250% 100%, 100% 100%; background-position: 130% 0, 0 0; background-repeat: no-repeat;
-        -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 3px 10px rgb(0 0 0 / 0.7));
+        -webkit-background-clip: text; background-clip: text;
         animation: splash-shine 1s 0.5s ease-in-out forwards;
       }
-      #splash .sp-w2 { font-size: clamp(22px, 7.4vw, 40px); letter-spacing: 0.18em; margin-top: 6px; color: #f4f1e8; }
-      #splash .sp-w2 b { color: #e9c467; }
       #splash .sp-tag { margin-top: 14px; font: 600 clamp(11px, 3.2vw, 14px) -apple-system, 'Segoe UI', Roboto, sans-serif; letter-spacing: 0.32em; text-transform: uppercase; color: #d9b45a; }
       /* The white the clip ends on, spread over the whole screen; timed from when the video starts playing */
       #splash .sp-white { position: absolute; inset: 0; z-index: 3; background: #f4f5f2; opacity: 0; pointer-events: none; }
@@ -49,8 +48,7 @@
     <div id="splash" aria-hidden="true">
       <video class="sp-video" src="/splash.mp4" poster="/splash-poster.jpg" autoplay muted playsinline preload="auto"></video>
       <div class="sp-brand">
-        <div class="sp-w1">GOLF</div>
-        <div class="sp-w2">SCORE <b>HQ</b></div>
+        <div class="sp-name"><span class="sp-gold">Golf</span>Score<span class="sp-gold">HQ</span></div>
         <div class="sp-tag">Your league, live.</div>
       </div>
       <div class="sp-white"></div>
