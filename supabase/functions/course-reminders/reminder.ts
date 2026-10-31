@@ -67,7 +67,7 @@ export function reminderEmail(r: ReminderInput): { subject: string; text: string
       `Hi,`,
       `This is the final reminder: your GolfScoreHQ Course plan invoice for ${r.courseName} (${dollars(r.amountCents)} for the year) is due in one week, on ${due}.`,
       pay,
-      `If it isn't paid by then, on ${off} Pro switches off for ${leagues}. That means:`,
+      `If it isn't paid by then, on ${off} Pro switches off for ${leagues}, and they lose:`,
       [
         '- Side games and money: skins, closest to the pin, presses, payouts and dues',
         '- The tee sheet, RSVPs, sub finder and "Are you playing?" reminders',
@@ -75,7 +75,6 @@ export function reminderEmail(r: ReminderInput): { subject: string; text: string
         '- Clubhouse TV and your sponsor screen',
         '- Past seasons, all formats, branding and downloads',
       ].join('\n'),
-      `Nothing is deleted. Scoring, the live leaderboard, standings and the roster keep working free, and everything comes back the moment the invoice is paid.`,
       `Questions, or need more time? Just reply, or write to ${r.supportEmail}.`,
       `Thank you,\nGolfScoreHQ`,
     ].join('\n\n'),

@@ -33,7 +33,8 @@ describe('course invoice reminders', () => {
     expect(e.text).toContain('$990');
     expect(e.text).toContain('Sunday, January 31, 2027');
     expect(e.text).toContain('Tuesday Men, Ladies 9');
-    expect(e.text).toContain('Nothing is deleted');
+    expect(e.text).toContain('they lose');
+    expect(e.text).not.toContain('Nothing is deleted');
     expect(e.text).toContain('https://pay.example/x');
     const first = reminderEmail({ kind: '14', courseName: 'Crystal Lake', leagues: [], amountCents: 99000, dueSec: due, graceDays: 3, payUrl: null, supportEmail: 's@x.com' });
     expect(first.text).toContain('two weeks');
