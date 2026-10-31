@@ -102,8 +102,9 @@ function InvoiceForm({ clubId, onDone, onCancel }: { clubId: string; onDone: (in
   const [price, setPrice] = useState(PRICE.course.replace(/\D/g, ''));
   const [days, setDays] = useState('30');
   const [email, setEmail] = useState(true);
-  // The Founding Course offer: no cost through January 31, 2027 (see ForCoursesPage).
-  const [freeUntil, setFreeUntil] = useState(new Date() < new Date('2027-01-30') ? '2027-01-31' : '');
+  // The Founding Course offer: no cost through January 31, 2027 (see ForCoursesPage), so the
+  // first invoice goes out Jan 1 and, with 30 days to pay, is due Jan 31.
+  const [freeUntil, setFreeUntil] = useState(new Date() < new Date('2026-12-31') ? '2027-01-01' : '');
   const { busy, error, setError, run } = useAction();
   return (
     <form className="stack" onSubmit={async (e) => {
@@ -118,12 +119,13 @@ function InvoiceForm({ clubId, onDone, onCancel }: { clubId: string; onDone: (in
       <div className="row wrap">
         <label className="inline">Price a year ($)<input inputMode="numeric" value={price} onChange={(e) => { setPrice(e.target.value.replace(/\D/g, '')); setError(null); }} /></label>
         <label className="inline">Days to pay<input inputMode="numeric" value={days} onChange={(e) => { setDays(e.target.value.replace(/\D/g, '')); setError(null); }} /></label>
-        <label className="inline">Free until<input type="date" value={freeUntil} onChange={(e) => { setFreeUntil(e.target.value); setError(null); }} /></label>
+        <label className="inline">First invoice goes out<input type="date" value={freeUntil} onChange={(e) => { setFreeUntil(e.target.value); setError(null); }} /></label>
       </div>
       <label className="check-row small"><input type="checkbox" checked={email} onChange={(e) => setEmail(e.target.checked)} /> Email the invoice to the manager</label>
       <p className="small muted">
-        With a free-until date, nothing is charged now and the first invoice goes out that day. Clear the date to invoice today.
-        It renews every year with a new invoice. They can pay by card or bank transfer on Stripe's page, or you mark it paid when a check comes.
+        Nothing is charged before the first invoice goes out; it's due the days to pay after that (Jan 1 + 30 days = Jan 31).
+        Not paid by then, Pro switches off 3 days later. Clear the date to invoice today.
+        It renews every year on the same day with a new invoice. They can pay by card or bank transfer on Stripe's page, or you mark it paid when a check comes.
       </p>
       <ErrorText>{error}</ErrorText>
       <div className="row">
@@ -138,7 +140,7 @@ function InvoiceLine({ invoice: i }: { invoice: CourseInvoice }) {
   return (
     <div className="stack">
       <p className="small">
-        {i.freeUntil ? <><strong>Free until {fmtDay(i.freeUntil)}</strong>. The first invoice goes out that day.</> : <>
+        {i.freeUntil ? <><strong>Free for now.</strong> The first invoice goes out {fmtDay(i.freeUntil)}{i.dueDate ? `, due by ${fmtDay(i.dueDate)}` : ''}.</> : <>
           <strong>{INVOICE_STATUS[i.status] ?? i.status}</strong>
           {i.status === 'open' && <> · {dollars(i.amountDue)} due{i.dueDate ? ` by ${fmtDay(i.dueDate)}` : ''}</>}
         </>}
