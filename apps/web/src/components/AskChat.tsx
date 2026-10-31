@@ -57,11 +57,18 @@ export function AskChat({ leagueSlug, seed, autoFocus }: {
 
   const patch = (i: number, p: Partial<Msg>) => setMsgs((all) => all.map((m, n) => (n === i ? { ...m, ...p } : m)));
 
-  function sendToUs(i: number) {
-    const q = [...msgs.slice(0, i)].reverse().find((m) => m.role === 'user')?.content ?? '';
-    const convo = msgs.slice(0, i + 1).map((m) => `${m.role === 'user' ? 'Q' : 'A'}: ${m.content}`).join('\n\n');
-    reportProblem('report', `Help question: ${q}`.slice(0, 200), `${convo}\n\n(from ${pathname}${leagueSlug ? `, league ${leagueSlug}` : ''})`);
-    patch(i, { sent: true });
+  // A person answers it under Ideas and questions (/feedback), with a notification.
+  async function sendToUs(i: number) {
+    const convo = msgs.slice(0, i + 1).map((m) => `${m.role === 'user' ? 'Asked' : 'The helper said'}: ${m.content}`).join('\n\n');
+    try {
+      await api.sendFeedback('question', convo.slice(0, 4000), leagueSlug, pathname);
+      patch(i, { sent: true });
+    } catch {
+      // Still reaches us, just without a way to answer in the app.
+      const q = [...msgs.slice(0, i)].reverse().find((m) => m.role === 'user')?.content ?? '';
+      reportProblem('report', `Help question: ${q}`.slice(0, 200), `${convo}\n\n(from ${pathname}${leagueSlug ? `, league ${leagueSlug}` : ''})`);
+      patch(i, { sent: true });
+    }
   }
 
   if (!user) {
@@ -88,8 +95,8 @@ export function AskChat({ leagueSlug, seed, autoFocus }: {
                     </>
                   ))}
                   {m.sent
-                    ? <span className="good">Sent. We'll email you at {user.email}.</span>
-                    : <button type="button" className="linkish" onClick={() => sendToUs(i)}>Send it to us</button>}
+                    ? <span className="good">Sent. A person will answer under <Link to={`/feedback${leagueSlug ? `?from=${encodeURIComponent(leagueSlug)}` : ''}`}>Ideas and questions</Link>.</span>
+                    : <button type="button" className="linkish" onClick={() => void sendToUs(i)}>Send it to us</button>}
                 </div>
               )}
             </div>

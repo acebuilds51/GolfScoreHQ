@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
   const key = env('ANTHROPIC_API_KEY');
   if (!key) {
     await save(null);
-    return json({ error: "The question helper isn't set up yet. Tap Send it to us and we'll answer by email." }, 503);
+    return json({ error: "The question helper isn't set up yet. Tap Send it to us and a person will answer." }, 503);
   }
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',

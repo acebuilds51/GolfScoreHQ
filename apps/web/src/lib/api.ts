@@ -1,7 +1,7 @@
 import type { CourseSummary, LookupCourse } from '../../../../supabase/functions/course-lookup/normalize';
 import type { HealthSnapshot } from '../../../../supabase/functions/health-report/report';
 import type {
-  AppErrorReport, HelpQuestion, UpgradeInterest, MatchMoney, PaidMark, PayHandles,
+  AppErrorReport, Feedback, FeedbackKind, FeedbackStatus, HelpQuestion, UpgradeInterest, MatchMoney, PaidMark, PayHandles,
   Club, LeagueBilling,
   Contact, Course, CtpEntry, JoinRequest, League, LeagueEvent, LeagueSummary, LedgerRow, Member, NewCourse, NewPlayer, Player, Role,
   PaymentHandles, RecapPreview, RoundData, RoundPlayer, RsvpStatus, ScoreEntry, Season, SubOffer, SubRequest, TvDisplay, TvFeed, TvSettings, User,
@@ -235,6 +235,15 @@ export interface Api {
   rateHelpAnswer(id: string, helpful: boolean): Promise<void>;
   /** Staff: questions people asked on the Help page, newest first. */
   staffHelpQuestions(days: number): Promise<HelpQuestion[]>;
+
+  /** "Ideas and questions": send GolfScoreHQ an idea, or a question for a person. Staff get a notification. */
+  sendFeedback(kind: FeedbackKind, message: string, leagueSlug: string | null, path: string | null): Promise<void>;
+  /** What you've sent, newest first, with our replies. */
+  myFeedback(): Promise<Feedback[]>;
+  /** Staff: everything sent, newest first. */
+  staffFeedback(days: number): Promise<Feedback[]>;
+  /** Staff: set the status and reply; the sender gets a notification. */
+  staffAnswerFeedback(id: string, status: FeedbackStatus, reply: string): Promise<void>;
 
   /** Diagnostics: the app reports a crash, a failed action, or a golfer's "Report a problem" note. Never throws. */
   logAppError(report: AppErrorReport): Promise<void>;

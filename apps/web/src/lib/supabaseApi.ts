@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Api, CourseSummary, HealthSnapshot, LookupCourse } from './api';
-import type { LeagueBilling, PilotCode, PilotCodeStatus, RecapPreview, ReminderPreview, RsvpLinkInfo, SetupRequest, SubOffer, TeeTime } from './types';
+import type { Feedback, LeagueBilling, PilotCode, PilotCodeStatus, RecapPreview, ReminderPreview, RsvpLinkInfo, SetupRequest, SubOffer, TeeTime } from './types';
 import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, TvFeed, User } from './types';
 import { randomToken, sha256Hex } from './util';
 
@@ -15,6 +15,11 @@ function toSetupRequest(r: Row): SetupRequest {
     staffAccess: r.staff_access ?? true, status: r.status, staffReply: r.staff_reply ?? null, createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }
+
+const toFeedback = (r: Row): Feedback => ({
+  id: r.id, kind: r.kind, message: r.message, status: r.status, reply: r.reply ?? null, repliedAt: r.replied_at ?? null,
+  createdAt: r.created_at, leagueName: r.league_name ?? null, email: r.email ?? null, path: r.path ?? null,
+});
 
 function check<T>(res: { data: T; error: { message: string } | null }): T {
   if (res.error) throw new Error(res.error.message);
@@ -735,6 +740,19 @@ export function supabaseApi(url: string, anonKey: string): Api {
         id: r.id, question: r.question, answer: r.answer ?? null, turn: r.turn ?? 1, helpful: r.helpful ?? null,
         createdAt: r.created_at, email: r.email ?? null, leagueName: r.league_name ?? null,
       }));
+    },
+
+    async sendFeedback(kind, message, leagueSlug, path) {
+      check(await sb.rpc('send_feedback', { p_kind: kind, p_message: message, p_league_slug: leagueSlug, p_path: path }));
+    },
+    async myFeedback() {
+      return ((check(await sb.rpc('my_feedback')) ?? []) as Row[]).map(toFeedback);
+    },
+    async staffFeedback(days) {
+      return ((check(await sb.rpc('staff_feedback', { p_days: days })) ?? []) as Row[]).map(toFeedback);
+    },
+    async staffAnswerFeedback(id, status, reply) {
+      check(await sb.rpc('staff_answer_feedback', { p_id: id, p_status: status, p_reply: reply }));
     },
 
     async logAppError(r) {
