@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Api, CourseSummary, HealthSnapshot, LookupCourse } from './api';
-import type { CourseInvoice, CourseReport, Feedback, LeagueBilling, PilotCode, StaffCourse, PilotCodeStatus, RecapPreview, ReminderPreview, RsvpLinkInfo, SetupRequest, SubOffer, TeeTime } from './types';
+import type { CourseInvoice, CourseReport, Feedback, LeagueBilling, LessonResult, LessonsDone, PilotCode, StaffCourse, PilotCodeStatus, RecapPreview, ReminderPreview, RsvpLinkInfo, SetupRequest, SubOffer, TeeTime } from './types';
 import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, TvFeed, User } from './types';
 import { isNetworkError } from './offline';
 import { randomToken, sha256Hex } from './util';
@@ -771,6 +771,18 @@ export function supabaseApi(url: string, anonKey: string): Api {
     },
     async rateHelpAnswer(id, helpful) {
       check(await sb.rpc('rate_help_answer', { p_id: id, p_helpful: helpful }));
+    },
+    async saveLessonProgress(p) {
+      check(await sb.rpc('save_lesson_progress', {
+        p_id: p.id, p_lesson: p.lessonId, p_steps: p.steps, p_reached: p.reached, p_finished: p.finished, p_missed: p.missed,
+        p_right: p.right ?? null, p_total: p.total ?? null, p_feel: p.feel ?? null, p_idea: p.idea ?? null,
+      }));
+    },
+    async myLessons() {
+      return (check(await sb.rpc('my_lessons')) ?? {}) as LessonsDone;
+    },
+    async staffLessonResults(days) {
+      return (check(await sb.rpc('staff_lesson_results', { p_days: days })) ?? []) as LessonResult[];
     },
     async staffHelpQuestions(days) {
       const rows = (check(await sb.rpc('staff_help_questions', { p_days: days })) ?? []) as Row[];

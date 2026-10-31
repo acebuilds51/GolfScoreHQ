@@ -1,10 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { reportProblem } from '../lib/diagnostics';
 import { FORMAT_NAMES, isQuiz, isTap, lessonById, LESSONS, type Lesson, type LessonFor } from '../lessons/lessons';
 import { TapContext } from '../lessons/Pretend';
+import { api } from '../lib/backend';
+import { useAsync, useAuth } from '../lib/hooks';
+import type { LessonProgress, LessonsDone } from '../lib/types';
 
-type Done = Record<string, { right: number; total: number; at: string }>;
+// Finished lessons are kept on this phone, and for signed-in people in their
+// account too, so the list shows them done on every phone. Each try is also
+// saved as it goes (lesson_results), so staff can see where people get stuck.
+type Done = LessonsDone;
 const KEY = 'gshq.lessons';
 const loadDone = (): Done => {
   try { return JSON.parse(localStorage.getItem(KEY) ?? '{}') as Done; } catch { return {}; }
@@ -13,11 +18,20 @@ const saveDone = (d: Done) => {
   try { localStorage.setItem(KEY, JSON.stringify(d)); } catch { /* private browsing: progress just isn't kept */ }
 };
 
+/** Save a try. Best effort: with no signal it just isn't counted, and the lesson carries on. */
+const save = (p: LessonProgress) => { void api.saveLessonProgress(p).catch(() => {}); };
+
+const newId = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID()
+  : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) => (Number(c) ^ (Math.random() * 16) >> (Number(c) / 4)).toString(16)));
+
 /** /lessons: practice league night on pretend screens, for golfers or commissioners, in each format. */
 export function LessonsPage() {
   const [params, setParams] = useSearchParams();
   const who: LessonFor = params.get('for') === 'commissioners' ? 'commissioners' : 'golfers';
-  const done = useMemo(loadDone, []);
+  const { user } = useAuth();
+  const local = useMemo(loadDone, []);
+  const mine = useAsync(async () => (user ? api.myLessons() : {}), [user?.id]);
+  const done: Done = { ...mine.data, ...local };
   const list = LESSONS.filter((l) => l.for === who);
 
   return (
@@ -67,10 +81,20 @@ function LessonPlayer({ lesson }: { lesson: Lesson }) {
   const [taps, setTaps] = useState(0);
   const [picked, setPicked] = useState<number | null>(null);
   const [score, setScore] = useState({ right: 0, total: 0 });
+  // This try: saved as each step opens, so an unfinished one still shows where it stopped.
+  const [id] = useState(newId);
+  const missed = useRef<number[]>([]);
   const step = lesson.steps[i];
   const next = () => { setI(i + 1); setTaps(0); setPicked(null); };
+  const progress = (extra: Partial<LessonProgress> = {}): LessonProgress => ({
+    id, lessonId: lesson.id, steps: lesson.steps.length, reached: Math.min(i, lesson.steps.length), finished: false, missed: missed.current, ...extra,
+  });
+  useEffect(() => {
+    if (i < lesson.steps.length) save(progress());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [i]);
 
-  if (!step) return <Finish lesson={lesson} right={score.right} total={score.total} />;
+  if (!step) return <Finish lesson={lesson} right={score.right} total={score.total} progress={progress} />;
 
   const tapCtx = {
     target: isTap(step) ? step.tap : null,
@@ -101,6 +125,10 @@ function LessonPlayer({ lesson }: { lesson: Lesson }) {
                 onClick={() => {
                   setPicked(n);
                   setScore((s) => ({ right: s.right + (o.right ? 1 : 0), total: s.total + 1 }));
+                  if (!o.right) {
+                    missed.current = [...missed.current, i];
+                    save(progress());
+                  }
                 }}>
                 {o.text}
               </button>
@@ -130,7 +158,9 @@ function LessonPlayer({ lesson }: { lesson: Lesson }) {
 
 const FEELS = [{ k: 'easy', icon: '😀', label: 'Easy' }, { k: 'ok', icon: '🙂', label: 'OK' }, { k: 'hard', icon: '😕', label: 'Hard' }] as const;
 
-function Finish({ lesson, right, total }: { lesson: Lesson; right: number; total: number }) {
+function Finish({ lesson, right, total, progress }: {
+  lesson: Lesson; right: number; total: number; progress: (extra?: Partial<LessonProgress>) => LessonProgress;
+}) {
   const nav = useNavigate();
   const [feel, setFeel] = useState<string | null>(null);
   const [changing, setChanging] = useState(false);
@@ -143,6 +173,8 @@ function Finish({ lesson, right, total }: { lesson: Lesson; right: number; total
     const d = loadDone();
     d[lesson.id] = { right, total, at: new Date().toISOString() };
     saveDone(d);
+    save(progress({ reached: lesson.steps.length, finished: true, right, total }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, right, total]);
 
   return (
@@ -172,10 +204,11 @@ function Finish({ lesson, right, total }: { lesson: Lesson; right: number; total
           <div>
             <button type="button" className="btn btn-primary" disabled={!feel && !idea.trim()}
               onClick={() => {
-                // Only worth sending with an idea or when it felt hard: that's what we act on.
-                if (idea.trim() || feel === 'hard') {
-                  reportProblem('report', `Lesson: ${lesson.title} (${feel ?? 'no answer'}, ${right}/${total})`, idea.trim() || null);
-                }
+                // Staff see it under Lessons on /staff.
+                save(progress({
+                  reached: lesson.steps.length, finished: true, right, total,
+                  feel: (feel as LessonProgress['feel']) ?? null, idea: changing ? idea.trim() || null : null,
+                }));
                 setSent(true);
               }}>
               Send

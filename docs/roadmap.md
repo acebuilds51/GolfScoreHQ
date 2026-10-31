@@ -44,10 +44,10 @@ Plans and features live in the `plans` table, so prices and feature lists can ch
 - **Course summary:** one printable page per course with every league's golfers, golfers on the app, league nights played, rounds brought to the course and average turnout.
 - **Post to GHIN:** golfers add their GHIN number; after a finished round the week page shows their scorecard and an Open GHIN button (no USGA license needed, so the golfer still enters the score). See [ghin.md](ghin.md).
 - **No signal on the course:** the app opens with no signal (its files are kept on the phone), every group's round is saved on the phone from the week page so it opens and scores offline, screens keep what they last loaded instead of an error, golfers stay signed in, waiting scores send from any screen or the next time the app opens, and a card submitted with no signal goes in by itself once every score has. A "No signal" bar says what's happening.
+- **Lesson results (staff):** every lesson try is saved as it goes, signed in or not. /staff shows per lesson how many tried and finished, the step where most stop, the quiz question most missed, how it felt, and what people would change. Finished lessons show done on every phone for signed-in people.
 
 ## Next
 
 - **Before pilots play (spring 2027):** upgrade Resend from the free plan (100 emails a day); a practice league night on real phones (including a round in airplane mode); test the ideas box with a second person.
 - An official GHIN connection only if paying customers ever cover the USGA fee (see [ghin.md](ghin.md)).
-- Lesson results saved to the database instead of the phone, so staff can see where people get stuck.
 - Paid text messages only if leagues ask.

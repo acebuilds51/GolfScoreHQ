@@ -465,6 +465,31 @@ export interface AppErrorReport {
   leagueSlug?: string | null;
 }
 
+/** One try at a lesson, saved as it goes. `reached` and `missed` are 0-based step numbers. */
+export interface LessonProgress {
+  id: string;
+  lessonId: string;
+  steps: number;
+  reached: number;
+  finished: boolean;
+  missed: number[];
+  right?: number | null;
+  total?: number | null;
+  feel?: 'easy' | 'ok' | 'hard' | null;
+  idea?: string | null;
+}
+
+/** Finished lessons by id: the best score. */
+export type LessonsDone = Record<string, { right: number; total: number; at: string }>;
+
+/** A lesson try, for staff. `email` only comes with an idea (so staff can answer it). */
+export interface LessonResult extends Omit<LessonProgress, 'id'> {
+  signedIn: boolean;
+  email: string | null;
+  startedAt: string;
+  updatedAt: string;
+}
+
 /** A question asked on the Help page and the answer it got (staff view). */
 export interface HelpQuestion {
   id: string;

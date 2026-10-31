@@ -1328,3 +1328,40 @@ describe('selling the Course plan', () => {
     expect(await rows(db, 'select ghin_number from players where id = $1', [mine])).toEqual([{ ghin_number: null }]);
   });
 });
+describe('lesson results', () => {
+  const T1 = '11111111-1111-4111-8111-111111111111';
+  const T2 = '22222222-2222-4222-8222-222222222222';
+  const saveAs = (user: string | null, id: string, reached: number, finished = false, missed = '{}', extra = 'null, null, null, null') =>
+    as(db, user, () => db.query(`select save_lesson_progress($1, 'golfer-best-ball', 9, $2, $3, $4::int[], ${extra})`, [id, reached, finished, missed]));
+
+  it('saves a try as it goes, only moving forward, and only for the person who started it', async () => {
+    await saveAs(joe, T1, 0);
+    await saveAs(joe, T1, 4, false, '{2}');
+    await saveAs(joe, T1, 3); // an older save arriving late doesn't move it back
+    expect(await rows(db, 'select user_id, reached, finished, missed from lesson_results where id = $1', [T1])).toEqual([{ user_id: joe, reached: 4, finished: false, missed: [2] }]);
+    await saveAs(tony, T1, 9, true); // someone else's try: ignored
+    expect(await rows(db, 'select reached, finished from lesson_results where id = $1', [T1])).toEqual([{ reached: 4, finished: false }]);
+    await saveAs(joe, T1, 9, true, '{2}', `3, 4, 'hard', '  I''d skip the presses step  '`);
+    expect(await rows(db, 'select finished, right_count, total_count, feel, idea from lesson_results where id = $1', [T1]))
+      .toEqual([{ finished: true, right_count: 3, total_count: 4, feel: 'hard', idea: "I'd skip the presses step" }]);
+    const [{ d }] = await as(db, joe, () => rows<{ d: any }>(db, 'select my_lessons() as d'));
+    expect(d).toMatchObject({ 'golfer-best-ball': { right: 3, total: 4 } });
+  });
+
+  it('counts people who are not signed in, and shows the results to staff only', async () => {
+    await saveAs(null, T2, 2);
+    expect(await rows(db, 'select user_id, reached from lesson_results where id = $1', [T2])).toEqual([{ user_id: null, reached: 2 }]);
+    await expect(as(db, null, () => db.query('select my_lessons()'))).rejects.toThrow(/permission denied/);
+    await expect(as(db, joe, () => db.query('select * from lesson_results'))).rejects.toThrow(/permission denied/);
+    await expect(as(db, joe, () => db.query('select staff_lesson_results(30)'))).rejects.toThrow(/staff only/);
+    const staff = await createUser(db, 'staff@golfscorehq.app');
+    await db.query('insert into staff_users (user_id) values ($1)', [staff]);
+    const [{ r }] = await as(db, staff, () => rows<{ r: any }>(db, 'select staff_lesson_results(30) as r'));
+    expect(r).toMatchObject([{ lessonId: 'golfer-best-ball', reached: 2, finished: false, signedIn: false, email: null }]);
+  });
+
+  it('refuses junk', async () => {
+    await expect(as(db, joe, () => db.query(`select save_lesson_progress($1, 'Bad Id!', 9, 0, false, '{}')`, [T1]))).rejects.toThrow(/check/);
+    await expect(as(db, joe, () => db.query(`select save_lesson_progress($1, 'golfer-best-ball', 9, 0, false, '{}', null, null, 'meh')`, [T1]))).rejects.toThrow(/check/);
+  });
+});
