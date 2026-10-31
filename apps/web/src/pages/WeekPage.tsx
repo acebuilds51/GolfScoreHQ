@@ -6,6 +6,7 @@ import { EmptyState, ErrorText, PageSkeleton } from '../components/ui';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useAuth, useLeague, useLiveRefresh } from '../lib/hooks';
 import { courseHandicapFor, leagueIndexes, loadPlayedRounds } from '../lib/handicaps';
+import { isAroundToday, rememberScoring } from '../lib/scoringCache';
 import { allLayouts, describeRules, fmtDate, handicapRules, individualRules, isScramble, matchSoFar, weekRules } from '../lib/scoring';
 import { SpecialWeek } from './SpecialWeek';
 import { TeeSheetPanel } from './TeeSheetPanel';
@@ -37,6 +38,14 @@ export function WeekPage() {
 
   // Live: refresh as groups enter scores while the week is open.
   useLiveRefresh(league.id, data.reload, data.data?.event.status !== 'settled');
+
+  // Save every group's scoring screen on the phone while there's signal, so a golfer can open
+  // their round and score after losing signal on the course.
+  useEffect(() => {
+    const w = data.data;
+    if (!w || data.stale || w.event.status === 'settled' || w.event.status === 'rainout' || !isAroundToday(w.event.eventDate)) return;
+    rememberScoring(w, w.rounds.map((r) => r.id));
+  }, [data.data, data.stale]);
 
   if (data.error) return <div className="page"><ErrorText>{data.error}</ErrorText></div>;
   if (!data.data) return (data.loading ? <PageSkeleton /> : <div className="page muted">Week not found.</div>);

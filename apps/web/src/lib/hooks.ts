@@ -3,6 +3,7 @@ import { friendlyError } from './api';
 import { api } from './backend';
 import { cached, cacheKey, remember, setCacheOwner } from './cache';
 import { reportProblem, worthReporting } from './diagnostics';
+import { isNetworkError, sawNoSignal, sawSignal } from './offline';
 import type { League, User } from './types';
 
 export function useAuthState() {
@@ -45,27 +46,47 @@ export function useLeague() {
  * What the screen loaded last time shows straight away (`loading` stays true
  * while the fresh copy arrives), so going back to a page or reopening the app doesn't wait.
  * `fresh`: always wait for the server (screens that set themselves up once from the first data, like scoring).
+ * `cacheAs`: remember under this name, so another screen can fill it in ahead of time.
+ *
+ * No signal: the screen keeps (or falls back to) what it last loaded instead of
+ * showing an error, so a golfer on the course can still see and score their round.
  */
-export function useAsync<T>(fn: () => Promise<T>, deps: unknown[], opts: { fresh?: boolean } = {}) {
-  const key = opts.fresh ? null : cacheKey(fn, deps);
+export function useAsync<T>(fn: () => Promise<T>, deps: unknown[], opts: { fresh?: boolean; cacheAs?: string } = {}) {
+  const key = opts.cacheAs ?? cacheKey(fn, deps);
   // stale: showing what was remembered from last time; the fresh copy hasn't arrived yet.
   const [state, setState] = useState<{ data: T | undefined; error: string | null; loading: boolean; stale: boolean }>(() => {
-    const data = cached<T>(key);
+    const data = opts.fresh ? undefined : cached<T>(key);
     return { data, error: null, loading: true, stale: data !== undefined };
   });
   const seq = useRef(0);
+  // The data on screen, and which inputs it belongs to.
+  const shown = useRef(state.data);
+  shown.current = state.data;
+  const shownFor = useRef<string | null>(null);
   const run = useCallback(() => {
     const n = ++seq.current;
+    const these = depsId(deps);
     // New inputs (another week, another golfer): show what we had for those, if anything.
     setState((s) => {
       if (n === 1) return { ...s, loading: true };
-      const remembered = cached<T>(key);
+      const remembered = opts.fresh ? undefined : cached<T>(key);
       return remembered !== undefined ? { data: remembered, error: null, loading: true, stale: true } : { ...s, error: null, loading: true };
     });
     fn().then(
-      (data) => { if (n !== seq.current) return; remember(key, data); setState({ data, error: null, loading: false, stale: false }); },
+      (data) => {
+        if (n !== seq.current) return;
+        sawSignal();
+        remember(key, data);
+        shownFor.current = these;
+        setState({ data, error: null, loading: false, stale: false });
+      },
       (e) => {
         if (n !== seq.current) return;
+        if (isNetworkError(e)) {
+          sawNoSignal();
+          const data = cached<T>(key) ?? (shownFor.current === these ? shown.current : undefined);
+          if (data !== undefined) return setState({ data, error: null, loading: false, stale: true });
+        }
         reportFailure('error', 'A screen could not load', e);
         setState({ data: undefined, error: friendlyError(e), loading: false, stale: false });
       },
@@ -74,6 +95,10 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[], opts: { fresh
   }, deps);
   useEffect(run, [run]);
   return { ...state, reload: run };
+}
+
+function depsId(deps: unknown[]): string {
+  try { return JSON.stringify(deps); } catch { return String(Math.random()); }
 }
 
 /** Re-run `reload` when the league's scoring data changes, with a slow poll as a safety net. */
@@ -115,6 +140,7 @@ export function useAction() {
     try {
       return await fn();
     } catch (e) {
+      if (isNetworkError(e)) sawNoSignal();
       reportFailure('failed_action', 'An action failed', e);
       setError(friendlyError(e));
       return undefined;

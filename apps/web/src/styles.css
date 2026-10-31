@@ -727,3 +727,12 @@ span.step { display: inline-flex; align-items: center; justify-content: center; 
 /* Post to GHIN: a small scorecard, nine holes fit a phone without scrolling. */
 table.ghin-card th, table.ghin-card td { padding: 4px 5px; text-align: center; white-space: nowrap; }
 table.ghin-card th { text-align: left; }
+
+/* No signal on the course / scores waiting on this phone (OfflineBar). */
+.offline-bar {
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, var(--surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border));
+}
