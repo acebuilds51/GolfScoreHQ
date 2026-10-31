@@ -831,7 +831,7 @@ export function demoApi(): DemoApi {
       if (c.invoice) throw new Error('This course is already billed. Use Invoice link to see it.');
       const free = o.freeUntil ? new Date(`${o.freeUntil}T12:00:00Z`) : null;
       c.invoice = free
-        ? { url: null, status: 'paid', amountDue: 0, dueDate: null, freeUntil: free.toISOString() }
+        ? { url: null, status: 'paid', amountDue: 0, dueDate: new Date(free.getTime() + o.daysUntilDue * 86_400_000).toISOString(), freeUntil: free.toISOString() }
         : { url: null, status: 'open', amountDue: o.priceCents, dueDate: new Date(Date.now() + o.daysUntilDue * 86_400_000).toISOString(), freeUntil: null };
       c.expiresAt = new Date((free ? free.getTime() : Date.now() + 365 * 86_400_000) + 3 * 86_400_000).toISOString();
       save(db);

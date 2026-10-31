@@ -90,6 +90,8 @@ export interface SubscriptionState {
   cancelAtPeriodEnd: boolean;
   metadata: Record<string, string>;
   customer: string | null;
+  /** Invoiced (not charged) subscriptions: days the customer has to pay each invoice. */
+  daysToPay?: number | null;
 }
 
 /** Read what matters from a Stripe subscription (newer API versions keep the period on the items). */
@@ -104,6 +106,7 @@ export function readSubscription(sub: Record<string, any>): SubscriptionState {
     cancelAtPeriodEnd: !!sub.cancel_at_period_end || !!sub.cancel_at,
     metadata: sub.metadata ?? {},
     customer: typeof sub.customer === 'string' ? sub.customer : sub.customer?.id ?? null,
+    daysToPay: sub.collection_method === 'send_invoice' && typeof sub.days_until_due === 'number' ? sub.days_until_due : null,
   };
 }
 
@@ -116,14 +119,15 @@ export const LIVE_STATUSES = ['active', 'trialing', 'past_due'];
 /**
  * Until when the plan's features stay on. Paid: the end of the paid year plus
  * grace. Renewal card failing (past_due): Stripe has already moved the period
- * on to the new, unpaid year, so only grace from that year's start. Canceled
- * for good or never paid: now (features off). A successful retry makes it
- * active again and the next webhook restores the full year.
+ * on to the new, unpaid year, so only grace from that year's start (for an
+ * invoice, from its due date). Canceled for good or never paid: now (features
+ * off). A successful retry makes it active again and the next webhook restores
+ * the full year.
  */
 export function accessUntil(s: SubscriptionState, nowMs = Date.now()): Date {
   if (!LIVE_STATUSES.includes(s.status) || !s.periodEnd) return new Date(nowMs);
   if (s.status === 'past_due') {
-    const from = s.periodStart ?? Math.floor(nowMs / 1000);
+    const from = s.periodStart != null ? s.periodStart + (s.daysToPay ?? 0) * 86_400 : Math.floor(nowMs / 1000);
     return new Date(Math.max(nowMs, from * 1000 + GRACE_DAYS * 86_400_000));
   }
   return new Date(s.periodEnd * 1000 + GRACE_DAYS * 86_400_000);

@@ -52,6 +52,16 @@ describe('Stripe helpers', () => {
     expect(accessUntil(s, later).getTime()).toBe(later); // still failing after grace: off
   });
 
+  it('gives an unpaid invoice grace from its due date, not the year start', () => {
+    const sentAt = 1_798_804_800; // Jan 1 2027, 12:00 UTC
+    const sub = readSubscription({ id: 's', status: 'past_due', collection_method: 'send_invoice', days_until_due: 30, current_period_start: sentAt, current_period_end: sentAt + 365 * 86_400 });
+    expect(sub.daysToPay).toBe(30);
+    const graceEnd = (sentAt + 30 * 86_400) * 1000 + GRACE_DAYS * 86_400_000;
+    expect(new Date(graceEnd).toISOString().slice(0, 10)).toBe('2027-02-03');
+    expect(accessUntil(sub, (sentAt + 30 * 86_400) * 1000 + 3_600_000).getTime()).toBe(graceEnd);
+    expect(readSubscription({ id: 's', status: 'past_due', days_until_due: 30 }).daysToPay).toBeNull(); // charged, not invoiced
+  });
+
   it('reads the period start from old and new API shapes', () => {
     expect(readSubscription({ id: 's', status: 'past_due', current_period_start: 50, current_period_end: 100 }).periodStart).toBe(50);
     expect(readSubscription({ id: 's', status: 'past_due', items: { data: [{ current_period_start: 150, current_period_end: 200 }] } }).periodStart).toBe(150);

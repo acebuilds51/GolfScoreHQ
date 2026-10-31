@@ -4,11 +4,12 @@
 // subscription, so stripe-webhook keeps it in step after renewals and payments.
 //
 // A free period (the Founding Course offer) is a Stripe trial: the first invoice
-// goes out the day it ends.
+// goes out the day it ends, so the course pays by the end of the free period
+// (Jan 1 + 30 days to pay = due Jan 31).
 //
 // The course gets its leagues on Pro as soon as the invoice is sent. If it isn't
 // paid by the due date, Stripe marks the subscription past due and the plan
-// switches off after the grace days (accessUntil).
+// switches off after the grace days from the due date (accessUntil).
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import { accessUntil, LIVE_STATUSES, readSubscription, stripeApi } from '../_shared/stripe.ts';
 
@@ -93,12 +94,15 @@ export async function courseBilling(key: string, admin: SupabaseClient, body: Co
 
 function invoiceOf(inv: Record<string, any> | null | undefined, sub: Record<string, any>): CourseInvoice {
   if (!inv) throw new Error('Stripe has no invoice for this course yet. Try Invoice link in a minute.');
+  const trialEnd = sub.status === 'trialing' && sub.trial_end ? sub.trial_end : null;
+  // While free, the first invoice's due date is the day it goes out plus the days to pay.
+  const due = trialEnd ? trialEnd + (sub.days_until_due ?? 0) * 86_400 : inv.due_date;
   return {
-    freeUntil: sub.status === 'trialing' && sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null,
+    freeUntil: trialEnd ? new Date(trialEnd * 1000).toISOString() : null,
     url: inv.hosted_invoice_url ?? null,
     status: inv.status,
     amountDue: inv.amount_due ?? 0,
-    dueDate: inv.due_date ? new Date(inv.due_date * 1000).toISOString() : null,
+    dueDate: due ? new Date(due * 1000).toISOString() : null,
   };
 }
 
