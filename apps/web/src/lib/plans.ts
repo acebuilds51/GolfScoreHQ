@@ -57,6 +57,26 @@ export const COMMISH_TEASERS: ProTeaser[] = [
   { icon: '🤝', wish: 'Wouldn’t it be great to hand off some of the work?', answer: 'Add co-commissioners, keep every past season, and export it all whenever you like.' },
 ];
 
+/** The locked features a "Pro" badge can point at, and what tapping the badge says about each. */
+export const PRO_FEATURES = {
+  awards: { name: 'Season awards', what: 'Best rounds, most birdies, hot streaks and course stats, all season long.' },
+  import: { name: 'Import past rounds', what: 'Bring in last season’s scores from a spreadsheet, so standings and handicaps pick up where you left off.' },
+  seasons: { name: 'Past seasons', what: 'Every season is kept, so you can look back at old standings, results and money.' },
+  stats: { name: 'More stats', what: 'Each golfer’s averages, birdies and best rounds, and how they’re trending.' },
+  formats: { name: 'Every league format', what: 'All the league formats, not just the basic ones, and you can switch any time.' },
+  sideGames: { name: 'Side games and money', what: 'Skins, closest to the pin, presses and match money, worked out and settled for you.' },
+  look: { name: 'Your league’s look', what: 'Your logo, colors and course photo on every page, the TV and the share pictures.' },
+  coCommish: { name: 'Co-commissioners', what: 'Hand off some of the work: co-commissioners can run league night with you.' },
+  payLinks: { name: 'Pay links', what: 'Golfers see your Venmo, PayPal and Zelle links right next to what they owe.' },
+  rsvpEmails: { name: '“Are you playing?” emails', what: 'Reminder emails with one-tap in or out answers, so you know who’s playing before league night.' },
+  tv: { name: 'Clubhouse TV', what: 'Live scores, skins and standings on any TV in the clubhouse.' },
+  setup: { name: 'We set up your league', what: 'Send us your spreadsheet and we’ll load your golfers, courses and history.' },
+  specialWeek: { name: 'Special weeks', what: 'Make any week a scramble or a special event without changing the season’s rules.' },
+  teeSheet: { name: 'Tee sheet', what: 'Tee times, groups and partners. Golfers join groups themselves, and captains run their own.' },
+  whosPlaying: { name: 'Who’s playing', what: 'One-tap RSVPs, and a sub finder when a group is short.' },
+} as const;
+export type ProFeature = keyof typeof PRO_FEATURES;
+
 /** Which teaser to show this time: the next one each time the card appears, so it stays fresh. */
 export function nextTeaser(list: ProTeaser[], key: string): number {
   try {

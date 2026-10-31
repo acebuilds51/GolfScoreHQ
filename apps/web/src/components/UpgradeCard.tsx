@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/backend';
 import { useAction, useAsync, useLeague } from '../lib/hooks';
@@ -36,43 +36,41 @@ function Teaser({ list, who }: { list: ProTeaser[]; who: string }) {
       <p>{t.answer} <strong className="teaser-pro">You get that with Pro!</strong></p>
       <div className="row wrap small">
         <button type="button" className="linkish" onClick={() => setI(nextTeaser(list, `gshq-upgrade-teaser:${who}`))}>Another idea ›</button>
-        <details className="teaser-all">
-          <summary>Everything in Pro</summary>
-          <ul className="ticks small">{PRO_PERKS.map((p) => <li key={p}>{p}</li>)}</ul>
-        </details>
+        <ProPerks />
       </div>
     </div>
   );
 }
 
+export function ProPerks() {
+  return (
+    <details className="teaser-all">
+      <summary>Everything in Pro</summary>
+      <ul className="ticks small">{PRO_PERKS.map((p) => <li key={p}>{p}</li>)}</ul>
+    </details>
+  );
+}
+
 /**
- * Free leagues, on Home: a taste of what Pro adds, then what it costs each
- * golfer for the season. Golfers can say they'd chip in their share (the
- * commissioner gets a notification); commissioners see who has. "Not now"
- * hides it for two weeks.
- * `golfers`: the league's regular golfers, to split the price across.
+ * What Pro costs each golfer for the season, then: commissioners see who has offered to chip in and
+ * a way to Pro; golfers can say they'd chip in their share (the commissioner gets a notification).
+ * `golfers`: the league's regular golfers, to split the price across (null while they load).
+ * `more`: extra buttons for the end of the row ("Not now", "Close").
  */
-export function UpgradeCard({ golfers }: { golfers: number }) {
+export function UpgradeOffer({ golfers, more, onLeave }: { golfers: number | null; more?: ReactNode; onLeave?: () => void }) {
   const { league } = useLeague();
   const commish = isCommissioner(league.role);
-  const key = snoozeKey(league.id, commish ? 'commish' : 'golfer');
-  const [hidden, setHidden] = useState(() => snoozed(key));
   const interest = useAsync(() => api.upgradeInterest(league.id), [league.id]);
   const { busy, error, run } = useAction();
-  if (league.effectivePlan !== 'free' || hidden) return null;
-
-  const share = shareDollars(golfers);
+  const share = golfers ? shareDollars(golfers) : null;
   const i = interest.data;
-  const notNow = <button className="btn btn-ghost btn-sm" onClick={() => { snooze(key); setHidden(true); }}>Not now</button>;
   const costLine = share
     ? <>All of Pro is <strong>{PRICE.pro} a year for the whole league</strong>. Split across your {golfers} golfers, that's about <strong className="num upgrade-share">${share}</strong> each for the season.</>
     : <>All of Pro is <strong>{PRICE.pro} a year for the whole league</strong>.</>;
 
   if (commish) {
     return (
-      <section className="card stack upgrade-card">
-        <div className="row between wrap"><h2>Unlock Pro for {league.name}</h2><span className="badge badge-pro">Pro</span></div>
-        <Teaser list={COMMISH_TEASERS} who="commish" />
+      <>
         <p>{costLine}</p>
         {i && i.count > 0 && (
           <p className="notice">
@@ -81,25 +79,22 @@ export function UpgradeCard({ golfers }: { golfers: number }) {
         )}
         {i && i.count === 0 && share && <p className="small muted">Golfers see this too, and can tell you they'd chip in their ${share}.</p>}
         <div className="row wrap">
-          <Link className="btn btn-primary" to="settings#plan">See Pro</Link>
-          {notNow}
+          <Link className="btn btn-primary" to={`/l/${league.slug}/settings#plan`} onClick={onLeave}>See Pro</Link>
+          {more}
         </div>
-      </section>
+      </>
     );
   }
 
-  // Golfers: ask if they'd chip in their share.
   return (
-    <section className="card stack upgrade-card">
-      <div className="row between wrap"><h2>Get more out of league night</h2><span className="badge badge-pro">Pro</span></div>
-      <Teaser list={GOLFER_TEASERS} who="golfer" />
+    <>
       <p>{costLine}</p>
       {i?.mine ? (
         <>
           <p className="notice">You told your commissioner you'd chip in {fmtMoney(i.mine)}.{i.count > 1 ? ` ${i.count} golfers have so far (${fmtMoney(i.totalCents)} of ${PRICE.pro}).` : ''}</p>
           <div className="row wrap">
             <button className="btn btn-ghost btn-sm" disabled={busy} onClick={async () => { await run(() => api.takeBackChipIn(league.id)); interest.reload(); }}>Changed my mind</button>
-            {notNow}
+            {more}
           </div>
         </>
       ) : share ? (
@@ -109,11 +104,35 @@ export function UpgradeCard({ golfers }: { golfers: number }) {
             <button className="btn btn-primary" disabled={busy} onClick={async () => { await run(() => api.chipIn(league.id, Math.min(share * 100, PRO_CENTS))); interest.reload(); }}>
               {busy ? 'Sending…' : `Yes, I'd chip in $${share}`}
             </button>
-            {notNow}
+            {more}
           </div>
         </>
-      ) : <div className="row wrap">{notNow}</div>}
+      ) : <div className="row wrap">{more}</div>}
       <ErrorText>{error}</ErrorText>
+    </>
+  );
+}
+
+/**
+ * Free leagues, on Home: a taste of what Pro adds, then the offer. "Not now" hides it for two weeks.
+ * `golfers`: the league's regular golfers, to split the price across.
+ */
+export function UpgradeCard({ golfers }: { golfers: number }) {
+  const { league } = useLeague();
+  const commish = isCommissioner(league.role);
+  const key = snoozeKey(league.id, commish ? 'commish' : 'golfer');
+  const [hidden, setHidden] = useState(() => snoozed(key));
+  if (league.effectivePlan !== 'free' || hidden) return null;
+
+  const notNow = <button className="btn btn-ghost btn-sm" onClick={() => { snooze(key); setHidden(true); }}>Not now</button>;
+  return (
+    <section className="card stack upgrade-card">
+      <div className="row between wrap">
+        <h2>{commish ? `Unlock Pro for ${league.name}` : 'Get more out of league night'}</h2>
+        <span className="badge badge-pro">Pro</span>
+      </div>
+      <Teaser list={commish ? COMMISH_TEASERS : GOLFER_TEASERS} who={commish ? 'commish' : 'golfer'} />
+      <UpgradeOffer golfers={golfers} more={notNow} />
     </section>
   );
 }

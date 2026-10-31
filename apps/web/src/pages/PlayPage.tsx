@@ -331,7 +331,7 @@ function SeasonForm({ season, onSaved, onCancel }: { season?: Season; onSaved: (
                 <label key={f} className={`format-pick${form.format === f ? ' on' : ''}${locked ? ' locked' : ''}`}>
                   <input type="radio" name="format" value={f} checked={form.format === f} disabled={locked} onChange={() => { set({ format: f }); setError(null); }} />
                   <span className="grow">
-                    <strong>{FORMAT_NAMES[f]}</strong>{locked && <> <ProLock /></>}
+                    <strong>{FORMAT_NAMES[f]}</strong>{locked && <> <ProLock feature="formats" /></>}
                     <span className="small muted block">{FORMAT_HELP[f]}</span>
                   </span>
                 </label>
@@ -342,7 +342,7 @@ function SeasonForm({ season, onSaved, onCancel }: { season?: Season; onSaved: (
         </div>
         <div className="row between wrap">
           <strong>Side games and money</strong>
-          {!pro && <ProLock />}
+          {!pro && <ProLock feature="sideGames" />}
         </div>
         {!pro && <p className="small muted">Free leagues track scores and results. Pro adds {form.format === 'bestBallMatch' ? 'the match bet, presses' : 'prize money by place'}, skins and closest to the pin, settled automatically.</p>}
         <fieldset className="side-games" disabled={!pro}>

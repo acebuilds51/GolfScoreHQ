@@ -40,7 +40,7 @@ export function SpecialWeek({ event, seasonRules, hasGroups, onChanged }: {
     <section className="card stack">
       <div className="row between wrap">
         <strong>{special ? 'This week is a scramble' : 'Special week'}</strong>
-        {!allowed && <ProLock />}
+        {!allowed && <ProLock feature="specialWeek" />}
       </div>
       {!allowed ? (
         <p className="small muted">Pro leagues can make any week a scramble (or another special format) with its own prize money and skins.</p>

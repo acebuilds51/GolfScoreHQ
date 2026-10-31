@@ -1,5 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useContext, useState, type ReactNode } from 'react';
+import { LeagueContext } from '../lib/hooks';
+import type { ProFeature } from '../lib/plans';
 import type { Plan } from '../lib/types';
+import { ProSheet } from './ProSheet';
 
 export function ErrorText({ children }: { children: ReactNode }) {
   return children ? <p className="error" role="alert">{children}</p> : null;
@@ -12,8 +15,29 @@ export function PlanBadge({ plan }: { plan: Plan }) {
   return <span className={`badge ${plan === 'free' ? 'badge-neutral' : 'badge-pro'}`}>{PLAN_LABEL[plan]}</span>;
 }
 
-export function ProLock({ label = 'Pro' }: { label?: string }) {
-  return <span className="badge badge-pro" title="Included with GolfScoreHQ Pro">{label}</span>;
+/**
+ * The "Pro" badge on a locked feature. In a free league it's a button: tapping it says what the
+ * feature does and offers Pro (golfers can say they'd chip in). Anywhere else it's just a label.
+ */
+export function ProLock({ label = 'Pro', feature }: { label?: string; feature?: ProFeature }) {
+  const ctx = useContext(LeagueContext);
+  const [open, setOpen] = useState(false);
+  if (ctx?.league.effectivePlan !== 'free') return <span className="badge badge-pro" title="Included with GolfScoreHQ Pro">{label}</span>;
+  return (
+    <>
+      <button
+        type="button"
+        className="badge badge-pro pro-tap"
+        aria-haspopup="dialog"
+        aria-label={`${label}: what you get with Pro`}
+        // It can sit inside a format's <label>: don't let the tap pick that format.
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(true); }}
+      >
+        {label} <span aria-hidden="true">›</span>
+      </button>
+      {open && <ProSheet feature={feature} onClose={() => setOpen(false)} />}
+    </>
+  );
 }
 
 /** A link with a copy button; falls back to selecting the text if the clipboard is blocked. */
