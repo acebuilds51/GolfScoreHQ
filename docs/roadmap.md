@@ -40,7 +40,7 @@ Plans and features live in the `plans` table, so prices and feature lists can ch
 - **Pro badges:** every locked feature's badge opens what it does, the price, each golfer's share and "I'd chip in".
 - **Download your league (Pro):** scores hole by hole, money and standings for any season, as spreadsheets.
 - **Splash:** a short video of a drive coming at the screen.
-- **Selling the Course plan (staff):** set up a course for its manager on /staff, add its leagues, and send the yearly Stripe invoice (Founding offer: the first invoice goes out Jan 1, 2027 and is due Jan 31; Pro switches off 3 days after an unpaid due date; pay by card or bank, or mark paid by check). Renews every year with a new invoice.
+- **Selling the Course plan (staff):** set up a course for its manager on /staff, add its leagues, and send the yearly Stripe invoice (Founding offer: the first invoice goes out Jan 1, 2027 and is due Jan 31; Pro switches off 3 days after an unpaid due date; pay by card or bank, or mark paid by check). Renews every year with a new invoice. Reminder emails to the manager two weeks and one week before an unpaid invoice is due; the final one lists what switches off and when.
 - **Course summary:** one printable page per course with every league's golfers, golfers on the app, league nights played, rounds brought to the course and average turnout.
 - **Post to GHIN:** golfers add their GHIN number; after a finished round the week page shows their scorecard and an Open GHIN button (no USGA license needed, so the golfer still enters the score). See [ghin.md](ghin.md).
 
