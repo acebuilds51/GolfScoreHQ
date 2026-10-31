@@ -1,5 +1,5 @@
 import type { Api, ErrorGroup, HealthSnapshot } from './api';
-import type { AppErrorReport, Feedback, HelpQuestion, MatchMoney as LeagueMatchMoney, PaidMark, PayHandles } from './types';
+import type { AppErrorReport, CourseInvoice, CourseReport, Feedback, HelpQuestion, MatchMoney as LeagueMatchMoney, PaidMark, PayHandles } from './types';
 import { searchHelp } from '../../../../supabase/functions/ask-help/manual';
 import type { Contact, Course, JoinRequest, League, LeagueBilling, LeagueEvent, LedgerRow, PaymentHandles, PilotCode, Plan, RecapPreview, Role, RoundData, RsvpStatus, Season, SetupRequest, SubRequest, TeeSheet, TeeTime, TvDisplay, User } from './types';
 import { isCommissioner } from './types';
@@ -33,7 +33,7 @@ interface Db {
     shareEmails?: boolean; showMoney?: boolean; matchMoney?: LeagueMatchMoney;
     rsvpReminderDays?: number | null;
   }[];
-  clubs: { id: string; ownerId: string; name: string; expiresAt: string | null }[];
+  clubs: { id: string; ownerId: string; name: string; expiresAt: string | null; createdAt?: string; invoice?: CourseInvoice }[];
   members: { leagueId: string; userId: string; role: Role }[];
   players: {
     id: string; leagueId: string; displayName: string; isSub: boolean; active: boolean; userId: string | null;
@@ -787,6 +787,93 @@ export function demoApi(): DemoApi {
       save(db);
     },
 
+    // ── Courses (staff): same rules as the database functions; Stripe is pretend ──
+    async staffCourses() {
+      const db = load();
+      me(db);
+      return [...db.clubs].reverse().map((c) => ({
+        id: c.id, name: c.name, expiresAt: c.expiresAt, createdAt: c.createdAt ?? new Date(0).toISOString(),
+        ownerEmail: db.users[c.ownerId]?.email ?? null,
+        leagues: db.leagues.filter((l) => l.clubId === c.id).map((l) => ({ id: l.id, name: l.name, slug: l.slug })),
+        billing: c.invoice ? { status: 'active', periodEnd: c.expiresAt } : null,
+      }));
+    },
+    async staffCreateCourse(name, managerEmail) {
+      const db = load();
+      me(db);
+      if (name.trim().length < 2) throw new Error('Give the course a name.');
+      const owner = Object.values(db.users).find((u) => u.email.toLowerCase() === managerEmail.trim().toLowerCase());
+      if (!owner) throw new Error(`Nobody has signed in with ${managerEmail.trim()}. Ask the manager to sign in at golfscorehq.app once, then try again.`);
+      const c = { id: id(), ownerId: owner.id, name: name.trim(), expiresAt: null, createdAt: new Date().toISOString() };
+      db.clubs.push(c);
+      save(db);
+      return c.id;
+    },
+    async staffSetCourseLeague(clubId, slug, on) {
+      const db = load();
+      me(db);
+      const l = db.leagues.find((x) => x.slug === slug.trim().toLowerCase());
+      if (!l) throw new Error(`No league at golfscorehq.app/l/${slug.trim()}.`);
+      if (on) {
+        if (l.plan === 'pilot' || l.plan === 'comp') throw new Error("This league already has GolfScoreHQ free; it doesn't need the Course plan.");
+        Object.assign(l, { clubId, plan: 'club', planExpiresAt: null });
+      } else if (l.clubId === clubId) {
+        if (l.plan === 'club') l.plan = 'free';
+        l.clubId = null;
+      }
+      save(db);
+    },
+    async courseInvoice(clubId, o) {
+      const db = load();
+      me(db);
+      const c = db.clubs.find((x) => x.id === clubId);
+      if (!c) throw new Error("That course wasn't found.");
+      if (c.invoice) throw new Error('This course is already billed. Use Invoice link to see it.');
+      const free = o.freeUntil ? new Date(`${o.freeUntil}T12:00:00Z`) : null;
+      c.invoice = free
+        ? { url: null, status: 'paid', amountDue: 0, dueDate: null, freeUntil: free.toISOString() }
+        : { url: null, status: 'open', amountDue: o.priceCents, dueDate: new Date(Date.now() + o.daysUntilDue * 86_400_000).toISOString(), freeUntil: null };
+      c.expiresAt = new Date((free ? free.getTime() : Date.now() + 365 * 86_400_000) + 3 * 86_400_000).toISOString();
+      save(db);
+      return c.invoice;
+    },
+    async courseInvoiceLink(clubId) {
+      const c = load().clubs.find((x) => x.id === clubId);
+      if (!c?.invoice) throw new Error("This course hasn't been invoiced yet.");
+      return c.invoice;
+    },
+    async courseMarkPaid(clubId) {
+      const db = load();
+      const c = db.clubs.find((x) => x.id === clubId);
+      if (c?.invoice?.status !== 'open') throw new Error('There is no open invoice to mark paid.');
+      c.invoice = { ...c.invoice, status: 'paid', amountDue: 0 };
+      save(db);
+      return c.invoice;
+    },
+    async courseReport(clubId) {
+      const db = load();
+      const c = db.clubs.find((x) => x.id === clubId);
+      if (!c || !db.session) throw new Error("That course wasn't found.");
+      const today = new Date().toISOString().slice(0, 10);
+      const leagues: CourseReport['leagues'] = db.leagues.filter((l) => l.clubId === c.id).map((l) => {
+        const players = db.players.filter((p) => p.leagueId === l.id && p.active);
+        const season = db.seasons.filter((s) => s.leagueId === l.id).sort((a, b) => b.year - a.year)[0];
+        const events = season ? db.events.filter((e) => e.seasonId === season.id) : [];
+        const settled = events.filter((e) => e.status === 'settled');
+        const open = events.filter((e) => e.status === 'scheduled' || e.status === 'in_progress');
+        const dates = (es: typeof events) => es.map((e) => e.eventDate).filter((d): d is string => !!d).sort();
+        return {
+          id: l.id, name: l.name, slug: l.slug,
+          golfers: players.filter((p) => !p.isSub).length, subs: players.filter((p) => p.isSub).length, onApp: players.filter((p) => p.userId).length,
+          season: season ? season.name || String(season.year) : null,
+          weeksPlayed: settled.length, weeksLeft: open.length,
+          rounds: db.rounds.filter((r) => settled.some((e) => e.id === r.eventId)).reduce((n, r) => n + r.players.length, 0),
+          nextWeek: dates(open).find((d) => d >= today) ?? null, lastWeek: dates(settled).at(-1) ?? null,
+        };
+      }).sort((a, b) => a.name.localeCompare(b.name));
+      return { id: c.id, name: c.name, expiresAt: c.expiresAt, leagues };
+    },
+
     async recapPreview(eventId, story) {
       return demoRecap(load(), eventId, story).preview;
     },
@@ -1324,6 +1411,16 @@ export function demoApi(): DemoApi {
       const p = db.players.find((x) => x.id === playerId && x.leagueId === leagueId);
       if (!p || !(p.userId === u.id || isCommissioner(roleIn(db, leagueId)))) throw new Error("You don't have permission to do that.");
       db.payHandles[playerId] = h;
+      save(db);
+    },
+    async setMyGhin(playerId, ghin) {
+      const db = load();
+      const u = me(db);
+      const p = db.players.find((x) => x.id === playerId && x.userId === u.id);
+      if (!p) throw new Error('You can only change your own GHIN number.');
+      const g = (ghin ?? '').replace(/\D/g, '') || null;
+      if (g && !/^[0-9]{5,10}$/.test(g)) throw new Error('A GHIN number is 5 to 10 digits.');
+      p.ghinNumber = g;
       save(db);
     },
     async setSeasonDues(seasonId, cents) {

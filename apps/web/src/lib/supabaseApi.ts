@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Api, CourseSummary, HealthSnapshot, LookupCourse } from './api';
-import type { Feedback, LeagueBilling, PilotCode, PilotCodeStatus, RecapPreview, ReminderPreview, RsvpLinkInfo, SetupRequest, SubOffer, TeeTime } from './types';
+import type { CourseInvoice, CourseReport, Feedback, LeagueBilling, PilotCode, StaffCourse, PilotCodeStatus, RecapPreview, ReminderPreview, RsvpLinkInfo, SetupRequest, SubOffer, TeeTime } from './types';
 import type { Contact, Course, Layout, League, LeagueEvent, LeagueSummary, Plan, Role, RoundData, Season, TvFeed, User } from './types';
 import { randomToken, sha256Hex } from './util';
 
@@ -635,6 +635,27 @@ export function supabaseApi(url: string, anonKey: string): Api {
     async revokePilotCode(code) {
       check(await sb.rpc('revoke_pilot_code', { p_code: code }));
     },
+    async staffCourses() {
+      return check(await sb.rpc('staff_courses')) as StaffCourse[];
+    },
+    async staffCreateCourse(name, managerEmail) {
+      return check(await sb.rpc('staff_create_course', { p_name: name, p_owner_email: managerEmail })) as string;
+    },
+    async staffSetCourseLeague(clubId, slug, on) {
+      check(await sb.rpc('staff_set_course_league', { p_club: clubId, p_slug: slug, p_on: on }));
+    },
+    async courseInvoice(clubId, o) {
+      return (await invokeFn(sb, 'billing', { action: 'course-invoice', clubId, ...o }, "Invoices aren't available right now. Try again in a minute.")) as CourseInvoice;
+    },
+    async courseInvoiceLink(clubId) {
+      return (await invokeFn(sb, 'billing', { action: 'course-link', clubId }, "Invoices aren't available right now. Try again in a minute.")) as CourseInvoice;
+    },
+    async courseMarkPaid(clubId) {
+      return (await invokeFn(sb, 'billing', { action: 'course-paid', clubId }, "Invoices aren't available right now. Try again in a minute.")) as CourseInvoice;
+    },
+    async courseReport(clubId) {
+      return check(await sb.rpc('course_summary', { p_club: clubId })) as CourseReport;
+    },
     async staffSetupQueue() {
       const rows = check(await sb.rpc('staff_setup_queue')) as Row[];
       return rows.map((r) => ({
@@ -698,6 +719,9 @@ export function supabaseApi(url: string, anonKey: string): Api {
       check(await sb.from('player_pay_handles').upsert({
         player_id: playerId, league_id: leagueId, venmo: h.venmo, paypal_me: h.paypalMe, zelle: h.zelle, updated_at: new Date().toISOString(),
       }));
+    },
+    async setMyGhin(playerId, ghin) {
+      check(await sb.rpc('set_my_ghin', { p_player: playerId, p_ghin: ghin ?? '' }));
     },
     async setSeasonDues(seasonId, cents) {
       check(await sb.rpc('set_season_dues', { p_season: seasonId, p_cents: cents }));

@@ -40,11 +40,14 @@ Plans and features live in the `plans` table, so prices and feature lists can ch
 - **Pro badges:** every locked feature's badge opens what it does, the price, each golfer's share and "I'd chip in".
 - **Download your league (Pro):** scores hole by hole, money and standings for any season, as spreadsheets.
 - **Splash:** a short video of a drive coming at the screen.
+- **Selling the Course plan (staff):** set up a course for its manager on /staff, add its leagues, and send the yearly Stripe invoice (free until a date for the Founding offer; pay by card or bank, or mark paid by check). Renews every year with a new invoice.
+- **Course summary:** one printable page per course with every league's golfers, golfers on the app, league nights played, rounds brought to the course and average turnout.
+- **Post to GHIN:** golfers add their GHIN number; after a finished round the week page shows their scorecard and an Open GHIN button (no USGA license needed, so the golfer still enters the score). See [ghin.md](ghin.md).
 
 ## Next
 
-- **Before pilots play (spring 2027):** upgrade Resend from the free plan (100 emails a day); switch Stripe to live for Pro; a practice league night on real phones; test the ideas box with a second person.
-- **Course sales (Florida pitches Nov 5–8):** an invoice and payment-link flow for the Course plan, and a one-page course summary with every league's activity.
-- **Handicaps:** a GHIN number on each golfer, a "Check on GHIN" link and a "post this round by midnight" reminder (no USGA license needed). An official GHIN connection only once paying customers cover the USGA fee (see [ghin.md](ghin.md)).
+- **Before pilots play (spring 2027):** upgrade Resend from the free plan (100 emails a day); switch Stripe to live for Pro and Course invoices; a practice league night on real phones; test the ideas box with a second person.
+- Offline scoring improvements for courses with no signal.
+- An official GHIN connection only if paying customers ever cover the USGA fee (see [ghin.md](ghin.md)).
 - Lesson results saved to the database instead of the phone, so staff can see where people get stuck.
 - Paid text messages only if leagues ask.

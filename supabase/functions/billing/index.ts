@@ -6,10 +6,16 @@
 //   POST { action: 'checkout', clubId }    → { url }   Club (the club's owner)
 //   POST { action: 'portal', returnPath? } → { url }   update card, invoices, cancel
 //
+// Staff only, the Course plan (invoiced, see course.ts):
+//   POST { action: 'course-invoice', clubId, priceCents, daysUntilDue, email } → { url, status, amountDue }
+//   POST { action: 'course-link', clubId }  → the open (or latest) invoice
+//   POST { action: 'course-paid', clubId }  → mark the open invoice paid by check
+//
 // Secrets: STRIPE_SECRET_KEY, STRIPE_PRICE_PRO, STRIPE_PRICE_CLUB, APP_URL.
 // Optional: STRIPE_AUTOMATIC_TAX=on once Stripe Tax is set up in the dashboard.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { checkoutFields, stripeApi } from '../_shared/stripe.ts';
+import { courseBilling, type CourseRequest } from './course.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -32,7 +38,7 @@ Deno.serve(async (req) => {
   const user = auth.user;
   if (!user) return json({ error: 'Sign in first.' }, 401);
 
-  let body: { action?: string; leagueId?: string; clubId?: string; returnPath?: string };
+  let body: { action?: string; leagueId?: string; clubId?: string; returnPath?: string } & CourseRequest;
   try { body = await req.json(); } catch { return json({ error: 'Bad request.' }, 400); }
   const admin = createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'));
 
@@ -55,6 +61,17 @@ Deno.serve(async (req) => {
       const path = (body.returnPath ?? '/leagues').startsWith('/') ? body.returnPath ?? '/leagues' : '/leagues';
       const s = await stripeApi(stripeKey, 'POST', 'billing_portal/sessions', { customer: cid, return_url: `${app}${path}` });
       return json({ url: s.url });
+    }
+
+    if (body.action?.startsWith('course-')) {
+      const { data: isStaff } = await userClient.rpc('is_staff');
+      if (!isStaff) return json({ error: 'Staff only.' }, 403);
+      try {
+        return json(await courseBilling(stripeKey, admin, body));
+      } catch (e) {
+        console.error('course billing', e);
+        return json({ error: (e as Error).message }, 400);
+      }
     }
 
     if (body.action !== 'checkout') return json({ error: 'Unknown action.' }, 400);

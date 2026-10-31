@@ -8,6 +8,7 @@ import { RsvpButtons } from './WhosPlaying';
 import { PhoneNotifications } from '../components/PhoneNotifications';
 import { UpgradeCard } from '../components/UpgradeCard';
 import { MyDues, MyPayHandles } from '../components/Payouts';
+import { MyGhin } from '../components/Ghin';
 
 export function OverviewPage() {
   const { league } = useLeague();
@@ -75,6 +76,7 @@ export function OverviewPage() {
       </section>
       {season && <MyDues season={season} players={players} />}
       <MyPayHandles players={players} />
+      <MyGhin players={players} />
       {league.features.includes('weekly_recap') && <RecapPref players={players} />}
       <PhoneNotifications />
     </div>
