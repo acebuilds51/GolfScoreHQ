@@ -12,88 +12,55 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="GolfScoreHQ" />
     <title>GolfScoreHQ</title>
-    <!-- The splash: shown the moment the app opens, faded out by lib/splash.ts once the app is up. -->
+    <!-- The splash: shown the moment the app opens, faded out by lib/splash.ts once the app is up.
+         A short video (public/splash.mp4, 2.7 s): the ball on the tee bursts with gold sparks and leaps at the
+         camera, and the clip ends on white. The whole screen follows it to white, then the app fades in. -->
     <style>
       #splash {
-        position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
-        background: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.035) 0 34px, transparent 34px 68px), radial-gradient(circle at 50% 38%, #1d4f86 0, #0f2a47 62%);
-        color: #fff; font-family: 'Arial Narrow', -apple-system, 'Segoe UI', Roboto, sans-serif; transition: opacity 0.35s ease;
+        position: fixed; inset: 0; z-index: 1000; overflow: hidden; background: #050506; color: #fff;
+        font-family: 'Arial Black', 'Helvetica Neue', Arial, sans-serif; transition: opacity 0.35s ease;
       }
       #splash.out { opacity: 0; pointer-events: none; }
-      #splash img { width: 108px; height: 108px; border-radius: 26px; box-shadow: 0 10px 30px rgb(0 0 0 / 0.35); animation: splash-pop 0.6s cubic-bezier(.2, 1.4, .4, 1) both; }
-      #splash .name { font-size: 2.4rem; font-weight: 700; letter-spacing: 0.02em; animation: splash-up 0.5s 0.15s ease-out both; }
-      #splash .tag { font-size: 1rem; opacity: 0.75; animation: splash-up 0.5s 0.3s ease-out both; }
-      /* A putt on the green: the ball curls along its line (the SVG's animateMotion, 0.4–2.4 s), drops into
-         the cup, a ring spreads and the pin shivers, just before the splash fades (lib/splash.ts: 3 s). */
-      #splash .green { width: 320px; max-width: 88vw; height: auto; margin-top: 6px; overflow: visible; animation: splash-up 0.6s 0.2s ease-out both; }
-      #splash .drop { animation: splash-drop 0.28s 2.4s ease-in forwards; }
-      #splash .trail { animation: splash-fade 0.5s 2.55s ease-out forwards; }
-      #splash .ring { opacity: 0; transform-box: fill-box; transform-origin: center; animation: splash-ring 0.7s 2.5s ease-out; }
-      #splash .pin { transform-origin: 232px 78px; animation: splash-pin 0.5s 2.45s ease-out; }
-      @keyframes splash-pop { from { transform: scale(0.5); opacity: 0; } }
-      @keyframes splash-up { from { transform: translateY(10px); opacity: 0; } }
-      @keyframes splash-drop { to { transform: translateY(2.5px) scale(0.5); opacity: 0; } }
-      @keyframes splash-fade { to { opacity: 0; } }
-      @keyframes splash-ring { from { transform: scale(1); opacity: 0.5; } to { transform: scale(3.2); opacity: 0; } }
-      @keyframes splash-pin { 35% { transform: rotate(1.6deg); } 70% { transform: rotate(-0.8deg); } }
-      @media (prefers-reduced-motion: reduce) {
-        #splash * { animation: none !important; }
-        #splash .ball, #splash .trail { display: none; }
+      #splash .sp-video {
+        position: absolute; left: 0; right: 0; top: 58vh; height: 62vh; width: 100%; transform: translateY(-50%); object-fit: cover; background: #050506;
+        -webkit-mask-image: radial-gradient(ellipse 50% 50% at center, #000 72%, transparent 100%); mask-image: radial-gradient(ellipse 50% 50% at center, #000 72%, transparent 100%);
       }
+      #splash .sp-brand { position: absolute; top: 9vh; left: 0; right: 0; z-index: 2; text-align: center; animation: splash-up 0.7s 0.1s ease-out both; }
+      #splash .sp-w1 {
+        font-size: clamp(56px, 19vw, 104px); line-height: 0.9; letter-spacing: 0.04em; color: transparent;
+        background: linear-gradient(110deg, transparent 40%, rgb(255 255 255 / 0.8) 50%, transparent 60%), linear-gradient(180deg, #fff6d2 0%, #f0cf73 38%, #b8862a 62%, #f7dc8e 100%);
+        background-size: 250% 100%, 100% 100%; background-position: 130% 0, 0 0; background-repeat: no-repeat;
+        -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 3px 10px rgb(0 0 0 / 0.7));
+        animation: splash-shine 1s 0.5s ease-in-out forwards;
+      }
+      #splash .sp-w2 { font-size: clamp(22px, 7.4vw, 40px); letter-spacing: 0.18em; margin-top: 6px; color: #f4f1e8; }
+      #splash .sp-w2 b { color: #e9c467; }
+      #splash .sp-tag { margin-top: 14px; font: 600 clamp(11px, 3.2vw, 14px) -apple-system, 'Segoe UI', Roboto, sans-serif; letter-spacing: 0.32em; text-transform: uppercase; color: #d9b45a; }
+      /* The white the clip ends on, spread over the whole screen; timed from when the video starts playing */
+      #splash .sp-white { position: absolute; inset: 0; z-index: 3; background: #f4f5f2; opacity: 0; pointer-events: none; }
+      #splash.play .sp-white { animation: splash-white 0.3s 2.35s ease-in forwards; }
+      @keyframes splash-up { from { transform: translateY(12px); opacity: 0; } }
+      @keyframes splash-shine { to { background-position: -30% 0, 0 0; } }
+      @keyframes splash-white { to { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) { #splash * { animation: none !important; } }
     </style>
   </head>
   <body>
     <div id="splash" aria-hidden="true">
-      <img src="/icon-192.png" alt="" width="108" height="108" />
-      <div class="name">GolfScoreHQ</div>
-      <div class="tag">Your league, live.</div>
-      <svg class="green" viewBox="0 0 320 130" width="320" height="130">
-        <defs>
-          <radialGradient id="sp-turf" cx="45%" cy="35%" r="65%"><stop offset="0" stop-color="#3f9a5c" /><stop offset="0.6" stop-color="#2a7446" /><stop offset="1" stop-color="#1b5434" /></radialGradient>
-          <radialGradient id="sp-fade"><stop offset="0.55" stop-color="#fff" /><stop offset="1" stop-color="#000" /></radialGradient>
-          <mask id="sp-edge"><ellipse cx="160" cy="88" rx="158" ry="44" fill="url(#sp-fade)" /></mask>
-          <pattern id="sp-mow" width="44" height="44" patternUnits="userSpaceOnUse" patternTransform="rotate(-62) scale(1 .38)"><rect width="22" height="44" fill="#fff" fill-opacity="0.045" /></pattern>
-          <radialGradient id="sp-ball" cx="38%" cy="32%" r="72%"><stop offset="0" stop-color="#fff" /><stop offset="0.45" stop-color="#f3f5f7" /><stop offset="1" stop-color="#aab4bf" /></radialGradient>
-          <linearGradient id="sp-cup" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#020b05" /><stop offset="1" stop-color="#0d2c18" /></linearGradient>
-          <linearGradient id="sp-stick" x1="0" x2="1"><stop offset="0" stop-color="#fff" /><stop offset="1" stop-color="#c3ccd5" /></linearGradient>
-          <linearGradient id="sp-flag" x1="0" x2="1"><stop offset="0" stop-color="#e2392d" /><stop offset="1" stop-color="#b3241b" /></linearGradient>
-          <linearGradient id="sp-trail" gradientUnits="userSpaceOnUse" x1="62" x2="232"><stop offset="0" stop-color="#fff" stop-opacity="0" /><stop offset="1" stop-color="#fff" stop-opacity="0.22" /></linearGradient>
-          <filter id="sp-soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="0.9" /></filter>
-        </defs>
-        <!-- The green: soft edges into the background, faint mowing stripes -->
-        <g mask="url(#sp-edge)">
-          <ellipse cx="160" cy="88" rx="158" ry="44" fill="url(#sp-turf)" />
-          <ellipse cx="160" cy="88" rx="158" ry="44" fill="url(#sp-mow)" />
-        </g>
-        <!-- The cup, its lip catching the light, and the ring when the ball drops -->
-        <ellipse cx="232" cy="78" rx="7" ry="2.6" fill="url(#sp-cup)" />
-        <path d="M225 78a7 2.6 0 0 0 14 0" fill="none" stroke="#fff" stroke-opacity="0.32" stroke-width="0.6" />
-        <ellipse class="ring" cx="232" cy="78" rx="7" ry="2.6" fill="none" stroke="#fff" stroke-width="0.6" />
-        <!-- The line the ball has rolled -->
-        <path class="trail" d="M62 108C120 114 178 72 232 78" fill="none" stroke="url(#sp-trail)" stroke-width="1.1" stroke-linecap="round" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1">
-          <animate attributeName="stroke-dashoffset" values="1;1;0" keyTimes="0;0.167;1" calcMode="spline" keySplines="0 0 1 1;0.12 0.62 0.3 1" dur="2.4s" fill="freeze" />
-        </path>
-        <!-- The ball: sits at address, rolls the line, then drops -->
-        <g class="ball">
-          <animateMotion path="M62 108C120 114 178 72 232 78" keyPoints="0;0;1" keyTimes="0;0.167;1" calcMode="spline" keySplines="0 0 1 1;0.12 0.62 0.3 1" dur="2.4s" fill="freeze" />
-          <g class="drop">
-            <ellipse cx="1.4" cy="3.7" rx="4.4" ry="1.4" fill="#000" fill-opacity="0.4" filter="url(#sp-soft)" />
-            <circle r="4.2" fill="url(#sp-ball)" />
-          </g>
-        </g>
-        <!-- The flagstick, its shadow on the green, and the flag -->
-        <g class="pin">
-          <line x1="232" y1="78" x2="266" y2="87" stroke="#000" stroke-opacity="0.22" stroke-width="1.6" stroke-linecap="round" filter="url(#sp-soft)" />
-          <rect x="231.1" y="13" width="1.8" height="65" rx="0.9" fill="url(#sp-stick)" />
-          <path d="M233 15C242 12 250 19 260 16L260 30C250 33 242 26 233 29Z" fill="url(#sp-flag)">
-            <animate attributeName="d" values="M233 15C242 12 250 19 260 16L260 30C250 33 242 26 233 29Z;M233 15C242 18 250 12 260 15L260 29C250 26 242 33 233 29Z;M233 15C242 12 250 19 260 16L260 30C250 33 242 26 233 29Z" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.45 0 0.55 1;0.45 0 0.55 1" dur="1.8s" repeatCount="indefinite" />
-          </path>
-          <circle cx="232" cy="13" r="1.3" fill="#e9eef3" />
-        </g>
-      </svg>
+      <video class="sp-video" src="/splash.mp4" poster="/splash-poster.jpg" autoplay muted playsinline preload="auto"></video>
+      <div class="sp-brand">
+        <div class="sp-w1">GOLF</div>
+        <div class="sp-w2">SCORE <b>HQ</b></div>
+        <div class="sp-tag">Your league, live.</div>
+      </div>
+      <div class="sp-white"></div>
       <script>
-        // The ball, its line and the flag move with SVG animation, which CSS can't stop: still them here.
-        if (matchMedia('(prefers-reduced-motion: reduce)').matches) document.querySelectorAll('#splash animate, #splash animateMotion').forEach((a) => a.remove());
+        (() => {
+          const v = document.querySelector('#splash video');
+          // Still frame only for people who turn motion off.
+          if (matchMedia('(prefers-reduced-motion: reduce)').matches) { v.removeAttribute('autoplay'); v.pause(); return; }
+          v.addEventListener('playing', () => document.getElementById('splash').classList.add('play'), { once: true });
+        })();
       </script>
     </div>
     <div id="root"></div>
