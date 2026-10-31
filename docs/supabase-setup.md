@@ -55,6 +55,7 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 35. `20261129000000_feedback.sql` (ideas and questions box with staff replies; redeploy `ask-help`)
 36. `20261130000000_fix_mismatches.sql` (Course plan $990 a year, plans billed per year, Scorers become golfers, "results are in" notification when a week is settled; redeploy `send-recap`)
 37. `20261201000000_course_billing.sql` (staff set up courses and send the yearly invoice from /staff, the course summary page, golfers add their own GHIN number; redeploy `billing`)
+38. `20261202000000_course_invoice_reminders.sql` (reminder emails for unpaid Course invoices, daily at 9 AM Eastern; deploy `course-reminders` with `--no-verify-jwt`, see step 8)
 
 **B. Command line**
 
@@ -190,6 +191,12 @@ Every day at 12:00 UTC (8 AM Eastern) the `health-report` function emails `SUPPO
 
 ```bash
 npx supabase functions deploy health-report --no-verify-jwt --use-api
+```
+
+Every day at 13:00 UTC (9 AM Eastern) the `course-reminders` function emails a course's manager when its Course plan invoice is unpaid with two weeks left, then a final reminder with one week left that lists what switches off and on which day (support gets a copy of each). It uses `STRIPE_SECRET_KEY`, `RESEND_API_KEY`, `RECAP_FROM_EMAIL` and `SUPPORT_EMAIL`.
+
+```bash
+npx supabase functions deploy course-reminders --no-verify-jwt --use-api
 ```
 
 When you upgrade a plan (Supabase Pro, Resend Pro), raise its limit with **Change limit** under Capacity so the warnings stay meaningful.
