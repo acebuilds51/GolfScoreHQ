@@ -10,13 +10,13 @@
 | Pilot | $0 in 2027 | The 10 pilot leagues get Pro; 2028 at Pro price (~10% thank-you discount) |
 | Comp | $0 | Complimentary Pro (OCBC, test leagues); never billed |
 
-Plans and features live in the `plans` table, so prices and feature lists can change without a code release. Billing is Stripe Checkout (charged up front, refunds also cancel the subscription).
+Plans and features live in the `plans` table, so prices and feature lists can change without a code release. Billing is Stripe Checkout (charged up front each year, refunds also cancel the subscription).
 
 ## Built
 
 - **Scoring:** season setup, weeks, groups, hole-by-hole entry that works offline, live leaderboard, settlement (commissioner only, by hand, so scores can be checked first) and rainouts.
 - **Formats:** 2-vs-2 best ball match (presses), stroke play, Stableford, scramble seasons and scramble weeks.
-- **Handicaps:** GHIN index or calculated from league rounds; net matches and skins.
+- **Handicaps:** a golfer's Handicap Index typed in (from GHIN) or calculated from league rounds; net matches and skins.
 - **Money:** skins, closest to the pin, prize money, ledger. **Paying out (Pro):** season dues with a who-paid checklist, a weekly Pay out list with Venmo/PayPal filled in (golfer, amount, note) and paid ticks golfers can see, golfers' own Venmo/PayPal/Zelle, and a league choice of whether match money is settled between golfers (shown, never collected) or goes through the commissioner. The app never moves money.
 - **Standings, awards and player stats:** with a shareable awards picture and hardest/easiest holes, a Hot sort (last 4 rounds), and every week's skins and CTP winners for commissioners. Past seasons (Pro) from a season picker. Commissioners choose whether golfers see season money.
 - **Seasons:** start the next season with the same format, league night and tee times; add the whole season's weeks at once, skipping off nights.
@@ -33,13 +33,18 @@ Plans and features live in the `plans` table, so prices and feature lists can ch
 - **Look and speed:** league-colored header with fairway stripes, splash screen, five-tab bottom bar; screens open instantly on what they showed last time, pages download before they're tapped.
 - **App health (staff):** the app reports its own problems, golfers can report one, capacity against plan limits, a daily health email.
 - **Upgrade prompts:** free leagues see "wouldn't it be great if…" teasers and each golfer's share of Pro; golfers can say they'd chip in.
-- **Phone notifications** for the tee sheet and subs (moved to a group, put in a group, a partner, a sub needed or found). OCBC's 2026 season is imported.
+- **Phone notifications** for the tee sheet and subs (moved to a group, put in a group, a partner, a sub needed or found), and "results are in" the moment a week is settled, in every league. OCBC's 2026 season is imported.
+- **Help:** a Help page with an AI "Ask a question" (answers from the user's guide, saved for staff), commissioner and golfer guides, eight walk-through lessons (golfers and commissioners × four formats), and a "?" Ask button on every screen.
+- **Ideas and questions box:** golfers and commissioners send ideas or questions; staff reply on /staff and the sender gets a notification.
+- **Sign-in emails** from signin@golfscorehq.app through Resend, with our own code email.
+- **Pro badges:** every locked feature's badge opens what it does, the price, each golfer's share and "I'd chip in".
+- **Download your league (Pro):** scores hole by hole, money and standings for any season, as spreadsheets.
+- **Splash:** a short video of a drive coming at the screen.
 
 ## Next
 
-- Help: questions and answers, a user's guide, and walk-through lessons for commissioners and golfers in each format.
-- A feature request / question box.
-- Sign-in emails from our own domain (Resend), and the live site address in Supabase.
-- Tappable Pro badges on locked features (teaser and "I'd chip in").
-- A practice league night on real phones before April.
+- **Before pilots play (spring 2027):** upgrade Resend from the free plan (100 emails a day); switch Stripe to live for Pro; a practice league night on real phones; test the ideas box with a second person.
+- **Course sales (Florida pitches Nov 5–8):** an invoice and payment-link flow for the Course plan, and a one-page course summary with every league's activity.
+- **Handicaps:** a GHIN number on each golfer, a "Check on GHIN" link and a "post this round by midnight" reminder (no USGA license needed). An official GHIN connection only once paying customers cover the USGA fee (see [ghin.md](ghin.md)).
+- Lesson results saved to the database instead of the phone, so staff can see where people get stuck.
 - Paid text messages only if leagues ask.

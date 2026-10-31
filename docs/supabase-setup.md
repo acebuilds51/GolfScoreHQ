@@ -52,6 +52,8 @@ In the Supabase dashboard open **SQL Editor → New query**. Paste each file fro
 32. `20261126000000_payouts.sql` (paying out: golfers' own Venmo/PayPal/Zelle, season dues and who paid, each week's skins/CTP payouts ticked off, who handles match money; redeploy `send-recap`)
 33. `20261127000000_course_plan.sql` (the Club plan becomes the Course plan for golf courses, with no 5-league cap)
 34. `20261128000000_help_questions.sql` (Help page "Ask a question": saves each question and its answer for staff; deploy `ask-help`, see step 9)
+35. `20261129000000_feedback.sql` (ideas and questions box with staff replies; redeploy `ask-help`)
+36. `20261130000000_fix_mismatches.sql` (Course plan $990 a year, plans billed per year, Scorers become golfers, "results are in" notification when a week is settled; redeploy `send-recap`)
 
 **B. Command line**
 
