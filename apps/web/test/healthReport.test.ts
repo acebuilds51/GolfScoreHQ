@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildHealthReport, capacityLines, type HealthSnapshot } from '../../../supabase/functions/health-report/report';
+import { friendlyError } from '../src/lib/api';
 import { worthReporting } from '../src/lib/diagnostics';
 
 const limits = {
@@ -69,5 +70,11 @@ describe('what the app reports about itself', () => {
     expect(worthReporting('Only commissioners can do that.')).toBe(false);
     expect(worthReporting('')).toBe(false);
     expect(worthReporting('duplicate key value violates unique constraint "hole_scores_pkey"')).toBe(true);
+  });
+
+  it('treats asking for a second sign-in code too soon as normal, and says so plainly', () => {
+    const tooSoon = new Error('For security purposes, you can only request this after 20 seconds.');
+    expect(worthReporting(tooSoon.message)).toBe(false);
+    expect(friendlyError(tooSoon)).toBe('We just sent you a code, so check your email. To get another one, wait 20 seconds and try again.');
   });
 });
