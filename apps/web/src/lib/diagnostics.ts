@@ -8,11 +8,11 @@ declare const __APP_VERSION__: string;
 /** When this copy of the app was built (shows which version a problem happened on). */
 export const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
 
-/** Not worth reporting: no signal on the course, or a plan or permission message the person was meant to see. */
+/** Not worth reporting: no signal on the course, or a plan, permission or "wait a moment for another code" message the person was meant to see. */
 export function worthReporting(message: string): boolean {
   if (!message.trim()) return false;
   if (/failed to fetch|networkerror|load failed|network request failed|the internet connection appears to be offline|fetch failed/i.test(message)) return false;
-  if (/GolfScoreHQ Pro|plan lapsed|Only commissioners can|Sign in first|ResizeObserver loop/i.test(message)) return false;
+  if (/GolfScoreHQ Pro|plan lapsed|Only commissioners can|Sign in first|ResizeObserver loop|only request this after/i.test(message)) return false;
   return typeof navigator === 'undefined' || navigator.onLine !== false;
 }
 

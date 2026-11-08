@@ -289,5 +289,7 @@ export function friendlyError(e: unknown): string {
   if (/not in this week/.test(msg)) return "The results include a golfer who isn't in this week. Refresh and try again.";
   if (/invalid or expired/.test(msg)) return 'This invite link is invalid or has expired. Ask your commissioner for a new one.';
   if (/no league with that code/.test(msg)) return 'No league uses that code. Check it with your commissioner.';
+  const wait = /only request this after (\d+) second/i.exec(msg);
+  if (wait) return `We just sent you a code, so check your email. To get another one, wait ${wait[1]} seconds and try again.`;
   return msg || 'Something went wrong. Try again.';
 }
